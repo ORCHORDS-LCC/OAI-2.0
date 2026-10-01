@@ -122,11 +122,19 @@ async def test_write_metadata_fails_closed_on_inconsistent_batch_counts() -> Non
 
 def test_d1_knowledge_writer_exports() -> None:
     from oai2.knowledge import (
-        D1KnowledgeWriter as ExportedWriter,
         KNOWLEDGE_CORPUS_ADVANCE_SQL as ExportedAdvance,
+    )
+    from oai2.knowledge import (
         KNOWLEDGE_CORPUS_REVISION_SQL as ExportedRevision,
+    )
+    from oai2.knowledge import (
         KNOWLEDGE_SCHEMA_VERSION as ExportedVersion,
+    )
+    from oai2.knowledge import (
         KNOWLEDGE_WRITER_UPSERT_SQL as ExportedUpsert,
+    )
+    from oai2.knowledge import (
+        D1KnowledgeWriter as ExportedWriter,
     )
     from oai2.knowledge.knowledge_d1 import (
         KNOWLEDGE_CORPUS_ADVANCE_SQL,
