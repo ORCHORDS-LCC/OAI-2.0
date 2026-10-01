@@ -135,8 +135,10 @@ def test_truth_module_exports_from_evals_package() -> None:
     from oai2.evals import TruthPromotionEvaluation as ExportedEvaluation
     from oai2.evals import TruthReport as ExportedReport
     from oai2.evals import TruthSample as ExportedSample
+    from oai2.evals import TruthCandidatePromotionEvaluation as ExportedCandidateEvaluation
     from oai2.evals import evaluate_truth_promotion as ExportedEvaluator
     from oai2.evals import summarize_truth as ExportedSummarizer
+    from oai2.evals import evaluate_truth_candidate_promotion as ExportedCandidateEvaluator
     from oai2.evals.truth import (
         TruthCaseClass,
         TruthOutcome,
@@ -144,8 +146,10 @@ def test_truth_module_exports_from_evals_package() -> None:
         TruthPromotionEvaluation,
         TruthReport,
         TruthSample,
+        TruthCandidatePromotionEvaluation,
         evaluate_truth_promotion,
         summarize_truth,
+        evaluate_truth_candidate_promotion,
     )
 
     assert ExportedCaseClass is TruthCaseClass
@@ -154,8 +158,10 @@ def test_truth_module_exports_from_evals_package() -> None:
     assert ExportedEvaluation is TruthPromotionEvaluation
     assert ExportedReport is TruthReport
     assert ExportedSample is TruthSample
+    assert ExportedCandidateEvaluation is TruthCandidatePromotionEvaluation
     assert ExportedEvaluator is evaluate_truth_promotion
     assert ExportedSummarizer is summarize_truth
+    assert ExportedCandidateEvaluator is evaluate_truth_candidate_promotion
 
 
 
