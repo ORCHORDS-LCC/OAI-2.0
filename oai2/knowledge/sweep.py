@@ -277,14 +277,15 @@ class GcSweepState:
 
             lease_token: str | None = None
             if lease_authority is not None:
-                lease_token = f"gc-sweep:{candidate.key}"
+                lease_revision = lease_authority.revision
+                lease_token = f"gc-sweep:{candidate.key}:{lease_revision}"
                 acquire = lease_authority.acquire_delete_lease(
                     key=candidate.key,
                     token=lease_token,
                     owner="gc-sweep",
                     now=float(now),
                     ttl_seconds=float(lease_ttl_seconds),
-                    expected_revision=lease_authority.revision,
+                    expected_revision=lease_revision,
                 )
                 if acquire.decision is not GcDeleteLeaseDecision.ACQUIRED:
                     record = GcSweepRecord(

@@ -11,6 +11,7 @@ from oai2.knowledge.gc import (
 )
 from oai2.knowledge.gc_lease import (
     GcDeleteLeaseAuthority,
+    GcDeleteLeaseDecision,
     GcReferenceDecision,
 )
 from oai2.knowledge.sweep import (
@@ -492,3 +493,49 @@ def test_sweep_lease_ttl_must_be_positive() -> None:
             lease_authority=GcDeleteLeaseAuthority(),
             lease_ttl_seconds=0.0,
         )
+
+
+
+def test_sweep_expired_takeover_fences_stale_token() -> None:
+    """A takeover must not reuse an expired worker's lease token."""
+    key = "oai2-blobs/takeover"
+    blobs = {key}
+    state = GcSweepState.from_report(_report(key))
+    authority = GcDeleteLeaseAuthority()
+    stale_token = f"gc-sweep:{key}"
+
+    first = authority.acquire_delete_lease(
+        key=key,
+        token=stale_token,
+        owner="stale-worker",
+        now=10.0,
+        ttl_seconds=5.0,
+        expected_revision=0,
+    )
+    assert first.decision is GcDeleteLeaseDecision.ACQUIRED
+
+    stale_token_valid_during_delete: list[bool] = []
+
+    def delete_blob(candidate_key: str) -> None:
+        stale_token_valid_during_delete.append(
+            authority.validate_delete_lease(
+                candidate_key, stale_token, now=20.0
+            )
+        )
+        blobs.remove(candidate_key)
+
+    result = state.process_batch(
+        now=20.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda candidate_key: candidate_key in blobs,
+        delete_blob=delete_blob,
+        lease_authority=authority,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.DELETED
+    assert stale_token_valid_during_delete == [False]
+    assert blobs == set()
