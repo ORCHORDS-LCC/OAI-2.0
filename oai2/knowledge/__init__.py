@@ -204,6 +204,7 @@ __all__ = [
     "KNOWLEDGE_CORPUS_REVISION_SQL",
     "KNOWLEDGE_WRITER_UPSERT_SQL",
     "KNOWLEDGE_CORPUS_ADVANCE_SQL",
+    "knowledge_query_sql",
     "knowledge_schema_statements",
     "D1KnowledgeReader",
     "D1KnowledgeWriter",

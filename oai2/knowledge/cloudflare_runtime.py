@@ -218,11 +218,12 @@ class AsyncCloudflareKnowledgeRuntime:
         if row.r2_blob_key is None:
             content = ""
         else:
-            content = await self._r2.get_text(row.r2_blob_key)
-            if content is None:
+            text = await self._r2.get_text(row.r2_blob_key)
+            if text is None:
                 raise KnowledgeIntegrityError(
                     f"R2 body is missing for knowledge_id={row.knowledge_id}"
                 )
+            content = text
 
         if sha256_hex(content) != row.content_hash:
             raise KnowledgeIntegrityError(

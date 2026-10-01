@@ -9,6 +9,7 @@ object key is not protected by an active lease.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from ..core import KnowledgeId, Status
 from .abstraction import RetrievalRequest
@@ -129,7 +130,7 @@ def _result_rows(result: object) -> list[Mapping[str, object]]:
         rows = result.get("results")
     else:
         rows = getattr(result, "results", None)
-    if hasattr(rows, "to_py"):
+    if rows is not None and hasattr(rows, "to_py"):
         rows = rows.to_py()
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes, bytearray)):
         raise RuntimeError("D1 result does not expose a row sequence")
@@ -167,9 +168,9 @@ def _row_from_mapping(row: Mapping[str, object]) -> CFRow:
         lifecycle = Status(str(status))
     except ValueError as exc:
         raise RuntimeError("D1 knowledge row has invalid status") from exc
-    source_uri = row.get("source_uri")
-    r2_blob_key = row.get("r2_blob_key")
-    vectorize_id = row.get("vectorize_id")
+    source_uri = cast("str | None", row.get("source_uri"))
+    r2_blob_key = cast("str | None", row.get("r2_blob_key"))
+    vectorize_id = cast("str | None", row.get("vectorize_id"))
     for name, value in (
         ("source_uri", source_uri),
         ("r2_blob_key", r2_blob_key),
