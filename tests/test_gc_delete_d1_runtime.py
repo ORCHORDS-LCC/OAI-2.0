@@ -196,3 +196,21 @@ async def test_delete_boundary_fails_closed_when_finalize_does_not_apply() -> No
     assert result.outcome is D1DeleteOutcome.FAILED
     assert blobs == set()
     assert [name for name, _ in store.calls] == ["acquire", "validate", "finalize"]
+
+
+
+def test_async_gc_delete_boundary_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import D1DeleteOutcome as ExportedOutcome
+    from oai2.knowledge import D1DeleteResult as ExportedResult
+    from oai2.knowledge import (
+        delete_candidate_with_d1_lease as ExportedDeleteCandidate,
+    )
+    from oai2.knowledge.gc_delete_d1_runtime import (
+        D1DeleteOutcome,
+        D1DeleteResult,
+        delete_candidate_with_d1_lease,
+    )
+
+    assert ExportedOutcome is D1DeleteOutcome
+    assert ExportedResult is D1DeleteResult
+    assert ExportedDeleteCandidate is delete_candidate_with_d1_lease
