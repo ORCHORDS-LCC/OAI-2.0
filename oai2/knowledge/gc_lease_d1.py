@@ -105,7 +105,13 @@ INSERT INTO {GC_LEASE_TABLE} (
 )
 SELECT
     ?1, ?2, ?3, ?4, ?5, 'active', 0, NULL, ?6, ?4
-WHERE NOT EXISTS (
+WHERE EXISTS (
+    SELECT 1
+    FROM knowledge_corpus_state
+    WHERE singleton = 1
+      AND revision = ?6
+)
+AND NOT EXISTS (
     SELECT 1
     FROM knowledge_index
     WHERE r2_blob_key = ?1
@@ -127,6 +133,12 @@ WHERE
             {GC_LEASE_TABLE}.state IN ('active', 'delete_failed')
             AND {GC_LEASE_TABLE}.expires_at <= excluded.acquired_at
         )
+    )
+    AND EXISTS (
+        SELECT 1
+        FROM knowledge_corpus_state
+        WHERE singleton = 1
+          AND revision = excluded.authority_revision
     )
     AND NOT EXISTS (
         SELECT 1
