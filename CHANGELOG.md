@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Versioned public-safe Cloudflare knowledge transport schemas for request/response, normalized auth context, explicit errors, D1 metadata, R2 body descriptors, Vectorize metadata and KV cache envelopes.
+- Regression tests for transport contract versioning, operation requirements, response invariants, content-addressed R2 integrity, Vectorize provenance and revisioned KV envelopes.
+- q-pipe compatibility source revision/blob markers tied to the exact public q-pipe source used for importer-policy verification.
+
 - Runner-free local preflight at `scripts/verify.py` covering Ruff, MyPy, Pytest, public-safety and Markdown-link checks.
 - Standards-aligned master issue hierarchy with work packages/work items through core architecture, data/training, inference, observability, resource control, supply-chain and configuration domains.
 

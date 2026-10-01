@@ -29,7 +29,8 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Multi-agent orchestrator interfaces | **EXPERIMENTAL scaffold** — no production swarm runtime yet |
 | Capability-eval harness | **EXPERIMENTAL** |
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
-| Cloudflare knowledge contract + mocks | **PROPOSED live / tested mock contract** |
+| Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
+| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still proposed |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
@@ -82,7 +83,7 @@ flowchart TD
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, and a strict q-pipe importer. It does **not** yet make live Cloudflare network calls.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, and versioned public-safe Worker transport schemas. It does **not** yet make live Cloudflare network calls.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 

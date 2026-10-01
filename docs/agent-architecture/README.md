@@ -26,6 +26,7 @@ Experimental source currently includes:
 - corrected MLX benchmark harness;
 - offline capability-evaluation scaffolds;
 - application-level Cloudflare knowledge contract + deterministic mocks;
+- versioned public-safe Cloudflare transport/schema models;
 - strict q-pipe verified-import policy.
 
 Not yet implemented as production capabilities:

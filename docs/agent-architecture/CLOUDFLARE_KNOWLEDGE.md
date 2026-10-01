@@ -2,13 +2,13 @@
 
 _Last reviewed against current Cloudflare documentation: 2026-10-01._
 
-> **Current status:** application-level contract + deterministic mocks are implemented/tested. Live Cloudflare network transport and production semantic retrieval remain **PROPOSED**.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, and versioned transport/schema models are implemented in source. Live Cloudflare network execution and production semantic retrieval remain **PROPOSED** until locally verified end-to-end.
 
 ## Verified architecture boundary
 
 The local OAI-2.0 runtime should not pretend Cloudflare Worker bindings are ordinary local Python calls. Current Cloudflare bindings are capabilities exposed **inside Workers** and their D1/R2/KV/Vectorize operations are asynchronous.
 
-The repository therefore exposes an **application-level `CloudflareBindingAdapter` protocol**. A future live Worker translates that protocol to native Cloudflare APIs.
+The repository exposes an **application-level `CloudflareBindingAdapter` protocol** plus versioned public-safe transport models in `oai2/knowledge/transport.py`. Those models define request/response, normalized authenticated identity, explicit error classes, D1 metadata, R2 body descriptors, Vectorize metadata, and KV cache envelopes. A future live Worker must translate that contract to native Cloudflare APIs.
 
 ```mermaid
 flowchart LR
@@ -19,6 +19,21 @@ flowchart LR
     W --> V[Vectorize embeddings]
     W --> K[KV query cache]
 ```
+
+## Versioned transport contract
+
+Current source now defines:
+
+- `TRANSPORT_VERSION`;
+- `KnowledgeTransportRequest` / `KnowledgeTransportResponse`;
+- `TransportAuthContext` containing normalized identity/capabilities but no bearer credential;
+- explicit authorization, validation, not-found, conflict, dependency, integrity and internal error classes;
+- `D1KnowledgeIndexRecord` with authoritative corpus revision;
+- `R2BodyDescriptor` with content-hash verification;
+- `VectorizeMetadata` carrying embedding version and provenance fields;
+- `QueryCacheEnvelope` keyed by corpus revision and embedding digest.
+
+These are contract/schema objects only. They do **not** prove a live Worker, live D1/R2/Vectorize/KV bindings, authentication middleware, or a network round trip.
 
 ## Service roles
 
@@ -68,7 +83,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 
 ## Current implementation limitations
 
-- no live Worker endpoint in this public repository;
+- versioned transport schemas exist, but no live Worker endpoint/network adapter is verified yet;
 - no production D1 schema migration/deployment;
 - no production R2 bucket binding;
 - no production Vectorize index binding;
