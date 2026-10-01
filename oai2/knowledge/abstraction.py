@@ -52,10 +52,21 @@ class RetrievalRequest:
     )
 
 
+@dataclass(slots=True, frozen=True)
+class RetrievalCandidate:
+    """One eligible retrieval candidate with explicit ranking/provenance evidence."""
+
+    knowledge_id: KnowledgeId
+    content_hash: str
+    source_uri: str | None
+    score: float | None = None
+
+
 @dataclass(slots=True)
 class RetrievalResult:
     topic: str
     objects: list[KnowledgeObject] = field(default_factory=list)
+    candidates: list[RetrievalCandidate] = field(default_factory=list)
 
     def __bool__(self) -> bool:  # pragma: no cover - trivial
         return bool(self.objects)
@@ -112,7 +123,19 @@ class InMemoryKnowledgeStore(KnowledgeStore):
                 continue
             out.append(obj)
         out.sort(key=lambda o: (o.authority, o.retrieved_at), reverse=True)
-        return RetrievalResult(topic=request.topic, objects=out[: request.limit])
+        selected = out[: request.limit]
+        return RetrievalResult(
+            topic=request.topic,
+            objects=selected,
+            candidates=[
+                RetrievalCandidate(
+                    knowledge_id=obj.knowledge_id,
+                    content_hash=obj.content_hash,
+                    source_uri=obj.source_uri,
+                )
+                for obj in selected
+            ],
+        )
 
     def all(self) -> Iterable[KnowledgeObject]:
         return tuple(self._items.values())
@@ -121,6 +144,7 @@ class InMemoryKnowledgeStore(KnowledgeStore):
 __all__ = [
     "KnowledgeObject",
     "RetrievalRequest",
+    "RetrievalCandidate",
     "RetrievalResult",
     "KnowledgeStore",
     "InMemoryKnowledgeStore",
