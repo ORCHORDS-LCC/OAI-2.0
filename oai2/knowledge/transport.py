@@ -19,7 +19,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..core import KnowledgeId, Status
 from .abstraction import KnowledgeObject, sha256_hex
 
-
 TRANSPORT_VERSION = "1"
 
 

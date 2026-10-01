@@ -30,6 +30,18 @@ from .cloudflare import (
     r2_blob_key_for,
 )
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
+from .qpipe_import import (
+    QPIPE_COMPATIBILITY_SOURCE_BLOBS,
+    QPIPE_COMPATIBILITY_SOURCE_REVISION,
+    ImportPolicy,
+    ImportReport,
+    QPipeRow,
+    QPipeSource,
+    QPipeStatus,
+    derive_authority,
+    import_qpipe_rows,
+    row_to_knowledge_object,
+)
 from .transport import (
     TRANSPORT_VERSION,
     D1KnowledgeIndexRecord,
@@ -43,18 +55,6 @@ from .transport import (
     TransportErrorCode,
     TransportOperation,
     VectorizeMetadata,
-)
-from .qpipe_import import (
-    QPIPE_COMPATIBILITY_SOURCE_BLOBS,
-    QPIPE_COMPATIBILITY_SOURCE_REVISION,
-    ImportPolicy,
-    ImportReport,
-    QPipeRow,
-    QPipeSource,
-    QPipeStatus,
-    derive_authority,
-    import_qpipe_rows,
-    row_to_knowledge_object,
 )
 
 __all__ = [
