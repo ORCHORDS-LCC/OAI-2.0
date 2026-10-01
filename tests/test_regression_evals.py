@@ -206,3 +206,22 @@ def test_every_candidate_capability_requires_explicit_threshold() -> None:
             candidate_abstention_accuracy=1.0,
             candidate_false_success_rate=0.0,
         )
+
+
+
+def test_held_out_regression_gate_exports_from_evals_package() -> None:
+    from oai2.evals import CapabilityRegression as ExportedRegression
+    from oai2.evals import CapabilityRegressionThreshold as ExportedThreshold
+    from oai2.evals import HeldOutPromotionBudget as ExportedBudget
+    from oai2.evals import HeldOutPromotionEvaluation as ExportedEvaluation
+    from oai2.evals import evaluate_held_out_promotion as ExportedEvaluate
+    from oai2.evals.regression import (
+        CapabilityRegression,
+        HeldOutPromotionEvaluation,
+    )
+
+    assert ExportedRegression is CapabilityRegression
+    assert ExportedThreshold is CapabilityRegressionThreshold
+    assert ExportedBudget is HeldOutPromotionBudget
+    assert ExportedEvaluation is HeldOutPromotionEvaluation
+    assert ExportedEvaluate is evaluate_held_out_promotion
