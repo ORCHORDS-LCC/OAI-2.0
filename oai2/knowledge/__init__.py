@@ -37,6 +37,15 @@ from .gc import (
     KnowledgeBlobRow,
     R2InventoryObject,
 )
+from .gc_lease import (
+    GcDeleteFinalizeDecision,
+    GcDeleteLease,
+    GcDeleteLeaseAuthority,
+    GcDeleteLeaseDecision,
+    GcDeleteLeaseResult,
+    GcDeleteLeaseState,
+    GcReferenceDecision,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
@@ -97,6 +106,13 @@ __all__ = [
     "GcReconciliationState",
     "KnowledgeBlobRow",
     "R2InventoryObject",
+    "GcDeleteFinalizeDecision",
+    "GcDeleteLease",
+    "GcDeleteLeaseAuthority",
+    "GcDeleteLeaseDecision",
+    "GcDeleteLeaseResult",
+    "GcDeleteLeaseState",
+    "GcReferenceDecision",
     "GcSweepBatchResult",
     "GcSweepCandidate",
     "GcSweepDisposition",
