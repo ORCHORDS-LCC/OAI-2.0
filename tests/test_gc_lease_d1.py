@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from oai2.knowledge.gc_lease_d1 import (
+    GC_LEASE_ACQUIRE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_SCHEMA_VERSION,
     GC_LEASE_SELECT_SQL,
@@ -124,3 +125,72 @@ def test_schema_rejects_invalid_lease_state_and_negative_failure_count() -> None
         except sqlite3.IntegrityError:
             return
         raise AssertionError("negative failure_count must be rejected")
+
+
+
+def test_conditional_acquire_blocks_referenced_object_and_live_lease() -> None:
+    with _db() as db:
+        key = "oai2-blobs/shared"
+        db.execute(
+            "INSERT INTO knowledge_index(knowledge_id, r2_blob_key) VALUES (?, ?)",
+            ("ko_1", key),
+        )
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-1", "gc-sweep", 10.0, 20.0, 7),
+        )
+        assert db.total_changes == before
+
+        db.execute(
+            "DELETE FROM knowledge_index WHERE knowledge_id = ?",
+            ("ko_1",),
+        )
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-1", "gc-sweep", 10.0, 20.0, 7),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[1] == "lease-1"
+
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-2", "gc-sweep", 15.0, 25.0, 8),
+        )
+        assert db.total_changes == before
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[1] == "lease-1"
+
+
+def test_conditional_acquire_allows_expired_takeover_but_rechecks_references() -> None:
+    with _db() as db:
+        key = "oai2-blobs/a"
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-old", "gc-sweep", 10.0, 15.0, 7),
+        )
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-new", "gc-sweep", 20.0, 30.0, 8),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[1] == "lease-new"
+        assert row[8] == 8
+
+        db.execute(
+            "INSERT INTO knowledge_index(knowledge_id, r2_blob_key) VALUES (?, ?)",
+            ("ko_2", key),
+        )
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-third", "gc-sweep", 40.0, 50.0, 9),
+        )
+        assert db.total_changes == before
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[1] == "lease-new"
