@@ -228,7 +228,17 @@ def test_store_get_rejects_mismatched_blob() -> None:
     b.blobs[r2_blob_key_for(obj.content_hash)] = b"tampered body"
     with pytest.raises(ValueError, match="hash"):
         store.get(obj.knowledge_id)
-\n\ndef test_store_preserves_source_uri() -> None:\n    b = MockCloudflareBindings()\n    store = CloudflareKnowledgeStore(b)\n    obj = _make_obj("provenance", "source body", source_uri="https://example.test/source")\n    store.put(obj)\n    got = store.get(obj.knowledge_id)\n    assert got is not None\n    assert got.source_uri == "https://example.test/source"\n
+
+
+def test_store_preserves_source_uri() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("provenance", "source body", source_uri="https://example.test/source")
+    store.put(obj)
+    got = store.get(obj.knowledge_id)
+    assert got is not None
+    assert got.source_uri == "https://example.test/source"
+
 
 def test_retrieve_ignores_corrupted_cache() -> None:
     b = MockCloudflareBindings()
