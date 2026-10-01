@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from oai2.knowledge.gc import (
     GcDryRunReport,
     GcObjectDisposition,
@@ -215,3 +217,12 @@ def test_snapshot_round_trip_preserves_cursor_and_first_seen() -> None:
     restored = GcSweepState.from_snapshot(state.to_snapshot())
     assert restored.cursor == 1
     assert restored.candidates[0].first_seen_at == 10.0
+
+
+def test_snapshot_rejects_cursor_tampering() -> None:
+    state = GcSweepState.from_report(_report("oai2-blobs/a", "oai2-blobs/b"))
+    snapshot = state.to_snapshot()
+    snapshot["cursor"] = 1
+
+    with pytest.raises(ValueError, match="snapshot fingerprint is invalid"):
+        GcSweepState.from_snapshot(snapshot)
