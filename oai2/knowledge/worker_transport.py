@@ -13,6 +13,7 @@ import time
 from collections.abc import Sequence
 from typing import Protocol
 
+from .abstraction import RetrievalRequest
 from .cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
@@ -109,7 +110,12 @@ class KnowledgeWorkerTransport:
             assert request.topic is not None
             vector = await self._embed(request.topic)
             result = await self._runtime.retrieve(
-                request.to_retrieval_request(),
+                RetrievalRequest(
+                    topic=request.topic,
+                    limit=request.limit,
+                    min_authority=request.min_authority,
+                    include_status=request.include_status,
+                ),
                 query_vector=vector,
             )
             return KnowledgeTransportResponse(
@@ -164,8 +170,11 @@ class KnowledgeWorkerTransport:
         auth = request.auth
         if auth is None:
             return "authentication is required" if self._require_auth else None
-        if auth.expires_at is not None and now >= auth.expires_at:
-            return "authentication context is expired"
+        if auth.expires_at is not None:
+            if not math.isfinite(float(auth.expires_at)):
+                return "authentication context has invalid expiry"
+            if now >= auth.expires_at:
+                return "authentication context is expired"
         if required_capability not in auth.capabilities:
             return f"missing required capability: {required_capability}"
         return None
