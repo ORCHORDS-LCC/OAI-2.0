@@ -24,6 +24,7 @@ Experimental source currently includes:
 - FURIOUS/NORMAL/DEEP/SWARM controller scaffolds;
 - multi-agent orchestration interfaces;
 - evidence/claim state models plus a versioned claim/evidence taxonomy with state-version/freshness invalidation and canonical repository/tool/web evidence-path adapters;
+- hidden-evidence adversarial truth runner, truthfulness outcome metrics, and a promotion gate that couples misleading-claim budgets to verified-task regression;
 - four-view vision abstractions;
 - corrected MLX benchmark harness;
 - offline capability-evaluation scaffolds;
