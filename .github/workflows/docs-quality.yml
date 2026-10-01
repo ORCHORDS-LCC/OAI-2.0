@@ -1,17 +1,15 @@
 name: Documentation quality
 
+# Direct uploads to main are the canonical workflow; the runner should
+# not fire on those. Runs when a pull request touches documentation or
+# when manually dispatched via the Actions tab.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**/*.md"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/workflows/docs-quality.yml"
   pull_request:
     paths:
       - "**/*.md"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/workflows/docs-quality.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
