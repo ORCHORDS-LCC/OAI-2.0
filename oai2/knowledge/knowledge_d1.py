@@ -42,6 +42,51 @@ FROM {KNOWLEDGE_CORPUS_STATE_TABLE}
 WHERE singleton = 1
 """.strip()
 
+
+KNOWLEDGE_GET_SQL = f"""
+SELECT
+    knowledge_id,
+    topic,
+    content_hash,
+    authority,
+    status,
+    source_uri,
+    retrieved_at,
+    r2_blob_key,
+    vectorize_id,
+    corpus_revision
+FROM {KNOWLEDGE_INDEX_TABLE}
+WHERE knowledge_id = ?1
+LIMIT 1
+""".strip()
+
+
+def knowledge_query_sql(status_count: int) -> str:
+    """Build the bounded filtered retrieval SQL for an explicit status set."""
+    if isinstance(status_count, bool) or not isinstance(status_count, int) or status_count <= 0:
+        raise ValueError("status_count must be a positive integer")
+    status_placeholders = ", ".join(f"?{index}" for index in range(3, 3 + status_count))
+    limit_index = 3 + status_count
+    return f"""
+SELECT
+    knowledge_id,
+    topic,
+    content_hash,
+    authority,
+    status,
+    source_uri,
+    retrieved_at,
+    r2_blob_key,
+    vectorize_id,
+    corpus_revision
+FROM {KNOWLEDGE_INDEX_TABLE}
+WHERE instr(lower(topic), lower(?1)) > 0
+  AND authority >= ?2
+  AND status IN ({status_placeholders})
+ORDER BY authority DESC, retrieved_at DESC
+LIMIT ?{limit_index}
+""".strip()
+
 KNOWLEDGE_WRITER_UPSERT_SQL = f"""
 INSERT INTO {KNOWLEDGE_INDEX_TABLE} (
     knowledge_id,
@@ -123,6 +168,8 @@ __all__ = [
     "KNOWLEDGE_CORPUS_STATE_TABLE",
     "KNOWLEDGE_SCHEMA_SQL",
     "KNOWLEDGE_CORPUS_REVISION_SQL",
+    "KNOWLEDGE_GET_SQL",
+    "knowledge_query_sql",
     "KNOWLEDGE_WRITER_UPSERT_SQL",
     "KNOWLEDGE_CORPUS_ADVANCE_SQL",
     "knowledge_schema_statements",
