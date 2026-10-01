@@ -9,6 +9,10 @@ from oai2.knowledge.gc import (
     GcObjectDisposition,
     GcObjectRecord,
 )
+from oai2.knowledge.gc_lease import (
+    GcDeleteLeaseAuthority,
+    GcReferenceDecision,
+)
 from oai2.knowledge.sweep import (
     GcSweepDisposition,
     GcSweepState,
@@ -312,3 +316,133 @@ def test_non_boolean_blob_existence_result_fails_closed() -> None:
     assert result.records[0].disposition is GcSweepDisposition.FAILED
     assert state.cursor == 0
     assert deleted == []
+
+
+def test_sweep_without_lease_authority_unchanged() -> None:
+    """When ``lease_authority`` is not provided the destructive path is
+    unchanged: no D1 lease is queried, delete_blob runs, and the candidate
+    is recorded as DELETED.
+    """
+    blobs = {"oai2-blobs/a"}
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda key: key in blobs,
+        delete_blob=blobs.remove,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.DELETED
+    assert blobs == set()
+
+
+def test_sweep_lease_authority_acquires_before_and_finalizes_after_delete() -> None:
+    """With ``lease_authority`` provided the destructive path acquires a
+    D1-authoritative lease immediately before delete_blob and finalizes the
+    lease after a confirmed absence.
+    """
+    blobs = {"oai2-blobs/a"}
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+    authority = GcDeleteLeaseAuthority()
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda key: key in blobs,
+        delete_blob=blobs.remove,
+        lease_authority=authority,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.DELETED
+    assert blobs == set()
+    # Lease was finalized: a subsequent reference attempt is blocked as a
+    # deleted body (proves finalize_delete ran successfully).
+    assert (
+        authority.try_add_reference("oai2-blobs/a", "ko-after")
+        is GcReferenceDecision.BODY_DELETED
+    )
+
+
+def test_sweep_lease_authority_writer_reference_during_delete_path_denies() -> None:
+    """If the lease-authority state changes between the second reference
+    lookup and the lease acquire (simulated here by a writer adding a
+    reference inside blob_exists), the sweep emits LEASE_DENIED and does
+    not call delete_blob.
+    """
+    deleted: list[str] = []
+    state = GcSweepState.from_report(_report("oai2-blobs/race"))
+    authority = GcDeleteLeaseAuthority()
+
+    def reference_lookup(_key: str) -> tuple[str, ...]:
+        return ()
+
+    def blob_exists(_key: str) -> bool:
+        # Race: a writer adds a reference via the lease authority between
+        # the second sweep reference lookup and the lease acquire.
+        authority.try_add_reference("oai2-blobs/race", "ko-late")
+        return True
+
+    def delete_blob(key: str) -> None:
+        deleted.append(key)
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=reference_lookup,
+        blob_exists=blob_exists,
+        delete_blob=delete_blob,
+        lease_authority=authority,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.LEASE_DENIED
+    assert deleted == []
+    # No lease is held for this key after a denial.
+    assert (
+        authority.try_add_reference("oai2-blobs/race", "ko-other")
+        is GcReferenceDecision.ADDED
+    )
+
+
+def test_sweep_lease_authority_records_failure_when_delete_fails() -> None:
+    """When ``lease_authority`` is provided and delete_blob raises, the sweep
+    records a retryable failure on the lease (DELETE_FAILED state) so the
+    next attempt can recover the claim and writers stay excluded.
+    """
+    blobs = {"oai2-blobs/a"}
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+    authority = GcDeleteLeaseAuthority()
+
+    def delete_blob(key: str) -> None:
+        raise RuntimeError("simulated R2 outage")
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda key: key in blobs,
+        delete_blob=delete_blob,
+        lease_authority=authority,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.FAILED
+    assert state.cursor == 0
+    # The lease stays held and continues to block writers (recoverable).
+    assert (
+        authority.try_add_reference("oai2-blobs/a", "ko-recover")
+        is GcReferenceDecision.BLOCKED_BY_DELETE_LEASE
+    )

@@ -16,6 +16,7 @@ from enum import StrEnum
 from typing import Self
 
 from .gc import GcDryRunReport, GcObjectDisposition
+from .gc_lease import GcDeleteLeaseAuthority, GcDeleteLeaseDecision
 
 
 class GcSweepDisposition(StrEnum):
@@ -26,6 +27,7 @@ class GcSweepDisposition(StrEnum):
     DRY_RUN = "dry_run"
     UNAPPROVED = "unapproved"
     RECOVERY_BLOCKED = "recovery_blocked"
+    LEASE_DENIED = "lease_denied"
     DELETED = "deleted"
     ALREADY_ABSENT = "already_absent"
     FAILED = "failed"
@@ -123,12 +125,20 @@ class GcSweepState:
         authorized: bool = False,
         recovery_ready: bool = False,
         max_items: int = 100,
+        lease_authority: GcDeleteLeaseAuthority | None = None,
+        lease_ttl_seconds: float = 60.0,
     ) -> GcSweepBatchResult:
         """Process a bounded number of candidates conservatively.
 
         A failed dependency operation leaves the cursor on the failing
         candidate so a later call can retry it. Non-failing decisions advance
         the cursor and are retained as public-safe evidence records.
+
+        When ``lease_authority`` is provided the destructive path acquires a
+        D1-authoritative lease immediately before ``delete_blob`` and either
+        finalizes it on a confirmed absence or records a retryable failure on
+        the lease when the delete does not confirm. With ``lease_authority``
+        ``None`` the destructive path is unchanged.
         """
         _require_non_negative_number(now, "now")
         _require_non_negative_number(grace_seconds, "grace_seconds")
@@ -136,6 +146,8 @@ class GcSweepState:
         _require_bool(destructive, "destructive")
         _require_bool(authorized, "authorized")
         _require_bool(recovery_ready, "recovery_ready")
+        if lease_authority is not None:
+            _require_non_negative_number(lease_ttl_seconds, "lease_ttl_seconds")
 
         emitted: list[GcSweepRecord] = []
         attempted = 0
@@ -263,12 +275,38 @@ class GcSweepState:
                 self._record_and_advance(record, emitted)
                 continue
 
+            lease_token: str | None = None
+            if lease_authority is not None:
+                lease_token = f"gc-sweep:{candidate.key}"
+                acquire = lease_authority.acquire_delete_lease(
+                    key=candidate.key,
+                    token=lease_token,
+                    owner="gc-sweep",
+                    now=float(now),
+                    ttl_seconds=float(lease_ttl_seconds),
+                    expected_revision=lease_authority.revision,
+                )
+                if acquire.decision is not GcDeleteLeaseDecision.ACQUIRED:
+                    record = GcSweepRecord(
+                        key=candidate.key,
+                        disposition=GcSweepDisposition.LEASE_DENIED,
+                        processed_at=float(now),
+                        knowledge_ids=acquire.knowledge_ids,
+                        detail=(
+                            "d1-authoritative lease denied: "
+                            f"{acquire.decision.value}"
+                        ),
+                    )
+                    self._record_and_advance(record, emitted)
+                    continue
+
             try:
                 delete_blob(candidate.key)
                 still_exists = _require_bool_result(
                     blob_exists(candidate.key), "blob_exists"
                 )
             except Exception:
+                _record_lease_failure(lease_authority, candidate.key, lease_token, float(now))
                 record = GcSweepRecord(
                     key=candidate.key,
                     disposition=GcSweepDisposition.FAILED,
@@ -279,6 +317,7 @@ class GcSweepState:
                 break
 
             if still_exists:
+                _record_lease_failure(lease_authority, candidate.key, lease_token, float(now))
                 record = GcSweepRecord(
                     key=candidate.key,
                     disposition=GcSweepDisposition.FAILED,
@@ -288,6 +327,7 @@ class GcSweepState:
                 self._record_without_advance(record, emitted)
                 break
 
+            _finalize_lease(lease_authority, candidate.key, lease_token, float(now))
             record = GcSweepRecord(
                 key=candidate.key,
                 disposition=GcSweepDisposition.DELETED,
@@ -435,6 +475,46 @@ class GcSweepState:
     ) -> None:
         self.records.append(record)
         emitted.append(record)
+
+
+def _record_lease_failure(
+    authority: GcDeleteLeaseAuthority | None,
+    key: str,
+    token: str | None,
+    now: float,
+) -> None:
+    """Record a retryable failure on a held sweep lease, if any.
+
+    Best-effort: any authority exception while transitioning the lease to
+    DELETE_FAILED must not mask the upstream sweep failure.
+    """
+    if authority is None or token is None:
+        return
+    try:
+        authority.record_delete_failure(key=key, token=token, now=now)
+    except Exception:
+        pass
+
+
+def _finalize_lease(
+    authority: GcDeleteLeaseAuthority | None,
+    key: str,
+    token: str | None,
+    now: float,
+) -> None:
+    """Finalize a held sweep lease after a confirmed R2 absence.
+
+    Best-effort: any authority exception while finalizing must not mask the
+    upstream confirmed deletion evidence.
+    """
+    if authority is None or token is None:
+        return
+    try:
+        authority.finalize_delete(
+            key=key, token=token, now=now, already_absent=True
+        )
+    except Exception:
+        pass
 
 
 def _snapshot_fingerprint(payload: Mapping[str, object]) -> str:
