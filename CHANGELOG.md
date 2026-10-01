@@ -8,7 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Expanded standards-aligned work-package map through WP-74, covering verification, Cloudflare knowledge, migration/retrieval, benchmarking, sparse/adaptive architecture, training/data/tokenizer, vision/tools/agents, host integrations, security/privacy/supply chain, Apple/device/accessibility integration, temporal knowledge, content-addressed garbage collection, numerical stability, architecture search, client SDKs and artifact distribution.
+- Expanded standards-aligned work-package map through WP-76, including claim-level evidence enforcement/hallucination resistance and end-to-end service-quality budgets.
+- D1-authoritative GC deletion-lease state contract with expected-revision acquisition, writer exclusion, expired-owner takeover/fencing, retryable failure, idempotent finalize/release, deleted-body tombstones and verified restore semantics.
 - Reference-safe, non-destructive R2 liveness reconciliation with shared-body grouping, missing/orphan classification, byte/age metrics, resumable pagination and authoritative-reference fingerprinting.
 - Conservative R2 orphan sweep decision core with grace windows, immediate pre-delete D1 recheck, dry-run default, explicit authorization/recovery gates, idempotent absence handling, bounded failure resume and integrity-checked checkpoints.
 - Versioned public-safe Cloudflare knowledge transport schemas for request/response, normalized auth context, explicit errors, D1 metadata, R2 body descriptors, Vectorize metadata and KV cache envelopes.
@@ -26,7 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Master Issue #1 is now the canonical global map through WP-74 and issue boundary #224, with parent WP issues owning detailed work-item registries.
+- Master Issue #1 is the canonical global map through WP-76 and issue boundary #233, with parent WP issues owning detailed work-item registries.
 - Runner-free preflight reports explicit Apple-Silicon PASS/SKIP state and verifies a real sibling/configured q-pipe checkout against pinned compatibility revision/blob hashes when available.
 - Removed GitHub Actions runner-backed workflows; OAI-2.0 acceptance is local/manual-first and runner-free.
 - Architecture target supersedes the original small-model-only concept: OAI-2.0 targets **10–30B+ total specialist capacity** with difficulty-dependent active compute.
@@ -39,8 +40,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Closed R2 sweep race windows by adding a second authoritative reference check immediately before deletion and retiring re-referenced candidates until a fresh dry-run/grace cycle.
-- Sweep runtime now rejects non-boolean dependency results instead of coercing them into destructive decisions.
-- Sweep checkpoints now fingerprint full state, including cursor/history/retired candidates, so tampered resume state is rejected.
+- Added a D1 claim/writer-exclusion contract so live integration can fence the remaining cross-service D1-reference/R2-delete race rather than treating one pre-delete lookup as atomic.
+- Sweep runtime rejects non-boolean dependency results instead of coercing them into destructive decisions.
+- Sweep checkpoints fingerprint full state, including cursor/history/retired candidates, so tampered resume state is rejected.
 - Dry-run GC page ingestion is atomic; snapshot booleans/cursors/inventory values are strictly validated; resumed scans can be checked against the current authoritative reference set.
 - Repaired the local preflight hard-coded-secret regex and excluded generated environments/caches/build trees from repository scans.
 - Removed stale claim that mock Cloudflare methods map 1:1 to live Worker APIs.
