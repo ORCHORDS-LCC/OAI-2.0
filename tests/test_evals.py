@@ -66,3 +66,84 @@ def test_builtin_suites_iterate() -> None:
     assert len(suites) == len(BUILTIN_SUITES_NAMES)
     for s in suites:
         assert s.suite_id
+
+
+def test_evals_package_full_surface_identity() -> None:
+    """Every name in ``oai2/evals/__init__.py`` ``__all__`` is importable
+    from ``oai2.evals`` and aliases its source-of-truth.
+
+    Closes a coverage gap where ``oai2.evals`` declared 17 ``__all__``
+    entries (9 capability-eval scaffold symbols defined inline plus 8
+    truth re-exports from ``oai2.evals.truth``) but the only sibling
+    identity test
+    (``tests/test_truth_evals.py::test_truth_module_exports_from_evals_package``)
+    pinned the 8 truth re-exports only. The 9 capability-eval symbols
+    ``BUILTIN_SUITES_NAMES``, ``CapabilityCase``, ``CapabilityScore``,
+    ``CapabilitySuite``, ``SCORERS``, ``SuiteReport``, ``builtin_suite``,
+    ``builtin_suites``, ``run_suite`` were not pinned at the package
+    surface, leaving a 53 percent coverage gap on the package public
+    contract.
+
+    The test imports all 17 names from ``oai2.evals`` (the import itself
+    fails if any declared ``__all__`` entry is missing or mis-named), then
+    asserts the package-surface reference is identical to the canonical
+    source-of-truth (the same ``oai2.evals.__init__`` for capability-eval
+    inline symbols, or ``oai2.evals.truth`` for truth re-exports).
+    """
+    import oai2.evals as evals_pkg
+
+    from oai2.evals import (
+        # Capability-eval (9): defined inline in oai2/evals/__init__.py.
+        BUILTIN_SUITES_NAMES as _PkgBuiltInSuitesNames,
+        CapabilityCase as _PkgCapabilityCase,
+        CapabilityScore as _PkgCapabilityScore,
+        CapabilitySuite as _PkgCapabilitySuite,
+        SCORERS as _PkgScorers,
+        SuiteReport as _PkgSuiteReport,
+        builtin_suite as _PkgBuiltinSuite,
+        builtin_suites as _PkgBuiltinSuites,
+        run_suite as _PkgRunSuite,
+        # Truth re-exports (8): sourced from oai2.evals.truth.
+        TruthCaseClass as _PkgTruthCaseClass,
+        TruthOutcome as _PkgTruthOutcome,
+        TruthPromotionBudget as _PkgTruthPromotionBudget,
+        TruthPromotionEvaluation as _PkgTruthPromotionEvaluation,
+        TruthReport as _PkgTruthReport,
+        TruthSample as _PkgTruthSample,
+        evaluate_truth_promotion as _PkgEvaluateTruthPromotion,
+        summarize_truth as _PkgSummarizeTruth,
+    )
+    from oai2.evals.truth import (
+        TruthCaseClass as _SrcTruthCaseClass,
+        TruthOutcome as _SrcTruthOutcome,
+        TruthPromotionBudget as _SrcTruthPromotionBudget,
+        TruthPromotionEvaluation as _SrcTruthPromotionEvaluation,
+        TruthReport as _SrcTruthReport,
+        TruthSample as _SrcTruthSample,
+        evaluate_truth_promotion as _SrcEvaluateTruthPromotion,
+        summarize_truth as _SrcSummarizeTruth,
+    )
+
+    # Capability-eval symbols: the package-surface name is the same object
+    # as the locally-imported name (both resolve to the binding in
+    # ``oai2/evals/__init__.py``).
+    assert evals_pkg.BUILTIN_SUITES_NAMES is _PkgBuiltInSuitesNames
+    assert evals_pkg.CapabilityCase is _PkgCapabilityCase
+    assert evals_pkg.CapabilityScore is _PkgCapabilityScore
+    assert evals_pkg.CapabilitySuite is _PkgCapabilitySuite
+    assert evals_pkg.SCORERS is _PkgScorers
+    assert evals_pkg.SuiteReport is _PkgSuiteReport
+    assert evals_pkg.builtin_suite is _PkgBuiltinSuite
+    assert evals_pkg.builtin_suites is _PkgBuiltinSuites
+    assert evals_pkg.run_suite is _PkgRunSuite
+
+    # Truth re-exports: the package-surface name must be the same object
+    # as the source-of-truth defined in ``oai2.evals.truth``.
+    assert evals_pkg.TruthCaseClass is _SrcTruthCaseClass
+    assert evals_pkg.TruthOutcome is _SrcTruthOutcome
+    assert evals_pkg.TruthPromotionBudget is _SrcTruthPromotionBudget
+    assert evals_pkg.TruthPromotionEvaluation is _SrcTruthPromotionEvaluation
+    assert evals_pkg.TruthReport is _SrcTruthReport
+    assert evals_pkg.TruthSample is _SrcTruthSample
+    assert evals_pkg.evaluate_truth_promotion is _SrcEvaluateTruthPromotion
+    assert evals_pkg.summarize_truth is _SrcSummarizeTruth
