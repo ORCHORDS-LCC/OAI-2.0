@@ -226,3 +226,89 @@ def test_snapshot_rejects_cursor_tampering() -> None:
 
     with pytest.raises(ValueError, match="snapshot fingerprint is invalid"):
         GcSweepState.from_snapshot(snapshot)
+
+
+def test_reference_added_after_initial_lookup_prevents_delete() -> None:
+    deleted: list[str] = []
+    references: tuple[str, ...] = ()
+    lookups = 0
+    state = GcSweepState.from_report(_report("oai2-blobs/race"))
+
+    def reference_lookup(_key: str) -> tuple[str, ...]:
+        nonlocal lookups
+        lookups += 1
+        return references
+
+    def blob_exists(_key: str) -> bool:
+        nonlocal references
+        references = ("ko-race",)
+        return True
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=reference_lookup,
+        blob_exists=blob_exists,
+        delete_blob=deleted.append,
+    )
+
+    assert lookups == 2
+    assert result.records[0].disposition is GcSweepDisposition.RE_REFERENCED
+    assert result.records[0].knowledge_ids == ("ko-race",)
+    assert deleted == []
+
+
+def test_rereferenced_candidate_requires_new_dry_run_before_future_delete() -> None:
+    deleted: list[str] = []
+    state = GcSweepState.from_report(_report("oai2-blobs/shared"))
+
+    first = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: ("ko-live",),
+        blob_exists=lambda _key: True,
+        delete_blob=deleted.append,
+    )
+    assert first.records[0].disposition is GcSweepDisposition.RE_REFERENCED
+
+    state.start_next_pass()
+    second = state.process_batch(
+        now=200.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda _key: True,
+        delete_blob=deleted.append,
+    )
+
+    assert second.complete is True
+    assert second.records == ()
+    assert deleted == []
+
+
+def test_non_boolean_blob_existence_result_fails_closed() -> None:
+    deleted: list[str] = []
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda _key: "yes",  # type: ignore[return-value]
+        delete_blob=deleted.append,
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.FAILED
+    assert state.cursor == 0
+    assert deleted == []
