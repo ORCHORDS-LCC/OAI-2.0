@@ -2,7 +2,7 @@
 
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Live Worker deployment, production semantic retrieval, destructive sweep integration against the D1-backed authority, and controlled private destructive demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision writer contract and lease-aware transactional metadata writer now exist in source.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, and KV binding-facing primitives now exist in source. Live Worker deployment, Vectorize-backed semantic retrieval, full transport orchestration, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision writer contract and lease-aware transactional metadata writer now exist in source.
 
 ## Verified architecture boundary
 
@@ -47,6 +47,8 @@ Source/index metadata and pointers. The logical adapter stores one metadata row 
 
 Content-addressed knowledge bodies under a hash-derived object key. R2 is used for bodies/artifacts rather than bloating D1 rows.
 
+`oai2/knowledge/cloudflare_bindings_runtime.py` now provides an async binding-facing `CloudflareR2Store` wrapper over documented Worker operations for text put/get, head-based existence checks, and delete. This is source-level binding integration only; no production bucket binding or private deployment round trip is claimed.
+
 ### Vectorize
 
 Intended semantic index keyed back to knowledge IDs. Current mock tests prove vector ranking behavior, but `KnowledgeStore.retrieve()` does **not yet use production Vectorize semantic search**.
@@ -56,6 +58,8 @@ Cloudflare's current Vectorize API uses vector objects such as `{id, values, met
 ### Workers KV
 
 Best-effort query-result cache only. KV is eventually consistent, so it must never be the authority for knowledge lifecycle state or write-after-write correctness.
+
+`CloudflareKvCache` now wraps async Worker KV get/put calls with explicit string handling and TTL validation. It remains cache-only and is not used as lifecycle authority.
 
 Current logical cache keys include both an embedding-version digest and a corpus revision. Corpus revision belongs in an authoritative store such as D1, not KV.
 
@@ -196,9 +200,8 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 
 - versioned transport schemas exist, but no live Worker endpoint/network adapter is verified yet;
 - public-safe D1 lease schema, D1 knowledge-index/corpus-revision schema, async lease adapter, and transactional metadata writer exist, but no production migration/deployment has been demonstrated;
-- no production R2 bucket binding;
-- no production Vectorize index binding;
-- no production KV namespace binding;
+- async R2 and KV binding wrappers exist, but no production bucket/namespace binding or deployed Worker round trip has been demonstrated;
+- no production Vectorize binding/integration has been verified;
 - no real q-pipe corpus migration;
 - no production embeddings pipeline;
 - no network integration test;
