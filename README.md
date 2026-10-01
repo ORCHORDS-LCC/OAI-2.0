@@ -1,15 +1,18 @@
+<p align="center">
+  <img src="./assets/1080x360.jpg" width="1080" alt="ORCHORDS — BUILD DIFFERENT.">
+</p>
+
 # OAI-2.0
 
-Public architecture and research workspace for a next-generation coding agent focused on:
+[![Documentation quality](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml/badge.svg)](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Status: Research](https://img.shields.io/badge/status-research-orange.svg)](./docs/agent-architecture/README.md)
 
-- native tool calling;
-- code + vision reasoning;
-- UI/UX testing and visual debugging;
-- adaptive deep reasoning;
-- native multi-agent orchestration;
-- portable operation across IDEs and agent hosts;
-- evidence-driven verification;
-- compact, fast local execution.
+> ⭐ If you find the architecture useful, consider starring the repository.
+
+**ORCHORDS — BUILD DIFFERENT.**
+
+OAI-2.0 is the public architecture and research workspace for a next-generation coding agent focused on native tool calling, code + vision reasoning, UI/UX testing, adaptive reasoning, native multi-agent orchestration, portable IDE/agent-host operation, evidence-driven verification, and compact fast local execution.
 
 > **Project status: PROPOSED / RESEARCH.** Architecture documents describe targets unless explicitly marked IMPLEMENTED.
 
@@ -51,10 +54,34 @@ flowchart TD
     C --> H
 ```
 
+## Repository map
+
+- `docs/agent-architecture/` — public architecture and research specifications
+- `.github/` — contribution templates, ownership and documentation checks
+- `CONTRIBUTING.md` — contribution workflow
+- `SECURITY.md` — private vulnerability reporting
+- `SUPPORT.md` — support and question routing
+- `CODE_OF_CONDUCT.md` — community participation standard
+- `CHANGELOG.md` — notable repository changes
+
 ## Public-repository boundary
 
 This repository intentionally avoids private endpoints, credentials, internal deployment topology, sensitive datasets, provider arrangements, private training sources, customer data, and other non-public operational details.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+Architecture documents distinguish **IMPLEMENTED**, **EXPERIMENTAL**, **PROPOSED**, and **BLOCKED** work. A diagram or design note is not evidence that a feature exists.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security-sensitive findings go through [SECURITY.md](SECURITY.md), not public issues.
+
+## Support
+
+See [SUPPORT.md](SUPPORT.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Brand
 
 **ORCHORDS — BUILD DIFFERENT.**
