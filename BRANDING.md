@@ -1,81 +1,54 @@
-# OAI-2.0 Branding
-
 <p align="center">
   <img src="./assets/branding/orchords-banner.jpg" width="1080" alt="ORCHORDS — BUILD DIFFERENT.">
 </p>
 
+# OAI-2.0 Branding
+
+_Last reviewed: 2026-10-01._
+
 ## Brand hierarchy
 
-**Organization:** ORCHORDS  
+**Organization:** ORCHORDS / ORCHORDS-LCC  
 **Project:** OAI-2.0  
 **Tagline:** **ORCHORDS — BUILD DIFFERENT.**
 
-OAI-2.0 is presented as an ORCHORDS research project. Public visuals should make the ORCHORDS parent brand obvious while keeping **OAI-2.0** as the project name.
+OAI-2.0 is a public ORCHORDS research and engineering project. The repository now contains an **experimental implementation scaffold**, while the custom large-capacity dynamically activated model remains **PROPOSED**.
 
 ## Approved public presentation
 
 Use:
 
 - **OAI-2.0**
+- **ORCHORDS OAI-2.0**
 - **ORCHORDS — BUILD DIFFERENT.**
-- **Public architecture and research workspace**
-- **Next-generation coding agent research**
+- **Next-generation coding-agent architecture and research**
+- **Experimental implementation scaffold**
 
-Do not present PROPOSED architecture as a released model or production service.
+Do not present the proposed 10–30B+ specialist model, live Cloudflare backend, production vision stack, or host integrations as released capabilities.
 
 ## Repository banner
 
-Canonical repository banner:
+Canonical public banner:
 
 `assets/branding/orchords-banner.jpg`
 
-The root README uses this asset so the project has the same ORCHORDS visual identity as the public documentation repository.
-
-## Naming
-
-Preferred:
-- `OAI-2.0`
-- `ORCHORDS OAI-2.0`
-
-Avoid:
-- invented model aliases not documented in this repository;
-- claims that imply a production release;
-- third-party provider branding as part of the OAI-2.0 identity.
-
 ## Status language
 
-Use the repository status labels consistently:
-
-- **IMPLEMENTED**
-- **EXPERIMENTAL**
-- **PROPOSED**
-- **BLOCKED**
+- **IMPLEMENTED** — repository code plus evidence exists.
+- **EXPERIMENTAL** — working scaffold/prototype exists but is not production-ready.
+- **PROPOSED** — architecture/design target only.
+- **BLOCKED** — explicitly waiting on a dependency or proof.
 
 ## Public-safety boundary
 
-Branding assets and public-facing copy must not expose:
+Public branding and copy must not expose credentials, private endpoints, account IDs, internal topology, sensitive datasets, private provider arrangements, non-public training sources, or private/customer data.
 
-- credentials;
-- private endpoints;
-- internal deployment topology;
-- sensitive datasets;
-- private provider arrangements;
-- non-public training sources;
-- customer or private operational data.
+## Licensing and trademark
 
-## Asset layout
+Repository content is licensed for **non-commercial use only** under [LICENSE](LICENSE). No trademark rights are granted for ORCHORDS, OAI-2.0, the tagline, or associated visual identifiers.
 
-```text
-assets/
-└── branding/
-    ├── README.md
-    └── orchords-banner.jpg
-```
+## Contact
 
-Additional approved visual assets can be added here later without changing the public architecture documents.
-
-## Ownership
-
-The ORCHORDS brand remains associated with ORCHORDS / ORCHORDS-LCC. Repository content is licensed for non-commercial use only as stated in [LICENSE](LICENSE). No trademark rights are granted.
+Where a public email is required, use only **crm@orchords.com**.
 
 **ORCHORDS — BUILD DIFFERENT.**

@@ -1,34 +1,46 @@
-# Security and sandboxing
+# Security and Sandboxing
 
-> **Status: PROPOSED requirements.**
+_Last reviewed: 2026-10-01._
 
-Agentic coding combines untrusted repository content, tool output, network content, model output and potentially multiple agents. Prompts are not a security boundary.
+> **Current status:** security policy scaffolding exists; production autonomous execution security remains **PROPOSED** until hardened and adversarially tested.
+
+## Current safeguards
+
+Repository source currently includes:
+
+- a six-gate tool dispatcher;
+- public-safety CI scanning;
+- secret/private-resource exclusions in repository policy;
+- evidence/status modeling;
+- non-commercial licensing/contact policy.
+
+These are useful controls, not a complete autonomous-agent security boundary.
+
+## Capability gate
 
 ```mermaid
 flowchart LR
-    M[Agent request] --> P[Policy engine]
-    P --> S[Schema validation]
-    S --> C[Scope validation]
-    C --> A{Allowed?}
-    A -->|yes| X[Sandboxed execution]
-    A -->|no| D[Structured denial]
-    X --> L[Audit result]
-    L --> M
-    D --> M
+    M[Agent request] --> P[Policy]
+    P --> S[Schema]
+    S --> C[Capability/scope]
+    C --> B[Budget/approval]
+    B -->|allowed| X[Execution]
+    B -->|denied| D[Structured denial]
+    X --> E[Evidence/audit]
 ```
 
-## Prompt-injection boundary
+## Prompt injection
 
-```mermaid
-flowchart TD
-    I[Repository / web / tool content] --> U[Untrusted data]
-    U --> M[Model reasoning]
-    M --> A[Requested action]
-    A --> P[Independent policy engine]
-    P -->|allowed| E[Execute]
-    P -->|denied| N[Do not execute]
-```
+Repository files, web pages, issue comments, screenshots/OCR, retrieved knowledge, and tool output are untrusted data. They cannot grant capabilities.
 
-Required controls include explicit workspace roots, path traversal defense, process/time/memory limits, network restrictions where appropriate, secret redaction, scoped credentials, per-agent capability isolation, approval policy for high-impact actions and auditable tool calls.
+## Cloudflare
 
-Test prompt injection, poisoned tool descriptions, path escape, shell injection, exfiltration attempts, privilege escalation, cross-agent leakage, resource exhaustion and unsafe retries.
+Bindings/secrets must live in deployment configuration, not public source. KV is cache-only and eventually consistent; authoritative state must not depend on immediate KV write visibility.
+
+## Multi-agent isolation
+
+Child agents cannot escalate beyond parent/runtime permissions. Shared state needs access control where secrets/private context ever exist.
+
+## Evaluation
+
+Test prompt injection, malicious tool descriptions, path escape, shell injection, exfiltration, privilege escalation, cross-agent leakage, resource exhaustion, unsafe retries, and false-success reporting.

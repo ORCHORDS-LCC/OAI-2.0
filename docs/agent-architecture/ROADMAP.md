@@ -1,44 +1,44 @@
-# Implementation roadmap
+# Implementation Roadmap
 
-> **Status: PROPOSED.** Stages are validation gates, not delivery promises.
+_Last reviewed: 2026-10-01._
 
-```mermaid
-flowchart LR
-    S0[0 Public contracts] --> S1[1 Host-neutral tool protocol]
-    S1 --> S2[2 Fast single-agent controller]
-    S2 --> S3[3 Vision/UI grounding]
-    S3 --> S4[4 Evidence verification]
-    S4 --> S5[5 Native multi-agent]
-    S5 --> S6[6 Adaptive reasoning]
-    S6 --> S7[7 Host adapters]
-    S7 --> S8[8 Hardening]
-```
+Stages are evidence gates, not delivery promises.
 
-## Stage 0
-Architecture, security boundaries, eval requirements, diagrams and contribution rules.
+| Stage | Scope | Current status |
+| --- | --- | --- |
+| 0 | Public architecture/contracts | **IMPLEMENTED docs** |
+| 1 | Host-neutral protocol/tool types | **EXPERIMENTAL scaffold** |
+| 2 | Fast single-agent controllers | **EXPERIMENTAL scaffold** |
+| 3 | Vision/UI grounding | **EXPERIMENTAL data model; real grounding PROPOSED** |
+| 4 | Evidence verification | **EXPERIMENTAL scaffold** |
+| 5 | Native multi-agent | **EXPERIMENTAL orchestration scaffold; real swarm PROPOSED** |
+| 6 | Adaptive routing/depth/custom model | **PROPOSED** |
+| 7 | Host adapters | **PROPOSED** |
+| 8 | Production hardening | **IN PROGRESS foundations; production PROPOSED** |
 
-## Stage 1
-Normalize multimodal messages, dynamic tools, results, cancellation, permissions and agent operations.
+## Knowledge track
 
-## Stage 2
-Build the smallest useful single-agent controller and measure correct actions/stopping.
+| Knowledge milestone | Status |
+| --- | --- |
+| KnowledgeStore abstraction | **EXPERIMENTAL** |
+| In-memory deterministic store | **EXPERIMENTAL** |
+| Application-level Cloudflare contract | **EXPERIMENTAL contract / PROPOSED live** |
+| Cache revision invalidation | **EXPERIMENTAL** |
+| Strict q-pipe verified import gate | **EXPERIMENTAL** |
+| Synthetic 50-row round trip | **IMPLEMENTED test** |
+| Real q-pipe corpus migration | **PROPOSED** |
+| Live Worker + D1/R2/KV | **PROPOSED** |
+| Production Vectorize semantic retrieval | **PROPOSED** |
 
-## Stage 3
-Add screenshots, UI structure, localization and source-render mapping.
+## Immediate next evidence gates
 
-## Stage 4
-Add explicit evidence and expected-vs-observed verification.
+1. run full corrected test/lint/type suite after adapter changes;
+2. implement and test a live Worker transport without committing secrets;
+3. deploy public-safe D1/R2/Vectorize/KV schemas/bindings privately;
+4. perform a small real q-pipe promoted/verified migration;
+5. add live round-trip retrieval/evidence tests;
+6. collect repeated M5 Max baseline benchmark statistics;
+7. prototype routing/adaptive-depth behavior at small model scale;
+8. only then scale architecture experiments.
 
-## Stage 5
-Add spawn/delegate/message/join/cancel/merge with scoped capabilities and one integration owner.
-
-## Stage 6
-Train/evaluate FURIOUS, DEEP and SWARM routing under fixed budgets.
-
-## Stage 7
-Add host adapters only after inspecting and testing each public contract.
-
-## Stage 8
-Security, stress, recovery, cancellation, redaction and compatibility hardening.
-
-A capability moves from PROPOSED only when code, tests and held-out evidence exist.
+A capability is promoted only when code, tests, held-out evaluation, safety checks, and limitations are recorded.

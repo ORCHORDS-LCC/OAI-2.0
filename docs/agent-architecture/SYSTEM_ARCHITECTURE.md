@@ -1,97 +1,57 @@
-# System architecture
+# System Architecture
 
-> **Status: PROPOSED.**
+_Last reviewed: 2026-10-01._
 
-OAI-2.0 targets a portable coding foundation agent that treats text, code, screenshots, UI structure, tools, execution results and subagents as one software environment.
+## Goal
+
+Build a portable multimodal coding intelligence that treats code, language, UI state, screenshots, tools, test/runtime evidence, external knowledge, and subagents as one evolving software world.
+
+## Current versus target
 
 ```mermaid
 flowchart TB
-    subgraph Hosts
-      IDE[IDE]
-      SHELL[Agent shell]
-      API[Compatible API host]
-    end
-
-    subgraph Protocol
-      AD[Host adapter]
-      TD[Dynamic tool definitions]
-      MM[Multimodal messages]
-      AO[Agent operations]
-    end
-
-    subgraph Core
-      LC[Language + code encoder]
-      VI[Vision encoder]
-      UI[UI structure encoder]
-      SH[Shared multimodal core]
-      RC[Reasoning controller]
-      TH[Tool head]
-      AH[Agent-control head]
-      VH[Verification head]
-      OH[Output head]
-    end
-
-    subgraph Runtime
-      CTX[Shared context/cache]
-      EV[Evidence store]
-      EX[Execution adapters]
-      BENCH[Evaluation hooks]
-    end
-
-    IDE --> AD
-    SHELL --> AD
-    API --> AD
-    AD --> MM
-    TD --> MM
-    AO --> MM
-    MM --> LC
-    MM --> VI
-    MM --> UI
-    LC --> SH
-    VI --> SH
-    UI --> SH
-    SH --> RC
-    SH --> TH
-    SH --> AH
-    SH --> VH
-    SH --> OH
-    TH --> EX
-    AH --> EX
-    EX --> EV
-    EV --> VH
-    SH --> CTX
-    SH --> BENCH
+    H[IDE / agent host] --> P[Host protocol adapters - PROPOSED]
+    P --> C[OAI-2.0 core model - PROPOSED]
+    C --> R[Reasoning controllers - EXPERIMENTAL scaffold]
+    C --> V[Vision encoder - PROPOSED]
+    C --> T[Tool policy/dispatch - EXPERIMENTAL]
+    C --> A[Agent orchestration - EXPERIMENTAL scaffold]
+    C --> E[Evidence graph - EXPERIMENTAL]
+    C --> K[KnowledgeStore abstraction - EXPERIMENTAL]
+    K --> CF[Live Cloudflare transport - PROPOSED]
 ```
+
+## Implemented scaffold
+
+Current source contains typed protocol/tool models, reasoning controllers, agent specs/orchestrator interfaces, evidence graphs, vision-state abstractions, knowledge-store abstractions, corrected benchmark tooling, and capability evals.
+
+It does **not** contain the trained final multimodal model.
 
 ## World state
 
-```mermaid
-flowchart TD
-    W[Software world state] --> R[Repository graph]
-    W --> U[UI state graph]
-    W --> B[Build/test state]
-    W --> D[Runtime/device state]
-    W --> G[Change state]
-    W --> E[Evidence graph]
-    W --> A[Active-agent graph]
-    W --> P[Permissions + budgets]
-```
+The target world state covers:
 
-The main learning target is not only next-token prediction:
+- repository/symbol graph;
+- build/test state;
+- runtime/device state;
+- UI/visual state;
+- evidence/claim graph;
+- external knowledge references;
+- active agents and budgets;
+- change/commit state.
+
+Large shared artifacts should be referenced rather than repeatedly pasted into every agent context.
+
+## Model objective
+
+The architecture should learn more than next-token generation:
 
 ```text
-(current state, goal, source, screen, history)
+(current world, goal, source, visual state, evidence, history)
  -> next action
  -> expected result
  -> verification method
- -> evidence status
+ -> confidence/evidence status
 ```
 
-## Non-goals
-
-- claiming literal zero hallucinations;
-- forcing every task into multi-agent mode;
-- replacing compilers/tests with model opinion;
-- hard-coding one IDE's tool names;
-- exposing private infrastructure;
-- claiming frontier capability without benchmark evidence.
+See [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) and [CLOUDFLARE_KNOWLEDGE.md](CLOUDFLARE_KNOWLEDGE.md).

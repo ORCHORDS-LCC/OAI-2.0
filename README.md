@@ -8,20 +8,106 @@
 [![License: Non-Commercial](https://img.shields.io/badge/license-non--commercial-red.svg)](./LICENSE)
 [![Status: Research](https://img.shields.io/badge/status-research-orange.svg)](./docs/agent-architecture/README.md)
 
-> ⭐ If you find the architecture useful, consider starring the repository.
+> ⭐ If OAI-2.0 is useful or interesting, consider starring the repository.
 
 **ORCHORDS — BUILD DIFFERENT.**
 
-OAI-2.0 is the public architecture and research workspace for a next-generation coding agent focused on native tool calling, code + vision reasoning, UI/UX testing, adaptive reasoning, native multi-agent orchestration, portable IDE/agent-host operation, evidence-driven verification, and compact fast local execution.
+OAI-2.0 is a public next-generation coding-agent research project focused on **large intelligence capacity with dynamically small active compute**: code + vision reasoning, native dynamic tools, evidence-driven verification, adaptive reasoning depth, and conditional multi-agent execution.
 
-> **Project status: PROPOSED / RESEARCH.** Architecture documents describe targets unless explicitly marked IMPLEMENTED.
+## Current state — 2026-10-01
 
-## Start here
+OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
+
+| Area | Current status |
+| --- | --- |
+| Python package, typed core/protocols | **EXPERIMENTAL** |
+| Six-gate tool dispatcher | **EXPERIMENTAL** |
+| FURIOUS / NORMAL / DEEP / SWARM controllers | **EXPERIMENTAL scaffold** |
+| Evidence graph / claim state | **EXPERIMENTAL** |
+| Four-view vision data model | **EXPERIMENTAL abstraction** — no trained vision encoder yet |
+| Multi-agent orchestrator interfaces | **EXPERIMENTAL scaffold** — no production swarm runtime yet |
+| Capability-eval harness | **EXPERIMENTAL** |
+| MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
+| Cloudflare knowledge contract + mocks | **PROPOSED live / tested mock contract** |
+| q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
+| Live Cloudflare Worker transport | **PROPOSED** |
+| Vectorize-backed semantic retrieval | **PROPOSED** |
+| Custom 10–30B+ specialist model | **PROPOSED** |
+| Android Studio / Hermes / OpenCode adapters | **PROPOSED** |
+
+## Architecture target
+
+The current source of truth is [ARCHITECTURE_TARGET.md](docs/agent-architecture/ARCHITECTURE_TARGET.md).
+
+```text
+Total specialist capacity:  ~10–30B+ eventually
+FURIOUS active compute:     ~500M–1B
+NORMAL active compute:      ~1–2B
+DEEP active compute:        ~2–4B
+SWARM:                      multiple ~1–2B+ lanes
+```
+
+These are research ranges, not a claim about a trained model currently in this repository.
+
+## Current measured MLX smoke evidence
+
+The corrected v0.2 benchmark harness has one committed smoke result for `mlx-community/Qwen2.5-0.5B-Instruct-4bit` on the M5 Max:
+
+- prompt: 133 tokens;
+- generated: 32 tokens;
+- prefill / TTFT: ~25.44 ms;
+- prefill throughput: ~5,227.9 tok/s;
+- pure decode throughput: ~198.47 tok/s;
+- end-to-end generation phase: ~191.10 ms;
+- peak MLX memory: ~0.402 GB.
+
+This is **one smoke repetition**, not an architecture benchmark. See [evals/benchmarks/README.md](evals/benchmarks/README.md).
+
+The earlier ~102–334 tok/s bootstrap numbers used an older end-to-end measurement method and remain historical only.
+
+## Knowledge architecture
+
+OAI-2.0 keeps long-tail factual/project knowledge outside the final model weights.
+
+```mermaid
+flowchart TD
+    A[OAI-2.0 agent] --> K[KnowledgeStore]
+    K --> W[Cloudflare Worker transport - proposed]
+    W --> D[D1 metadata/index]
+    W --> R[R2 content-addressed bodies]
+    W --> V[Vectorize semantic index]
+    W --> C[KV query cache]
+    Q[q-pipe verified learning] --> I[Strict import gate]
+    I --> K
+```
+
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, and a strict q-pipe importer. It does **not** yet make live Cloudflare network calls.
+
+The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
+
+See [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
+
+## q-pipe import safety
+
+Default imports now mirror q-pipe's Cloudflare export rules:
+
+- default sources: `scenario-forge`, `terminal-bench-2.1`;
+- `android-curriculum-oss` requires explicit opt-in;
+- promoted rows only by default;
+- positive independent verification;
+- success count must cover verification and exceed failure count;
+- bounded fingerprint and structured guidance;
+- unsafe guidance is rejected;
+- accepted guidance receives a deterministic content hash.
+
+## Documentation map
 
 | Topic | Document |
 | --- | --- |
 | Architecture index | [docs/agent-architecture/README.md](docs/agent-architecture/README.md) |
-| System design | [SYSTEM_ARCHITECTURE.md](docs/agent-architecture/SYSTEM_ARCHITECTURE.md) |
+| Architecture target | [ARCHITECTURE_TARGET.md](docs/agent-architecture/ARCHITECTURE_TARGET.md) |
+| System architecture | [SYSTEM_ARCHITECTURE.md](docs/agent-architecture/SYSTEM_ARCHITECTURE.md) |
+| Cloudflare knowledge | [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md) |
 | Tool calling | [TOOL_CALLING.md](docs/agent-architecture/TOOL_CALLING.md) |
 | Vision/UI | [VISION_AND_UI.md](docs/agent-architecture/VISION_AND_UI.md) |
 | Multi-agent | [MULTI_AGENT.md](docs/agent-architecture/MULTI_AGENT.md) |
@@ -29,86 +115,32 @@ OAI-2.0 is the public architecture and research workspace for a next-generation 
 | Training/evaluation | [TRAINING_AND_EVALUATION.md](docs/agent-architecture/TRAINING_AND_EVALUATION.md) |
 | Verification | [VERIFICATION_AND_EVIDENCE.md](docs/agent-architecture/VERIFICATION_AND_EVIDENCE.md) |
 | Host compatibility | [HOST_COMPATIBILITY.md](docs/agent-architecture/HOST_COMPATIBILITY.md) |
-| Security | [SECURITY_AND_SANDBOXING.md](docs/agent-architecture/SECURITY_AND_SANDBOXING.md) |
+| Security/sandboxing | [SECURITY_AND_SANDBOXING.md](docs/agent-architecture/SECURITY_AND_SANDBOXING.md) |
 | Roadmap | [ROADMAP.md](docs/agent-architecture/ROADMAP.md) |
-| Public references | [SOURCES.md](docs/agent-architecture/SOURCES.md) |
-
-## Core idea
-
-```mermaid
-flowchart TD
-    U[User goal] --> H[IDE / agent host]
-    H --> C[OAI-2.0 multimodal coding agent]
-    C --> R{Reasoning mode}
-    R -->|FURIOUS| F[Fast single-agent path]
-    R -->|DEEP| D[Branch + verify]
-    R -->|SWARM| S[Multi-agent orchestration]
-    C --> T[Dynamic tools]
-    C --> V[Vision + UI world state]
-    C --> E[Evidence verifier]
-    T --> X[Host capabilities]
-    V --> X
-    S --> X
-    X --> E
-    E --> C
-    C --> H
-```
-
-## Repository map
-
-- `docs/agent-architecture/` — public architecture and research specifications
-- `.github/` — contribution templates, ownership and documentation checks
-- `CONTRIBUTING.md` — contribution workflow
-- `SECURITY.md` — private vulnerability reporting
-- `SUPPORT.md` — support and question routing
-- `CODE_OF_CONDUCT.md` — community participation standard
-- `CHANGELOG.md` — notable repository changes
-
-## Public-repository boundary
-
-This repository intentionally avoids private endpoints, credentials, internal deployment topology, sensitive datasets, provider arrangements, private training sources, customer data, and other non-public operational details.
-
-Architecture documents distinguish **IMPLEMENTED**, **EXPERIMENTAL**, **PROPOSED**, and **BLOCKED** work. A diagram or design note is not evidence that a feature exists.
-
+| Public sources | [SOURCES.md](docs/agent-architecture/SOURCES.md) |
 
 ## ⭐ Star OAI-2.0
 
-If OAI-2.0's architecture, diagrams, or research direction is useful to you, **star this repository**:
-
 ⭐ https://github.com/ORCHORDS-LCC/OAI-2.0
 
-Stars help people discover the project and give us a lightweight signal that the public work is useful.
-
+Stars are voluntary and do not provide access, commercial rights, or control over project decisions.
 
 ## Donations & sponsorship
 
-If you want to financially support ORCHORDS public engineering, documentation, research, or open technical work, contact:
+To support ORCHORDS public engineering, documentation, or research, contact **crm@orchords.com**.
 
-**crm@orchords.com**
-
-Donations and sponsorship do not grant commercial rights, roadmap control, guaranteed feature implementation, or access to private systems. Commercial licensing is separate and must be agreed in writing.
-
-
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security-sensitive findings go through [SECURITY.md](SECURITY.md), not public issues.
-
-## Support
-
-See [SUPPORT.md](SUPPORT.md).
+Donations/sponsorship do not grant commercial rights, roadmap control, guaranteed implementation, or private access. Commercial licensing is separate and must be agreed in writing.
 
 ## License
 
-Non-commercial use only — see [LICENSE](LICENSE).
+**Non-commercial use only.** See [LICENSE](LICENSE).
 
-## Brand
+## Contact
 
-**ORCHORDS — BUILD DIFFERENT.**
-
+Public contact: **crm@orchords.com**
 
 ## Branding
 
-The public OAI-2.0 brand package is documented in [BRANDING.md](BRANDING.md), with reusable assets under [assets/branding/](assets/branding/README.md).
+See [BRANDING.md](BRANDING.md) and [assets/branding/](assets/branding/README.md).
 
 **ORCHORDS — BUILD DIFFERENT.**

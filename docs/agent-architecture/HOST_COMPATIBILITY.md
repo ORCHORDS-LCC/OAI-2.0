@@ -1,41 +1,31 @@
-# Host compatibility
+# Host Compatibility
 
-> **Status: PROPOSED adapters.** External capabilities are based on public vendor documentation reviewed 2026-10-01. That does not mean OAI-2.0 already works in those hosts.
+_Last reviewed: 2026-10-01._
 
-## Strategy
+> **Current status:** host integrations are **PROPOSED**. OAI-2.0 currently has internal protocol/tool abstractions, not a compatibility certification for any IDE/agent host.
+
+## Target surfaces
 
 ```mermaid
 flowchart LR
-    Q[Agent core] --> API[Compatible model API]
-    Q --> AD[Protocol adapters]
-    AD --> MCP[MCP tools]
-    AD --> ACP[ACP/editor sessions]
-    AD --> IDE[IDE-native bridges]
-    API --> AS[Android Studio]
-    API --> OC[OpenCode]
-    AD --> HE[Hermes]
-    IDE --> OTHER[Other hosts]
+    Q[OAI-2.0] --> API[Compatible model API]
+    Q --> P[Protocol adapters]
+    P --> MCP[MCP]
+    P --> ACP[ACP/editor]
+    P --> IDE[IDE-native bridge]
 ```
 
-| Host | Publicly documented capability | Target |
+## Publicly documented host capabilities
+
+| Host | Public capability relevant to OAI-2.0 | OAI-2.0 status |
 | --- | --- | --- |
-| Android Studio | local third-party model support and agent/tool workflows | compatible serving plus feature-by-feature testing |
-| Hermes Agent | MCP tool discovery and ACP editor integration | dynamic tools and editor integration |
-| OpenCode | custom providers and MCP | compatible provider endpoint plus tool behavior |
-| Other hosts | varies | inspect the live contract before claiming support |
+| Android Studio | local third-party models, agent/tool workflows, MCP-related capabilities | **PROPOSED integration** |
+| Hermes Agent | MCP and ACP/editor integration | **PROPOSED integration** |
+| OpenCode | custom providers and MCP | **PROPOSED integration** |
+| Other hosts | varies | inspect live contract before claiming support |
 
-## Unknown host flow
+## Compatibility proof
 
-```mermaid
-flowchart TD
-    H[New host] --> D[Discover protocol + tools]
-    D --> N[Normalize messages/tools]
-    N --> C[Capability tests]
-    C -->|pass| A[Document supported version]
-    C -->|partial| P[Document limitations]
-    C -->|fail| X[Do not claim support]
-```
+A support claim must record host version, OAI adapter/runtime version, protocol path, tool-call behavior, streaming, multimodal behavior, cancellation/error recovery, and known limitations.
 
-Every compatibility claim should record host version, adapter/runtime version, tested capabilities and known failures.
-
-See [Sources](SOURCES.md).
+See [SOURCES.md](SOURCES.md).

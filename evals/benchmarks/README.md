@@ -1,114 +1,95 @@
-# OAI-2.0 MLX sanity-probe benchmarks (v0.1.0 → v0.2.0)
+# OAI-2.0 MLX Benchmarks
 
-> **Status: SUPERSEDED for prefill/TTFT.** v0.2.0 replaced the old
-> `mlx_lm.generate`-based `bench_*.json` numbers. The new harness
-> (`scripts/bench.py`) uses `mlx_lm.stream_generate` for a true
-> prefill / decode / TTFT split. See **v0.2.0 results** below.
->
-> The v0.1.0 JSON records (`bench_5ecb176f8b`, `bench_485d709342`,
-> `bench_299bb3ee67`, `bench_43f7ed8a27`) are kept for historical
-> traceability — they document that the bootstrap path works, but
-> `prefill_seconds=0.0` and `ttft_seconds=0.0` are NOT real numbers.
->
-> **Architecture decisions use v0.2.0+ numbers, never v0.1.0.**
+_Last reviewed: 2026-10-01._
 
-## Hardware
+## Which numbers are current?
 
-- Machine: Apple Mac Studio (M5 Max)
-- CPU: 18 cores (arm64)
-- GPU: 40 cores (M5 Max)
-- Unified memory: 64 GB
-- macOS: 27.0 (BuildVersion 26A428)
+Use **v0.2+ benchmark records** for prefill/TTFT/decode claims.
 
-## Software
+The original v0.1 `bench_*.json` files are retained as historical bootstrap evidence only. They used a short `mlx_lm.generate` wall-clock interval that included prompt work, so their ~102–334 tok/s figures must **not** be described as clean pure-decode results.
 
-- Python: 3.14.7
-- MLX: `mlx_lm` 0.32.0 (default device `Device(gpu, 0)`)
-- `transformers` 5.18.0, `tokenizers` 0.23.2, `huggingface_hub` 1.33.0
-- Quantization: native MLX 4-bit where indicated.
+## Hardware for committed local records
 
-## Results
+- Apple Mac Studio, M5 Max
+- 18-core CPU
+- 40-core GPU
+- 64 GB unified memory
+- macOS 27.0 (build 26A428)
 
-All runs share the same machine, the same Python interpreter, and the
-same benchmark script (`scripts/bench.py`). The prompt is a short
-deterministic code-completion / generation task. Decode rate is the
-end-to-end wall-clock time of `mlx_lm.generate(..., max_tokens=64)`
-divided by 64 output tokens.
+The JSON record remains the source of truth for exact software versions.
 
-| Model                                       | Size  | Quant | Decode tok/s | Output quality (one-line) |
-| ------------------------------------------- | ----- | ----- | ------------: | ------------------------- |
-| `mlx-community/SmolLM-135M-Instruct-4bit`   | 135M  | 4-bit |       ~101.9 | Docstring-style code, no function body. |
-| `mlx-community/Qwen2.5-0.5B-Instruct-4bit`  | 500M  | 4-bit |       ~325.0 | Described the function instead of writing it. |
-| `mlx-community/Llama-3.2-1B-Instruct-4bit`  | 1B    | 4-bit |       ~271.1 | Produced a function skeleton with docstring + Args/Returns. |
-| `mlx-community/Qwen2.5-Coder-0.5B-Instruct-4bit` | 500M  | 4-bit |       ~334.2 | Produced a correct recursive `factorial`. |
+## Corrected v0.2 smoke record
 
-Raw JSON for each run is committed under `evals/benchmarks/`.
+Committed file: `summary_smoke.json` / `bench_b3a2faef45.json`
 
-## What these numbers mean
+Model: `mlx-community/Qwen2.5-0.5B-Instruct-4bit`
 
-- **Decode tok/s is real.** The M5 Max GPU is delivering ~100–340
-  decode tok/s for small 4-bit MLX models. The architecture target
-  research goals for `FURIOUS` (500–800 tok/s) and `NORMAL` (300–600
-  tok/s) are within reach for the small end of the active-compute
-  range once a sparse-expert model is wired.
-- **Decode tok/s ≠ capability.** A 500M coding-tuned model produced a
-  correct recursive `factorial` on this prompt; a 1B general model
-  produced a skeleton. This matches the architecture target's
-  principle: **intelligence must not be sacrificed for speed.**
-- **Output quality is not a benchmark.** A single prompt is not an
-  evaluation. These runs prove the installed MLX stack can load,
-  compile, and decode real weights end-to-end on this hardware.
+| Metric | Value |
+| --- | ---: |
+| Repetitions | 1 |
+| Prompt tokens | 133 |
+| Generation tokens | 32 |
+| Model load | ~0.663 s |
+| Compile | ~0.200 s |
+| Warm run | ~0.0677 s |
+| Prefill / TTFT | ~0.02544 s |
+| Prefill throughput | ~5,227.9 tok/s |
+| Decode | ~0.16566 s |
+| Pure decode throughput | ~198.47 tok/s |
+| End-to-end generation phase | ~0.19110 s |
+| Peak MLX memory | ~0.402 GB |
+| Active MLX memory | ~0.282 GB |
+| Cache memory | ~0.00869 GB |
 
-## Limitations
+This is a **single smoke repetition**. It proves the corrected harness works; it does not establish stable model throughput.
 
-- **Prefill and TTFT are reported as 0.0.** `mlx_lm.generate` does not
-  expose a separate prefill/decode boundary to callers, so the bench
-  script cannot split them today. A future revision will use
-  `stream_generate` for a true prefill/decode split.
-- **Single prompt.** A single 64-token generation is not a
-  representative sample. The benchmark harness will grow a real task
-  suite (`evals/` package) before any architecture decision is made.
-- **No system load isolation.** Other processes may have been
-  running. For official numbers the bench should be repeated with the
-  machine quiesced.
-- **No warm-up separation.** First-call latency includes compile and
-  cache warm-up; subsequent runs are typically faster.
+## Harness
 
-## Running the benchmark yourself
+`scripts/bench.py` uses `mlx_lm.stream_generate` and records:
 
-The CLI shape changed in v0.2.0. The new harness reports
-`load_seconds`, `compile_seconds`, `warm_run_seconds`,
-`prefill_seconds` (TTFT), `prefill_tokens_per_second`, `decode_seconds`,
-`decode_tokens_per_second`, `end_to_end_seconds`, `generation_tokens`,
-`peak_memory_gb`, `active_memory_gb`, `cache_memory_gb`, and
-aggregates `mean / median / min / max / stddev` over N repetitions.
+- load;
+- compile;
+- warm-up;
+- TTFT/prefill;
+- prefill tok/s;
+- pure decode duration/tok/s;
+- end-to-end generation;
+- actual generation token count;
+- MLX memory;
+- aggregate mean/median/min/max/stddev over requested repetitions.
+
+Metrics that cannot be measured should be `null`, never fabricated as zero.
+
+Example:
 
 ```bash
-cd /Users/orchords/src/OAI-2.0
 uv run python scripts/bench.py \
-    --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
-    --prompt-tokens 128 1024 4096 \
-    --max-tokens 256 \
-    --repetitions 5
+  --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
+  --prompt-tokens 128 1024 4096 \
+  --max-tokens 256 \
+  --repetitions 5
 ```
 
-Each run writes a per-run JSON record under `evals/benchmarks/`,
-plus a `summary_<tag>.json` aggregating the per-config aggregates.
+## Required next benchmark set
 
-`bench.py` never reports 0.0 for any measurable quantity; unmeasurable
-metrics are reported as JSON `null`.
+Before architecture decisions:
 
-## How these will be replaced
+1. repeat every baseline at least 5 times;
+2. separate cold/warm behavior;
+3. use multiple prompt lengths;
+4. use meaningful generation lengths;
+5. compare capability on machine-verifiable tasks;
+6. record system load;
+7. compare quantization/runtime variants;
+8. test speculation/MTP only after baseline correctness.
 
-A later release ships:
+## Research targets
 
-- A proper task suite covering coding accuracy, tool use, vision,
-  long-horizon completion, and verification.
-- Warm-up + repeated-measurement statistics.
-- Separate prefill, decode, TTFT, and end-to-end wall-clock numbers.
-- Comparison against the dense baselines listed in
-  `docs/agent-architecture/ARCHITECTURE_TARGET.md`.
+OAI-2.0's architecture targets remain goals:
 
-Until that release, do **not** treat these numbers as architecture
-evidence. They are proof that the bootstrap path works end-to-end on
-this machine.
+- FURIOUS: 500–800 tok/s;
+- NORMAL: 300–600 tok/s;
+- DEEP: 150–350+ tok/s/lane;
+- SWARM: 600–1,500+ aggregate tok/s.
+
+Do not rewrite these goals as measured OAI-2.0 performance.

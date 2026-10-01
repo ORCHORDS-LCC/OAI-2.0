@@ -1,19 +1,25 @@
 # Code of Conduct
 
+_Last reviewed: 2026-10-01._
+
 ## Our standard
 
-Participation in OAI-2.0 should be professional, constructive and respectful.
+Participation in OAI-2.0 should be professional, constructive, evidence-oriented, and respectful.
 
-Expected behavior includes discussing ideas and evidence rather than attacking people, giving actionable feedback, respecting privacy and confidentiality, acknowledging and correcting mistakes, avoiding harassment or sustained disruption, and following maintainers' reasonable moderation directions.
+Expected behavior includes discussing ideas rather than attacking people, giving actionable feedback, respecting privacy/confidentiality, acknowledging mistakes, avoiding harassment or sustained disruption, and following maintainers' reasonable moderation directions.
 
 ## Scope
 
-This applies to repository discussions, issues, pull requests, reviews and other ORCHORDS-managed spaces connected to this project.
+This applies to repository discussions, issues, pull requests, reviews, and other ORCHORDS-managed spaces connected to OAI-2.0.
+
+## Technical discussion
+
+Architecture proposals should clearly distinguish measured results from targets, and implemented behavior from experimental/proposed work. Disagreement over technical design is welcome when it remains evidence-based and respectful.
 
 ## Enforcement
 
-Maintainers may edit or remove content, issue warnings, restrict participation, lock discussions or take other proportionate action. Security-sensitive material may be removed immediately and redirected to [SECURITY.md](SECURITY.md).
+Maintainers may edit/remove content, issue warnings, restrict participation, lock discussions, or take other proportionate action. Security-sensitive material may be removed immediately and redirected to [SECURITY.md](SECURITY.md).
 
 ## Reporting
 
-For conduct concerns, contact `crm@orchords.com`. For security concerns, use [SECURITY.md](SECURITY.md).
+Conduct, security, licensing, and other public contact: **crm@orchords.com**.

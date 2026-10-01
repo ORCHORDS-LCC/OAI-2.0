@@ -1,45 +1,53 @@
-# Training and evaluation strategy
+# Training and Evaluation Strategy
 
-> **Status: PROPOSED.** Public documentation is provider-neutral and excludes private datasets, providers, infrastructure and sensitive training sources.
+_Last reviewed: 2026-10-01._
 
-## Capability curriculum
+> **Training status:** no final OAI-2.0 specialist model has been trained.  
+> **Evaluation status:** an **EXPERIMENTAL** offline capability-eval scaffold exists.
 
-```mermaid
-flowchart TD
-    B[Language + code foundations] --> T[Single-tool use]
-    T --> D[Dynamic/unseen tool schemas]
-    D --> C[Real coding tasks]
-    C --> V[Vision + UI grounding]
-    V --> X[Code-to-render diagnosis]
-    X --> R[Verification + abstention]
-    R --> M[Multi-agent orchestration]
-    M --> L[Long-horizon projects]
-    L --> A[Adversarial evaluation]
-```
+## Current evaluation scaffold
 
-## Training records
+Built-in offline suites cover:
 
-Use auditable task artifacts: goals, acceptance criteria, available tools, tool calls/results, screenshots/UI state, patches, compiler/test/runtime outcomes, evidence references and success/failure labels.
+- coding;
+- tool use;
+- bug diagnosis;
+- reasoning;
+- verification;
+- vision;
+- orchestration.
 
-Do not require reproducing any model's private hidden reasoning.
+The scaffold can run against a runtime interface, including placeholders in CI. These are foundation tests, not a claim of frontier capability.
 
-## Reference evaluation
+## Benchmarking
 
-External reference systems may create scenarios, critiques or preference labels, but deterministic execution should dominate when available.
+Use the corrected `scripts/bench.py` harness for load/compile/warm-up, TTFT/prefill, decode, end-to-end, and MLX memory metrics.
+
+Architecture decisions require repeated runs and real task success, not one prompt.
+
+## Curriculum target
 
 ```mermaid
 flowchart LR
-    TASK[Task + environment] --> A[Agent attempt]
-    A --> RUN[Real tools / tests / runtime]
-    RUN --> OBS[Observed outcome]
-    OBS --> DET[Deterministic score]
-    OBS --> REF[Reference evaluation]
-    DET --> DATA[Reviewed record]
-    REF --> DATA
-    DATA --> TRAIN[Train / tune]
-    TRAIN --> HOLD[Held-out evaluation]
+    L[Language/code foundations] --> T[Dynamic tools]
+    T --> C[Verified coding tasks]
+    C --> V[Vision/UI grounding]
+    V --> E[Evidence/abstention]
+    E --> O[Orchestration]
+    O --> H[Long-horizon projects]
+    H --> A[Adversarial evaluation]
 ```
 
-Tool schemas should be randomized. Held-out tests must include unseen names and shapes.
+## Data rules
 
-Negative examples should include hallucinated tools, fake test claims, bad screenshots, regressions, unnecessary swarms, unsafe actions and wrong stopping behavior.
+Training/eval data needs known provenance, permitted use, sensitive-data screening, deduplication/contamination tracking, and train/eval separation.
+
+Production traces must not automatically become training data.
+
+## Reference evaluators
+
+External evaluators/teachers may generate critique or scenarios, but deterministic builds/tests/runtime/visual evidence should dominate where available. Public docs remain provider-neutral.
+
+## Promotion gate
+
+A speed improvement is rejected if verified capability materially regresses.

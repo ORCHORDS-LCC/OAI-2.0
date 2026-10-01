@@ -1,10 +1,14 @@
-# Native multi-agent orchestration
+# Native Multi-Agent Orchestration
 
-> **Status: PROPOSED.**
+_Last reviewed: 2026-10-01._
 
-The same core model may act as primary agent or as scoped subagents with different goals, tools and budgets.
+> **Current status:** orchestrator/spec/context types and FURIOUS/NORMAL/DEEP/SWARM controller scaffolds are **EXPERIMENTAL**. Real parallel inference, isolated write workspaces, messaging transport, and production merging are **PROPOSED**.
 
-## Adaptive modes
+## Principle
+
+Multi-agent execution is conditional. A sequential task should not become a swarm merely because multiple agents are available.
+
+## Target routing
 
 ```mermaid
 flowchart TD
@@ -15,44 +19,23 @@ flowchart TD
     P -->|yes| S[SWARM]
     F --> V[Verify]
     D --> V
-    S --> J[Join findings]
+    S --> J[Join evidence]
     J --> I[Integrator]
     I --> V
-    V --> X{Acceptance proven?}
-    X -->|yes| Z[Stop]
-    X -->|no| R[Re-plan within budget]
-    R --> C
 ```
 
-Native orchestration semantics include spawn, delegate, message, inspect, join, cancel and merge.
+## Target operations
 
-## Example swarm
+Spawn, delegate, message, inspect, join, cancel, and merge are semantic operations. Exact host wire formats remain adapter-specific.
 
-```mermaid
-flowchart TB
-    O[Orchestrator] --> A[Source investigator]
-    O --> B[Visual/runtime investigator]
-    O --> C[Test/log investigator]
-    O --> D[Documentation investigator]
-    A --> E[Shared evidence]
-    B --> E
-    C --> E
-    D --> E
-    E --> I[Integrator]
-    I --> T[Build + tests + runtime verification]
-    T --> O
-```
+## Integration rule
 
-## Parallel research, serial integration
+Parallel investigation; controlled integration. Multiple agents should not blindly mutate one shared working tree at the same time.
 
-```mermaid
-flowchart LR
-    A1[Proposal A] --> I[Integrator]
-    A2[Proposal B] --> I
-    A3[Evidence C] --> I
-    A4[Test result D] --> I
-    I --> W[Single coherent write path]
-    W --> V[Deterministic verification]
-```
+## Shared state
 
-Controls include maximum depth/count, per-agent budgets, no child privilege escalation, duplicate-work cancellation and measured benefit before raising parallelism.
+Repository snapshots, visual encodings, evidence, knowledge, build results, and tool outputs should be referenced from shared immutable state rather than duplicated into every prompt.
+
+## Evaluation requirement
+
+Measure whether SWARM actually improves verified completion versus DEEP/single-agent execution at the same time/resource budget.

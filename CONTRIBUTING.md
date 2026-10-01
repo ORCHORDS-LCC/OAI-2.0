@@ -1,38 +1,66 @@
 # Contributing to OAI-2.0
 
+_Last reviewed: 2026-10-01._
+
+OAI-2.0 is a public, non-commercial research and engineering repository. Read current source before treating any architecture document as implemented behavior.
+
+## Status vocabulary
+
+- **IMPLEMENTED** — code and repository evidence exist.
+- **EXPERIMENTAL** — prototype/scaffold exists but is not production-supported.
+- **PROPOSED** — design target only.
+- **BLOCKED** — explicitly waiting on a dependency or proof.
+
 ## Before changing anything
 
-1. Read the existing architecture docs first.
-2. Preserve the distinction between **IMPLEMENTED**, **EXPERIMENTAL**, **PROPOSED**, and **BLOCKED**.
-3. Prefer current primary/vendor documentation for protocol and host claims.
-4. Keep public docs free of credentials, private endpoints, private topology, sensitive datasets, private provider arrangements, customer data, and internal identifiers.
-5. Keep diagrams provider-neutral and architecture-focused.
-6. Do not claim tests, benchmarks or host compatibility that were not actually run.
-7. Update related indexes when adding or moving docs.
+1. Fetch and inspect current `main`.
+2. Read [ARCHITECTURE_TARGET.md](docs/agent-architecture/ARCHITECTURE_TARGET.md).
+3. Preserve the non-commercial [LICENSE](LICENSE).
+4. Prefer current primary/vendor documentation for external technical claims.
+5. Never publish credentials, private endpoints, account IDs, private topology, sensitive datasets, private provider arrangements, customer data, or non-public training sources.
+6. Use only `crm@orchords.com` where a public email is required.
+7. Do not claim tests, CI, benchmarks, Cloudflare connectivity, model capability, or host compatibility that was not actually demonstrated.
 
-## Workflow
-
-Authorized maintainers work directly on `main` when repository policy permits.
-
-For engineering work:
+## Engineering workflow
 
 ```text
-INSPECT -> SOURCE -> RESEARCH WHEN NEEDED -> VERIFY GAP
--> IMPLEMENT -> TEST -> RECHECK -> COMMIT -> VERIFY RESULT
+INSPECT -> CURRENT SOURCE -> OFFICIAL RESEARCH -> VERIFY GAP
+-> IMPLEMENT -> TEST -> BENCHMARK WHEN RELEVANT
+-> RECHECK -> COMMIT MAIN -> VERIFY RESULT
 ```
 
-For documentation work:
+Authorized maintainers may work directly on `main` where repository rules permit it.
 
-- use Mermaid when a flow benefits from visualization;
-- validate links;
-- cite public primary sources;
-- mark speculative work as PROPOSED;
-- do not publish sensitive implementation details.
+## Current verification commands
 
-## Architecture docs
+Typical local checks:
 
-Public architecture work lives under [docs/agent-architecture/](docs/agent-architecture/README.md).
+```bash
+uv sync --extra dev
+uv run ruff check oai2 tests scripts
+uv run mypy --ignore-missing-imports oai2
+uv run pytest -W error
+```
+
+MLX tests require compatible Apple Silicon/macOS and are skipped on unsupported CI hosts.
+
+## Knowledge/Cloudflare changes
+
+Read [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
+
+The current repository has a tested **application-level contract and mock bindings**, not a verified live Cloudflare Worker deployment. Any live adapter must map correctly to current asynchronous D1, R2, Vectorize, and KV APIs.
+
+q-pipe imports default to q-pipe's verified Cloudflare export rules: promoted rows, independent verification, quality gates, approved source allow-list, and explicit Android-curriculum opt-in.
+
+## Documentation changes
+
+- update indexes when adding/moving docs;
+- use Mermaid where flow visualization helps;
+- keep sensitive implementation details out of diagrams;
+- update stale status labels;
+- cite current primary sources in [SOURCES.md](docs/agent-architecture/SOURCES.md);
+- keep benchmark limitations next to benchmark numbers.
 
 ## Security
 
-Do not publish vulnerabilities or secrets in issues. Follow [SECURITY.md](SECURITY.md).
+Security-sensitive findings belong in [SECURITY.md](SECURITY.md), not public issues.

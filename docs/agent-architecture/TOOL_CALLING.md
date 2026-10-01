@@ -1,68 +1,55 @@
-# Portable native tool calling
+# Portable Native Tool Calling
 
-> **Status: PROPOSED.**
+_Last reviewed: 2026-10-01._
 
-The host supplies tool names, descriptions, argument schemas, permissions and results at runtime. The model learns tool meaning from those definitions rather than memorizing one product's tool names.
+> **Current status:** dynamic tool schemas and a six-gate `ToolDispatcher` are **EXPERIMENTAL**. Production host adapters remain **PROPOSED**.
 
-## Lifecycle
+## Runtime contract
+
+The host supplies tool name, description, schema, capabilities, scope, risk/approval requirements, and execution result at runtime.
+
+The model should reason from semantics rather than memorizing fixed tool names.
+
+## Current six-gate dispatcher
+
+Current source checks, in order:
+
+1. tool exists;
+2. arguments satisfy the supplied schema;
+3. required capability is granted;
+4. requested resource is in scope;
+5. task/tool budget permits the call;
+6. high-impact action has the required approval.
+
+A failed/denied call remains explicit state. It must not be converted into a fake success.
+
+## Target lifecycle
 
 ```mermaid
 sequenceDiagram
     participant H as Host
-    participant M as Agent
+    participant M as OAI-2.0
     participant P as Policy
     participant T as Tool
     participant V as Verifier
 
-    H->>M: Goal + context + tool schemas
-    M->>P: Typed tool call
-    P->>P: Validate schema + scope + permission
-    alt Allowed
-      P->>T: Execute
-      T-->>M: Structured result
-      M->>V: Expected vs observed state
-      V-->>M: Verified / conflict / insufficient
-    else Denied
-      P-->>M: Structured denial
+    H->>M: goal + context + live tool schemas
+    M->>P: typed action
+    P->>P: six-gate validation
+    alt allowed
+        P->>T: execute
+        T-->>M: structured result
+        M->>V: expected vs observed
+        V-->>M: supported / conflict / insufficient
+    else denied
+        P-->>M: structured denial
     end
-    M-->>H: Next action or final output
 ```
 
-## Semantic generalization
+## Compact actions
 
-```mermaid
-flowchart LR
-    A[read_file path] --> S[workspace.read]
-    B[file_get location] --> S
-    C[workspace_open uri] --> S
-    D[fetch_source target] --> S
-    S --> M[Reason from schema + description]
-```
+Compact internal action tokens remain a research direction for reducing unnecessary decode latency. Wire protocols may still require verbose JSON.
 
-## Validation
+## Portability
 
-Before execution:
-
-1. tool exists;
-2. arguments validate;
-3. capability is allowed;
-4. resource is in scope;
-5. budget is respected;
-6. high-impact actions satisfy host policy.
-
-## Failure behavior
-
-```mermaid
-flowchart TD
-    C[Tool call] --> R{Result}
-    R -->|success| O[Observe]
-    R -->|schema error| F[Repair arguments]
-    R -->|denied| P[Choose allowed alternative]
-    R -->|timeout| B[Retry within budget]
-    R -->|unavailable| U[Re-plan]
-    O --> V[Verify state]
-    F --> C
-    B --> C
-```
-
-A tool error is never converted into a fabricated success.
+OpenAI-compatible tools, MCP, ACP, and IDE-native integrations are adapter targets. None should be marked supported until versioned integration tests pass.

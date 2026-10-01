@@ -1,17 +1,28 @@
 # Support
 
-## Questions and architecture discussion
+_Last reviewed: 2026-10-01._
 
-Use GitHub issues for public, non-sensitive architecture questions, documentation problems and reproducible feature requests.
+## Public questions
 
-Before opening an issue, search existing issues and docs, link the relevant architecture document, explain the expected behavior or unclear area, and keep private implementation details and credentials out of the report.
+Use GitHub issues for non-sensitive architecture questions, documentation errors, reproducible feature requests, benchmark methodology, or implementation problems.
+
+Before opening an issue:
+
+1. inspect current `main`;
+2. link the relevant source/doc;
+3. distinguish measured behavior from targets;
+4. state whether the issue concerns IMPLEMENTED, EXPERIMENTAL, PROPOSED, or BLOCKED work.
+
+## Current project maturity
+
+The repository contains experimental scaffolding. The final custom OAI-2.0 model, live Cloudflare Worker knowledge backend, production vision model, and IDE integrations are not yet production capabilities.
 
 ## Security
 
-Do not use public issues for vulnerabilities, secrets, sandbox escapes or private-data exposure. Follow [SECURITY.md](SECURITY.md).
+Do not use public issues for vulnerabilities, credentials, private data, sandbox escapes, private endpoints, or sensitive infrastructure. See [SECURITY.md](SECURITY.md).
 
-## Commercial / organizational contact
+## Business / donations / sponsorship / licensing / security
 
-Contact `crm@orchords.com`.
+**crm@orchords.com**
 
 **ORCHORDS — BUILD DIFFERENT.**

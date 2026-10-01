@@ -1,49 +1,61 @@
-# OAI-2.0 agent architecture
+# OAI-2.0 Agent Architecture
 
-> **Status: PROPOSED.** This folder describes public architecture targets, not completed implementation claims.
+_Last reviewed: 2026-10-01._
+
+This folder is the public architecture source for OAI-2.0. It now documents both the **PROPOSED final architecture** and the **EXPERIMENTAL scaffold that exists on current main**.
 
 ## Status language
 
 | Label | Meaning |
 | --- | --- |
-| **IMPLEMENTED** | Code and repository proof exist. |
-| **EXPERIMENTAL** | Prototype/evaluation exists but is not production-supported. |
+| **IMPLEMENTED** | Code plus repository evidence exists. |
+| **EXPERIMENTAL** | Prototype/scaffold exists but is not production-supported. |
 | **PROPOSED** | Design target only. |
-| **BLOCKED** | Work is stopped on a named dependency or missing proof. |
+| **BLOCKED** | Waiting on a named dependency or missing proof. |
 
-## Documentation map
+## Current implementation snapshot
 
-- [System architecture](SYSTEM_ARCHITECTURE.md)
-- [Portable tool calling](TOOL_CALLING.md)
-- [Vision and UI](VISION_AND_UI.md)
-- [Multi-agent orchestration](MULTI_AGENT.md)
-- [Reasoning and speed](REASONING_AND_SPEED.md)
-- [Training and evaluation](TRAINING_AND_EVALUATION.md)
-- [Verification and evidence](VERIFICATION_AND_EVIDENCE.md)
-- [Host compatibility](HOST_COMPATIBILITY.md)
-- [Security and sandboxing](SECURITY_AND_SANDBOXING.md)
-- [Roadmap](ROADMAP.md)
-- [Sources](SOURCES.md)
+Experimental source currently includes:
 
-## Design principles
+- typed core/protocol models;
+- dynamic tool definitions and a six-gate dispatcher;
+- FURIOUS/NORMAL/DEEP/SWARM controller scaffolds;
+- multi-agent orchestration interfaces;
+- evidence/claim state models;
+- four-view vision abstractions;
+- corrected MLX benchmark harness;
+- offline capability-evaluation scaffolds;
+- application-level Cloudflare knowledge contract + deterministic mocks;
+- strict q-pipe verified-import policy.
 
-1. **Agent, not chatbot.**
-2. **Vision is native**, not a bolt-on.
-3. **Tools are dynamic** and learned from schemas.
-4. **Multi-agent execution is conditional.**
-5. **Verification outranks confidence.**
-6. **Easy tasks remain fast.**
-7. **Host adapters are separate from core reasoning.**
-8. **Unsupported claims remain unverified.**
-9. **Public docs stay provider-neutral and non-sensitive.**
+Not yet implemented as production capabilities:
 
-```mermaid
-flowchart LR
-    GOAL[Goal] --> CORE[Multimodal core]
-    CORE --> CODE[Code]
-    CORE --> VISION[Vision]
-    CORE --> TOOLS[Tools]
-    CORE --> AGENTS[Agents]
-    CORE --> VERIFY[Verification]
-    VERIFY --> CORE
-```
+- the custom 10–30B+ specialist model;
+- trained dynamic expert router/adaptive depth;
+- real multimodal vision encoder;
+- real parallel swarm inference;
+- live Cloudflare Worker transport;
+- production Vectorize semantic retrieval;
+- Android Studio/Hermes/OpenCode integrations.
+
+## Read order
+
+1. [Architecture target](ARCHITECTURE_TARGET.md)
+2. [System architecture](SYSTEM_ARCHITECTURE.md)
+3. [Cloudflare knowledge](CLOUDFLARE_KNOWLEDGE.md)
+4. [Tool calling](TOOL_CALLING.md)
+5. [Reasoning and speed](REASONING_AND_SPEED.md)
+6. [Vision and UI](VISION_AND_UI.md)
+7. [Multi-agent orchestration](MULTI_AGENT.md)
+8. [Verification and evidence](VERIFICATION_AND_EVIDENCE.md)
+9. [Training and evaluation](TRAINING_AND_EVALUATION.md)
+10. [Host compatibility](HOST_COMPATIBILITY.md)
+11. [Security and sandboxing](SECURITY_AND_SANDBOXING.md)
+12. [Roadmap](ROADMAP.md)
+13. [Sources](SOURCES.md)
+
+## Design principle
+
+> **LARGE TOTAL INTELLIGENCE CAPACITY, SMALL DYNAMIC INSTANTANEOUS COMPUTE.**
+
+The goal is not a tiny model with retrieval. The target is a large-capacity multimodal coding intelligence whose active experts/depth scale with task difficulty.
