@@ -33,7 +33,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still incomplete |
 | R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
 | Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
-| D1 GC lease binding layer | **EXPERIMENTAL source implementation** — schema, async prepare/bind/batch adapter, conditional acquire/revalidate/finalize/release; live writer/sweep proof remaining |
+| D1 knowledge + GC transaction layer | **EXPERIMENTAL source implementation** — durable corpus revision, lease-aware metadata writer, async lease acquire/revalidate/finalize/release; live sweep/deployment proof remaining |
 | QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests; service/scheduler integration remaining |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
@@ -89,7 +89,7 @@ flowchart TD
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, and an async D1 binding-facing lease adapter with conditional acquire/revalidate/failure/finalize/release operations. It does **not** yet prove the complete live Worker/D1/R2/Vectorize/KV transport, a lease-aware normal writer transaction, or a live destructive R2 operation.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, an async D1 lease adapter with conditional acquire/revalidate/failure/finalize/release operations, and a durable D1 knowledge-index/corpus-revision writer that transactionally gates metadata writes on expected revision plus deletion-lease state. It does **not** yet prove the complete live Worker/D1/R2/Vectorize/KV transport, destructive sweep integration against the D1-backed authority, or a live destructive R2 operation.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 
