@@ -1,6 +1,6 @@
 # Security and Sandboxing
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Current status:** security policy scaffolding exists; production autonomous execution security remains **PROPOSED** until hardened and adversarially tested.
 
@@ -32,6 +32,10 @@ flowchart LR
 ## Prompt injection
 
 Repository files, web pages, issue comments, screenshots/OCR, retrieved knowledge, and tool output are untrusted data. They cannot grant capabilities.
+
+## GC/destructive knowledge operations
+
+R2 cleanup must remain dry-run-first and authorization/recovery gated. KV/cache state is never sufficient authority for deletion. Current D1 lease/delete-boundary code is experimental and requires live concurrency/destructive proof before production use.
 
 ## Cloudflare
 

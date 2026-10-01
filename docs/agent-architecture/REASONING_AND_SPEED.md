@@ -55,6 +55,10 @@ The earlier ~102–334 tok/s v0.1 values measured short end-to-end generations w
 - selective quantization;
 - kernel/runtime work only after profiling.
 
+## Inference/session scheduling status
+
+Current source now includes a safe session-batching scheduler core with isolation-focused tests. This is infrastructure progress for concurrent inference; it is **not** evidence that the final OAI-2.0 model reaches the research throughput targets above.
+
 ## Primary metric
 
 For an agent, time-to-first-useful-action and verified task completion per unit time matter more than decorative prose throughput.

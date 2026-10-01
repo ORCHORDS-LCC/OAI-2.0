@@ -24,7 +24,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 
 | Work package | Issue | Domain | Current state |
 | --- | --- | --- | --- |
-| WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | EXPERIMENTAL implementation in progress |
+| WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | **COMPLETED / CLOSED** |
 | WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | EXPERIMENTAL contracts + durable D1 metadata/revision writer + async R2/KV/Vectorize wrappers + D1/R2 GC delete boundary; authenticated Worker orchestration/live proof remaining |
 | WP-03 | [#4](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/4) | Real q-pipe migration | PROPOSED |
 | WP-04 | [#5](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/5) | Semantic retrieval/evidence | PROPOSED |
@@ -93,7 +93,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-67 | [#198](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/198) | Xcode / iOS/macOS simulator integration | PROPOSED |
 | WP-68 | [#199](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/199) | Cloudflare quota/backpressure/migrations | PROPOSED |
 | WP-69 | [#200](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/200) | Temporal/conflicting knowledge | PROPOSED |
-| WP-70 | [#209](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/209) | Knowledge blob lifecycle / GC | EXPERIMENTAL reconciliation/sweep/lease source; live proof remaining |
+| WP-70 | [#209](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/209) | Knowledge blob lifecycle / GC | #214 reconciliation **CLOSED**; #215 sweep and #233 D1 lease/live concurrency **OPEN** |
 | WP-71 | [#210](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/210) | Numerical stability / precision | PROPOSED |
 | WP-72 | [#211](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/211) | Architecture/hyperparameter search | PROPOSED |
 | WP-73 | [#212](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/212) | Client SDKs / typed APIs | PROPOSED |
@@ -161,24 +161,24 @@ flowchart TD
 
 A runner-free local preflight exists at `scripts/verify.py` and includes dependency sync, Ruff, MyPy, Pytest, explicit Apple-Silicon PASS/SKIP reporting, q-pipe compatibility drift checking, public-safety scanning, and Markdown link checks.
 
-- **#17 / WI-VV-002 is closed** with recorded local regression evidence.
+- **#2 / WP-01 is closed**: runner-free verification baseline acceptance is recorded.
+- **#16 / WI-VV-001 and #17 / WI-VV-002 are closed** with local runner-free evidence.
 - **#18 / WI-KNOW-001 is closed** for the versioned transport/schema contract; live network execution remains #19.
-- **#16 / WI-VV-001 remains open** only until the latest PASS/SKIP + q-pipe compatibility additions are rerun locally and recorded.
-- **#20 / WI-MIG-001 remains open** until the new real-checkout q-pipe drift gate is executed and recorded against current q-pipe.
+- **#20 / WI-MIG-001 is closed** for q-pipe compatibility; the real migration pilot remains #21.
+- **#214 / WI-GC-001 is closed** for non-destructive R2 liveness reconciliation; #215/#233 own destructive-sweep/concurrency completion.
 
 Knowledge-store reads verify stored content hashes/provenance and fail closed on missing/tampered bodies/corrupted cache records.
 
 ## Immediate dependency-ordered gates
 
-1. Re-run the latest runner-free preflight and close #16 when the PASS/SKIP/q-pipe drift evidence is recorded.
-2. Execute the pinned q-pipe checkout compatibility gate and close #20 if it passes.
-3. Continue #19 / WP-02 from the existing D1 metadata/revision writer, R2/KV/Vectorize wrappers, and async D1/R2 delete boundary into the authenticated Worker endpoint/orchestration and private end-to-end proof.
-4. Perform WP-03 small real q-pipe migration.
-5. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
-6. Expand WP-08 held-out capability/regression gates.
-7. Run small architecture/tokenizer/training probes before scaling.
-8. Build real vision/tools/agent runtimes and host adapters.
-9. Run repository-scale battle tests and risk/security gates.
-10. Scale only when prerequisite evidence exists.
+1. Keep the closed WP-01 verification baseline green on every source change.
+2. Continue #19 / WP-02 from the existing D1 metadata/revision writer, R2/KV/Vectorize wrappers, and async D1/R2 delete boundary into the authenticated Worker endpoint/orchestration and private end-to-end proof.
+3. Perform WP-03 small real q-pipe migration.
+4. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
+5. Expand WP-08 held-out capability/regression gates.
+6. Run small architecture/tokenizer/training probes before scaling.
+7. Build real vision/tools/agent runtimes and host adapters.
+8. Run repository-scale battle tests and risk/security gates.
+9. Scale only when prerequisite evidence exists.
 
 A capability is promoted only when its requirements, acceptance criteria, verification evidence, risks and documentation are current.

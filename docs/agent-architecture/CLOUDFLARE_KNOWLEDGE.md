@@ -2,7 +2,7 @@
 
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, KV, and Vectorize binding-facing primitives now exist in source. Live Worker deployment, full transport orchestration, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision writer contract and lease-aware transactional metadata writer now exist in source.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, async source-level D1/R2/KV/Vectorize binding wrappers, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, KV, and Vectorize binding-facing primitives now exist in source. Live Worker deployment, full transport orchestration, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision writer contract and lease-aware transactional metadata writer now exist in source.
 
 ## Verified architecture boundary
 
@@ -96,7 +96,7 @@ The reconciler:
 - rejects a conflicting page atomically;
 - never deletes R2 data.
 
-Focused source evidence currently records nine passing dry-run tests. Full current-main Mac preflight remains required before #214 can close.
+WI-GC-001 / #214 is **closed** with recorded acceptance evidence for the non-destructive reconciliation scope. That does not authorize destructive cleanup.
 
 ### Conservative sweep core
 
@@ -130,7 +130,7 @@ The core currently provides:
 - idempotent repeated execution;
 - versioned, integrity-fingerprinted checkpoints.
 
-Focused source evidence currently records eleven passing sweep tests plus compile/import smoke. This is **not** a live R2 deletion claim. #215 remains open for full runner-free current-main verification and a controlled private demonstration after backup/recovery prerequisites.
+Focused sweep tests exercise the decision core, but this is **not** a live R2 deletion claim. #215 remains open for grace/recheck/idempotent destructive-sweep acceptance, and #233 remains open for D1 lease/concurrent-reference exclusion plus live concurrency proof.
 
 ### D1 deletion lease and writer exclusion
 

@@ -1,6 +1,6 @@
 # OAI-2.0 Engineering Issue and Traceability Standard
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 ## Purpose
 
@@ -18,7 +18,8 @@ For `ORCHORDS-LCC/OAI-2.0`:
 - **no self-hosted runners**;
 - **no GitHub Actions runner-based acceptance**;
 - local/manual verification is the project acceptance path;
-- commit messages describe the change only, not runner names, workflow IDs, operational logs, or machine-run records.
+- commit messages describe the change only, not runner names, workflow IDs, operational logs, or machine-run records;
+- because multiple AIs may work concurrently, active agents shall re-fetch remote `main` approximately every 3 minutes and immediately before each commit, reconciling overlapping work instead of force-updating.
 
 ## Standards used as terminology/process references
 
@@ -62,7 +63,16 @@ Current domain codes:
 - `SEC` — security/public safety;
 - `AI` — AI risk/management;
 - `DOC` — documentation/traceability;
-- `MODEL` — model scaling/final acceptance.
+- `MODEL` — model scaling/final acceptance;
+- `GC` — content-addressed storage lifecycle/garbage collection;
+- `NUM` — numerical stability/precision;
+- `SEARCH` — architecture/hyperparameter search;
+- `SDK` — client SDKs/typed APIs;
+- `DIST` — model/artifact distribution integrity;
+- `TRUTH` — claim/evidence enforcement and contradiction handling;
+- `QOS` — end-to-end latency/tail/service-quality budgets.
+
+The domain list is extensible; use the owning issue's established code rather than inventing a duplicate synonym.
 
 ## Requirement language
 
@@ -184,6 +194,9 @@ When an AI agent works a work package, report:
 
 ### INSPECTED
 Exact current `main` SHA and source inspected.
+
+### SYNC STATUS
+Exact remote `main` recheck and any concurrent-agent commits reconciled.
 
 ### GAP
 Requirement(s) not yet satisfied.
