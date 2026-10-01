@@ -270,7 +270,7 @@ class GcSweepState:
 
     def to_snapshot(self) -> dict[str, object]:
         """Serialize the bounded sweep state for process-level resume."""
-        return {
+        payload: dict[str, object] = {
             "schema_version": 1,
             "candidate_fingerprint": self.candidate_fingerprint,
             "candidates": [
@@ -293,12 +293,21 @@ class GcSweepState:
                 for record in self.records
             ],
         }
+        payload["snapshot_fingerprint"] = _snapshot_fingerprint(payload)
+        return payload
 
     @classmethod
     def from_snapshot(cls, snapshot: Mapping[str, object]) -> Self:
         """Restore a strictly validated sweep checkpoint."""
         if snapshot.get("schema_version") != 1:
             raise ValueError("unsupported or missing sweep snapshot schema_version")
+        fingerprint = snapshot.get("snapshot_fingerprint")
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ValueError("snapshot fingerprint is required")
+        fingerprint_payload = dict(snapshot)
+        fingerprint_payload.pop("snapshot_fingerprint", None)
+        if fingerprint != _snapshot_fingerprint(fingerprint_payload):
+            raise ValueError("snapshot fingerprint is invalid")
         raw_candidates = snapshot.get("candidates")
         raw_records = snapshot.get("records", [])
         if not isinstance(raw_candidates, list):
@@ -378,6 +387,14 @@ class GcSweepState:
     ) -> None:
         self.records.append(record)
         emitted.append(record)
+
+
+def _snapshot_fingerprint(payload: Mapping[str, object]) -> str:
+    try:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("snapshot contains non-serializable data") from exc
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _candidate_fingerprint(candidates: Iterable[GcSweepCandidate]) -> str:
