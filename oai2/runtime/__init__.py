@@ -17,6 +17,11 @@ from .admission import (
     AdmissionRequest,
     CapacitySnapshot,
 )
+from .admission_scheduler import (
+    AdmissionBatchController,
+    AdmissionScheduledRequest,
+    AdmissionSchedulerMetrics,
+)
 from .inference import (
     InferenceRequest,
     InferenceResponse,
@@ -34,6 +39,9 @@ from .scheduler import (
 )
 
 __all__ = [
+    "AdmissionBatchController",
+    "AdmissionScheduledRequest",
+    "AdmissionSchedulerMetrics",
     "AdmissionAction",
     "AdmissionDecision",
     "AdmissionPolicy",
