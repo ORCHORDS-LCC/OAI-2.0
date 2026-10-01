@@ -182,3 +182,20 @@ async def test_runner_rejects_duplicate_case_ids() -> None:
 def test_response_cannot_claim_success_and_abstain() -> None:
     with pytest.raises(ValueError, match="both claim success and abstain"):
         CandidateTruthResponse(text="", claimed_success=True, abstained=True)
+
+
+
+def test_truth_runner_exports_from_evals_package() -> None:
+    from oai2.evals import CandidateTruthInput as ExportedInput
+    from oai2.evals import CandidateTruthResponse as ExportedResponse
+    from oai2.evals import TruthCase as ExportedCase
+    from oai2.evals import TruthVerifierVerdict as ExportedVerdict
+    from oai2.evals import classify_truth_outcome as ExportedClassifier
+    from oai2.evals import run_held_out_truth_cases as ExportedRunner
+
+    assert ExportedInput is CandidateTruthInput
+    assert ExportedResponse is CandidateTruthResponse
+    assert ExportedCase is TruthCase
+    assert ExportedVerdict is TruthVerifierVerdict
+    assert ExportedClassifier is classify_truth_outcome
+    assert ExportedRunner is run_held_out_truth_cases
