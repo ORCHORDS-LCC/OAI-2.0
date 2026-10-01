@@ -37,6 +37,11 @@ from .gc import (
     KnowledgeBlobRow,
     R2InventoryObject,
 )
+from .gc_delete_d1_runtime import (
+    D1DeleteOutcome,
+    D1DeleteResult,
+    delete_candidate_with_d1_lease,
+)
 from .gc_lease import (
     GcDeleteFinalizeDecision,
     GcDeleteLease,
@@ -131,6 +136,9 @@ __all__ = [
     "hash_topic",
     "object_to_row",
     "r2_blob_key_for",
+    "D1DeleteOutcome",
+    "D1DeleteResult",
+    "delete_candidate_with_d1_lease",
     "GcDryRunReport",
     "GcObjectDisposition",
     "GcObjectRecord",
