@@ -141,3 +141,16 @@ async def test_kv_get_fails_closed_on_non_string_value() -> None:
 
     with pytest.raises(RuntimeError, match="non-string"):
         await cache.get_text("q:key")
+
+
+
+def test_r2_and_kv_wrappers_export_from_knowledge_package() -> None:
+    from oai2.knowledge import CloudflareKvCache as ExportedKv
+    from oai2.knowledge import CloudflareR2Store as ExportedR2
+    from oai2.knowledge.cloudflare_bindings_runtime import (
+        CloudflareKvCache,
+        CloudflareR2Store,
+    )
+
+    assert ExportedKv is CloudflareKvCache
+    assert ExportedR2 is CloudflareR2Store
