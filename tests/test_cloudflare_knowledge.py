@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from oai2.core import KnowledgeId, Status
@@ -324,9 +322,109 @@ def test_retrieve_ignores_corrupted_cache() -> None:
 
     req = RetrievalRequest(topic="cache-integrity")
     key = cache_key_for(req, "stub-v0", b.cache_revision())
-    cached = obj.model_dump()
-    cached["content"] = "tampered body"
-    b.kv_put(key, json.dumps({"objects": [cached]}))
+    b.kv_put(key, "{not-valid-json")
 
     result = store.retrieve(req)
     assert [item.content for item in result.objects] == ["trusted body"]
+
+
+def test_retrieve_ignores_cache_ref_with_wrong_hash() -> None:
+    from oai2.knowledge import RetrievalRequest
+    from oai2.knowledge.transport import KnowledgeCacheRef, QueryCacheEnvelope
+
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("cache-ref-integrity", "trusted body")
+    store.put(obj)
+
+    req = RetrievalRequest(topic="cache-ref-integrity")
+    key = cache_key_for(req, "stub-v0", b.cache_revision())
+    bad = QueryCacheEnvelope(
+        corpus_revision=b.cache_revision(),
+        embedding_digest="stub-v0",
+        request_fingerprint=key,
+        refs=[
+            KnowledgeCacheRef(
+                knowledge_id=obj.knowledge_id,
+                content_hash=sha256_hex("wrong"),
+            )
+        ],
+    )
+    b.kv_put(key, bad.model_dump_json())
+
+    result = store.retrieve(req)
+    assert [item.content for item in result.objects] == ["trusted body"]
+
+
+def test_retrieve_survives_kv_get_failure() -> None:
+    from oai2.knowledge import RetrievalRequest
+
+    class KVGetFails(MockCloudflareBindings):
+        def kv_get(self, key: str) -> str | None:
+            raise RuntimeError("simulated KV read outage")
+
+    b = KVGetFails()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("kv-read-outage", "authoritative body")
+    store.put(obj)
+
+    result = store.retrieve(RetrievalRequest(topic="kv-read-outage"))
+    assert [item.content for item in result.objects] == ["authoritative body"]
+
+
+def test_retrieve_survives_kv_put_failure() -> None:
+    from oai2.knowledge import RetrievalRequest
+
+    class KVPutFails(MockCloudflareBindings):
+        def kv_put(self, key: str, value: str, ttl: int | None = None) -> None:
+            raise RuntimeError("simulated KV write outage")
+
+    b = KVPutFails()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("kv-write-outage", "authoritative body")
+    store.put(obj)
+
+    result = store.retrieve(RetrievalRequest(topic="kv-write-outage"))
+    assert [item.content for item in result.objects] == ["authoritative body"]
+
+
+def test_put_uses_atomic_index_and_revision_contract() -> None:
+    class Recording(MockCloudflareBindings):
+        def __init__(self) -> None:
+            super().__init__()
+            self.atomic_calls = 0
+
+        def d1_upsert_and_bump_revision(self, row: object) -> int:
+            self.atomic_calls += 1
+            return super().d1_upsert_and_bump_revision(row)
+
+    b = Recording()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("atomic-revision", "body")
+    before = b.cache_revision()
+
+    store.put(obj)
+
+    assert b.atomic_calls == 1
+    assert b.cache_revision() == before + 1
+
+
+def test_cache_contains_refs_not_full_bodies() -> None:
+    from oai2.knowledge import RetrievalRequest
+    from oai2.knowledge.transport import QueryCacheEnvelope
+
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("compact-cache", "body should stay in R2")
+    store.put(obj)
+    req = RetrievalRequest(topic="compact-cache")
+
+    store.retrieve(req)
+
+    key = cache_key_for(req, "stub-v0", b.cache_revision())
+    raw = b.kv_get(key)
+    assert raw is not None
+    envelope = QueryCacheEnvelope.model_validate_json(raw)
+    assert len(envelope.refs) == 1
+    assert envelope.refs[0].knowledge_id == obj.knowledge_id
+    assert "body should stay in R2" not in raw

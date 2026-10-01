@@ -48,6 +48,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+
 from ..core import KnowledgeId, Status
 from .abstraction import (
     KnowledgeObject,
@@ -56,6 +58,7 @@ from .abstraction import (
     RetrievalResult,
     sha256_hex,
 )
+from .transport import KnowledgeCacheRef, QueryCacheEnvelope
 
 
 class CFPrimitive(StrEnum):
@@ -155,6 +158,7 @@ class CloudflareBindingAdapter(Protocol):
     """
 
     def d1_upsert(self, row: CFRow) -> None: ...
+    def d1_upsert_and_bump_revision(self, row: CFRow) -> int: ...
     def d1_get(self, knowledge_id: KnowledgeId) -> CFRow | None: ...
     def d1_query(
         self,
@@ -204,6 +208,12 @@ class MockCloudflareBindings:
     # -- D1.knowledge_index --
     def d1_upsert(self, row: CFRow) -> None:
         self.rows[row.knowledge_id] = row_to_d1(row)
+
+    def d1_upsert_and_bump_revision(self, row: CFRow) -> int:
+        """Mock the D1 transaction that writes metadata and advances revision."""
+        self.d1_upsert(row)
+        self.revision += 1
+        return self.revision
 
     def d1_get(self, knowledge_id: KnowledgeId) -> CFRow | None:
         raw = self.rows.get(knowledge_id)
@@ -360,12 +370,11 @@ class CloudflareKnowledgeStore(KnowledgeStore):
             r2_blob_key = r2_blob_key_for(obj.content_hash)
             self._b.r2_put(r2_blob_key, obj.content.encode("utf-8"))
         try:
-            self._b.d1_upsert(row)
+            self._b.d1_upsert_and_bump_revision(row)
         except BaseException:
             if r2_blob_key is not None:
                 self._b.r2_delete(r2_blob_key)
             raise
-        self._b.bump_cache_revision()
 
     def get(self, knowledge_id: KnowledgeId) -> KnowledgeObject | None:
         row = self._b.d1_get(knowledge_id)
@@ -394,23 +403,45 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         )
 
     def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
+        revision = self._b.cache_revision()
         cache_key = cache_key_for(
             request,
             self._embedding_digest,
-            self._b.cache_revision(),
+            revision,
         )
-        cached = self._b.kv_get(cache_key)
+
+        # KV is best-effort only. A cache outage or malformed value must not
+        # turn an otherwise healthy D1/R2 retrieval into a task failure.
+        try:
+            cached = self._b.kv_get(cache_key)
+        except Exception:
+            cached = None
+
         if cached is not None:
-            payload = json.loads(cached)
-            cached_objs = [
-                KnowledgeObject.model_validate(o) for o in payload["objects"]
-            ]
-            if all(
-                sha256_hex(obj.content) == obj.content_hash
-                for obj in cached_objs
+            try:
+                envelope = QueryCacheEnvelope.model_validate_json(cached)
+            except (ValidationError, ValueError, TypeError):
+                envelope = None
+
+            if (
+                envelope is not None
+                and envelope.corpus_revision == revision
+                and envelope.embedding_digest == self._embedding_digest
+                and envelope.request_fingerprint == cache_key
             ):
-                return RetrievalResult(topic=request.topic, objects=cached_objs)
-            # Ignore a corrupted cache entry and rebuild from D1/R2.
+                cached_objs: list[KnowledgeObject] = []
+                valid = True
+                for ref in envelope.refs:
+                    obj = self.get(ref.knowledge_id)
+                    if obj is None or obj.content_hash != ref.content_hash:
+                        valid = False
+                        break
+                    cached_objs.append(obj)
+                if valid:
+                    return RetrievalResult(
+                        topic=request.topic,
+                        objects=cached_objs,
+                    )
 
         rows = self._b.d1_query(
             topic_substring=request.topic,
@@ -424,15 +455,27 @@ class CloudflareKnowledgeStore(KnowledgeStore):
             if obj is not None:
                 objs.append(obj)
 
-        # Best-effort cache write; TTL 5 minutes matches the Worker default.
-        self._b.kv_put(
-            cache_key,
-            json.dumps(
-                {"objects": [o.model_dump() for o in objs]},
-                separators=(",", ":"),
-            ),
-            ttl=300,
+        envelope = QueryCacheEnvelope(
+            corpus_revision=revision,
+            embedding_digest=self._embedding_digest,
+            request_fingerprint=cache_key,
+            refs=[
+                KnowledgeCacheRef(
+                    knowledge_id=o.knowledge_id,
+                    content_hash=o.content_hash,
+                )
+                for o in objs
+            ],
         )
+        try:
+            self._b.kv_put(
+                cache_key,
+                envelope.model_dump_json(),
+                ttl=300,
+            )
+        except Exception:
+            # Cache failures are intentionally non-authoritative.
+            pass
         return RetrievalResult(topic=request.topic, objects=objs)
 
     def all(self) -> Iterable[KnowledgeObject]:
