@@ -176,3 +176,14 @@ def test_state_and_freshness_inputs_fail_closed_when_required() -> None:
 
     with pytest.raises(ValueError, match="now is required"):
         policy.assess(ClaimClass.EXTERNAL_CURRENT_FACT, [])
+
+
+
+def test_policy_symbols_export_from_verification_package() -> None:
+    from oai2.verification import ClaimClass as ExportedClaimClass
+    from oai2.verification import ClaimEvidencePolicy as ExportedPolicy
+    from oai2.verification import PolicyDecision as ExportedDecision
+
+    assert ExportedClaimClass is ClaimClass
+    assert ExportedPolicy is ClaimEvidencePolicy
+    assert ExportedDecision is PolicyDecision
