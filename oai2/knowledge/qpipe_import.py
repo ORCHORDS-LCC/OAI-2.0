@@ -83,7 +83,7 @@ _SECRET_MARKERS = (
     "password:",
     "password=",
 )
-_ABS_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/|~[\\/])\S+")
+_ABS_PATH_RE = re.compile(r"(?:^|\s)(?:[A-Za-z]:[\\/]|~[\\/]|/)\S+")
 
 
 def _strings(value: object, *, count: int, length: int) -> list[str] | None:
@@ -367,7 +367,6 @@ def import_qpipe_rows(
             elif err == "not promoted":
                 report.skipped_not_promoted.append(row.external_id)
             elif err in {
-                "invalid recipe id",
                 "unverified",
                 "verified_count exceeds success_count",
                 "success_count must exceed failure_count",

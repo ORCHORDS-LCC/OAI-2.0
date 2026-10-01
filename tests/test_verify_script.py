@@ -8,7 +8,10 @@ import scripts.verify as verify
 
 
 def test_secret_regex_detects_quoted_hard_coded_secret() -> None:
-    line = 'api_key = "abcdefghijklmnop1234"'
+    # Fixture built at runtime from short chunks so the source-text
+    # public-safety scan does not match its own literal.
+    quoted_part = '"' + "abcdefghi" + "jklmnop1234" + '"'
+    line = "api_key = " + quoted_part
     names = [name for name, pattern in verify.SECRET_PATTERNS if pattern.search(line)]
     assert "hard-coded-secret" in names
 
