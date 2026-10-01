@@ -17,10 +17,14 @@ flowchart TB
     C --> T[Tool policy/dispatch - EXPERIMENTAL]
     C --> A[Agent orchestration - EXPERIMENTAL scaffold]
     C --> E[Evidence graph - EXPERIMENTAL]
-    C --> K[KnowledgeStore + D1/R2/KV/Vectorize source adapters - EXPERIMENTAL]
-    K --> CF[Full live Cloudflare Worker transport - NOT YET VERIFIED]
+    C --> K[AsyncCloudflareKnowledgeRuntime + source adapters - EXPERIMENTAL]
+    K --> CF[Authenticated/deployed Cloudflare Worker path - NOT YET VERIFIED]
     C --> QOS[QoS/admission + safe session batching - EXPERIMENTAL]
 ```
+
+## Assembled source-level knowledge runtime
+
+The knowledge path now has source-level async orchestration across D1 authority, R2 bodies, Vectorize semantic matches, and best-effort KV cache. This materially advances WP-02, but it remains a source/test implementation until authenticated Worker deployment and private end-to-end Cloudflare evidence exist.
 
 ## Implemented scaffold
 

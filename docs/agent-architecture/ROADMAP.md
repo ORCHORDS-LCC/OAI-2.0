@@ -25,7 +25,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | Work package | Issue | Domain | Current state |
 | --- | --- | --- | --- |
 | WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | **COMPLETED / CLOSED** |
-| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | EXPERIMENTAL contracts + async D1 reader/writer + R2/KV/Vectorize wrappers + D1/R2 GC delete boundary; authenticated Worker orchestration/live proof remaining |
+| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | **EXPERIMENTAL source runtime assembled** from D1 reader/writer + R2/KV/Vectorize wrappers + D1/R2 GC delete boundary; authenticated Worker/private deployment proof remaining |
 | WP-03 | [#4](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/4) | Real q-pipe migration | PROPOSED |
 | WP-04 | [#5](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/5) | Semantic retrieval/evidence | PROPOSED |
 | WP-05 | [#6](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/6) | Performance baselines | EXPERIMENTAL harness / matrix remaining |
@@ -172,7 +172,7 @@ Knowledge-store reads verify stored content hashes/provenance and fail closed on
 ## Immediate dependency-ordered gates
 
 1. Keep the closed WP-01 verification baseline green on every source change.
-2. Continue #19 / WP-02 from the existing D1 reader/writer, R2/KV/Vectorize wrappers, and async D1/R2 delete boundary into the authenticated Worker endpoint/orchestration and private end-to-end proof.
+2. Continue #19 / WP-02 from the assembled async source runtime into authenticated Worker deployment, private end-to-end Cloudflare proof, and production resource/integrity/latency validation.
 3. Perform WP-03 small real q-pipe migration.
 4. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
 5. Expand WP-08 held-out capability/regression gates.

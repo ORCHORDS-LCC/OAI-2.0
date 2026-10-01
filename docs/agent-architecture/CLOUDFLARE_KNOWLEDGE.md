@@ -37,6 +37,12 @@ Current source defines:
 
 These are contract/schema objects only. They do **not** prove a live Worker, live D1/R2/Vectorize/KV bindings, authentication middleware, or a network round trip.
 
+## Assembled async runtime
+
+`oai2/knowledge/cloudflare_runtime.py` now provides an **EXPERIMENTAL source-level** `AsyncCloudflareKnowledgeRuntime` that composes D1 metadata/revision authority, R2 content-addressed bodies, optional Vectorize semantic lookup, and best-effort KV caching. It detects revision conflicts and D1/R2/Vectorize integrity mismatches. Focused tests exist.
+
+This is **not** evidence of an authenticated deployed Worker, production resource bindings, real network latency/quotas, or a private end-to-end Cloudflare demonstration.
+
 ## Service roles
 
 ### D1
