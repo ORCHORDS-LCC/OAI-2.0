@@ -1,0 +1,23 @@
+{
+  "run_id": "bench_485d709342",
+  "timestamp": 1790842415.443694,
+  "model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "prompt": "Write a Python function that returns the sum of the first n natural numbers, with a short docstring.",
+  "prompt_tokens": 21,
+  "output_tokens": 64,
+  "prefill_seconds": 0.0,
+  "decode_seconds": 0.1969432500191033,
+  "decode_tokens_per_second": 324.96670992172653,
+  "prefill_tokens_per_second": 0.0,
+  "ttft_seconds": 0.0,
+  "device": "Device(gpu, 0)",
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "output_excerpt": "The function should be named `sum_n_numbers`. The function should take a single argument `n` and return the sum of the first `n` natural numbers. The function should be self-contained, meaning it should not use any external libraries or pac"
+}

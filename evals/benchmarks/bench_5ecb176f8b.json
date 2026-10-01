@@ -1,0 +1,23 @@
+{
+  "run_id": "bench_5ecb176f8b",
+  "timestamp": 1790842374.003086,
+  "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+  "prompt": "Write a Python function that returns the sum of the first n natural numbers, with a short docstring.",
+  "prompt_tokens": 21,
+  "output_tokens": 64,
+  "prefill_seconds": 0.0,
+  "decode_seconds": 0.6280147910001688,
+  "decode_tokens_per_second": 101.9084278223358,
+  "prefill_tokens_per_second": 0.0,
+  "ttft_seconds": 0.0,
+  "device": "Device(gpu, 0)",
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "output_excerpt": "The docstring should be formatted as follows:\n\n```python\ndef sum_n_natural_numbers(n):\n    \"\"\"\n    Returns the sum of the first n natural numbers, with a short docstring.\n    \"\"\"\n    return sum(i for i in range(1, n + 1))\n"
+}

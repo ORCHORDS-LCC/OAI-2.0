@@ -1,0 +1,42 @@
+# OAI-2.0 — local artifacts that should NOT be committed.
+#
+# Public repo policy: no real credentials, no private endpoints,
+# no caches, no large model weights. See SECURITY.md and
+# docs/agent-architecture/ for the public-repository boundary.
+
+# Local environment overrides
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# uv
+.venv/
+
+# Hugging Face cache (model weights live outside the repo)
+.huggingface/
+huggingface/
+
+# Build artifacts
+build/
+dist/
+
+# Local benchmark scratch (full run JSONs go to evals/benchmarks/ and
+# ARE committed; transient artifacts do not).
+*.tmp
+*.swp
+.DS_Store
+
+# Editor / OS
+.idea/
+.vscode/

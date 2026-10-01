@@ -1,0 +1,23 @@
+{
+  "run_id": "bench_43f7ed8a27",
+  "timestamp": 1790842536.873711,
+  "model": "mlx-community/Qwen2.5-Coder-0.5B-Instruct-4bit",
+  "prompt": "def factorial(n):",
+  "prompt_tokens": 4,
+  "output_tokens": 64,
+  "prefill_seconds": 0.0,
+  "decode_seconds": 0.1915136250318028,
+  "decode_tokens_per_second": 334.17987879124604,
+  "prefill_tokens_per_second": 0.0,
+  "ttft_seconds": 0.0,
+  "device": "Device(gpu, 0)",
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "output_excerpt": "\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n - 1)\n\n# Example usage\nn = 5\nresult = factorial(n)\nprint(f\"The factorial of {n} is {result}\")\n```\n\nThis code defines a function `factorial` that"
+}
