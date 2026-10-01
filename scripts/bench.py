@@ -1,5 +1,15 @@
 """OAI-2.0 MLX benchmark harness — properly separated prefill / decode / TTFT.
 
+Run with:    uv run python scripts/bench.py [args]
+NOT with:    python3 scripts/bench.py   # ModuleNotFoundError: mlx_lm
+
+This script imports :mod:`mlx_lm` (a project dependency declared in
+``pyproject.toml``). It runs under the project venv created by ``uv sync``,
+i.e. via ``uv run python scripts/bench.py ...``. A plain ``python3``
+invocation will fail with :class:`ModuleNotFoundError` because the system
+interpreter does not see project-scoped dependencies. The :func:`run_one`
+guard below converts that failure into an actionable one-line error.
+
 This harness is the source of truth for measured Apple Silicon MLX
 performance on the OAI-2.0 reference machines. It supersedes v0.1.0's
 ``scripts/bench.py``, which incorrectly attributed prefill time to
@@ -183,7 +193,22 @@ def run_one(
     warm: bool,
 ) -> RunMetrics:
     """Load model + run a single measured generation."""
-    from mlx_lm import load, stream_generate  # local import for --help speed.
+    try:
+        from mlx_lm import load, stream_generate  # local import for --help speed.
+    except ModuleNotFoundError as exc:
+        # Python's import machinery sets `exc.name` only when the message
+        # starts with "No module named ". Fall back to parsing the message
+        # so the operator sees the *actual* missing module name.
+        missing = exc.name or (
+            exc.msg.split("'", 2)[1]
+            if exc.msg.startswith("No module named '") and "'" in exc.msg[18:]
+            else exc.msg
+        )
+        raise SystemExit(
+            f"Python module {missing!r} is not installed in this interpreter. "
+            f"bench.py requires project deps in the project venv. Run with "
+            f"`uv run python scripts/bench.py ...`, or `uv sync` first."
+        ) from exc
 
     run_id = f"bench_{uuid.uuid4().hex[:10]}"
     sys_info = _system_info()
