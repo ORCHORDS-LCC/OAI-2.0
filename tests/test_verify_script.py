@@ -57,6 +57,7 @@ def test_main_reaches_success_when_all_gates_pass(monkeypatch) -> None:
     monkeypatch.setattr(verify, "run_check", lambda name, command: True)
     monkeypatch.setattr(verify, "run_public_safety_scan", lambda: True)
     monkeypatch.setattr(verify, "run_markdown_link_scan", lambda: True)
+    monkeypatch.setattr(verify, "run_qpipe_compatibility_check", lambda: True)
     assert verify.main() == 0
 
 
@@ -274,3 +275,127 @@ def test_qpipe_compatibility_check_revision_skip_still_enforces_blob_drift(
     output = capsys.readouterr().out
     assert "FAIL qpipe-compat" in output
     assert "source blob changed" in output
+
+
+def test_gateway_reach_check_skips_without_api_key(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.delenv("OAI2_GATEWAY_API_KEY", raising=False)
+    assert verify.run_gateway_reach_check() is True
+    output = capsys.readouterr().out
+    assert "SKIP gateway-reach" in output
+    assert "OAI2_GATEWAY_API_KEY" in output
+
+
+def test_gateway_reach_check_passes_when_model_exposed(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.delenv("OAI2_GATEWAY_BASE_URL", raising=False)
+    monkeypatch.delenv("OAI2_GATEWAY_MODEL", raising=False)
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {"data": [{"id": "oai-1.2"}, {"id": "other"}]}
+
+    captured: dict = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["auth"] = kwargs.get("headers", {}).get("Authorization")
+        return FakeResponse()
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    assert verify.run_gateway_reach_check() is True
+    output = capsys.readouterr().out
+    assert "PASS gateway-reach" in output
+    assert captured["url"] == "https://api.orchords.com/v1/models"
+    assert captured["auth"] == "Bearer k"
+
+
+def test_gateway_reach_check_fails_on_http_error(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
+    monkeypatch.delenv("OAI2_GATEWAY_MODEL", raising=False)
+
+    class FakeResponse:
+        status_code = 401
+        text = ""
+
+        def json(self) -> dict:
+            return {}
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+    assert verify.run_gateway_reach_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL gateway-reach" in output
+    assert "401" in output
+
+
+def test_gateway_reach_check_fails_when_expected_model_missing(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {"data": [{"id": "oai-1.0"}]}
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+    assert verify.run_gateway_reach_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL gateway-reach" in output
+    assert "oai-1.2" in output
+
+
+def test_gateway_reach_check_fails_on_transport_error(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.delenv("OAI2_GATEWAY_BASE_URL", raising=False)
+
+    import httpx
+
+    def boom(*args, **kwargs):
+        raise httpx.ConnectError("transport-failure-by-test")
+
+    monkeypatch.setattr(httpx, "get", boom)
+    assert verify.run_gateway_reach_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL gateway-reach" in output
+    assert "ConnectError" in output
+
+
+def test_gateway_reach_check_fails_on_malformed_payload(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.delenv("OAI2_GATEWAY_BASE_URL", raising=False)
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {"unexpected": "no-data-key"}
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+    assert verify.run_gateway_reach_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL gateway-reach" in output
+    assert "data" in output

@@ -284,6 +284,91 @@ def run_qpipe_compatibility_check() -> bool:
     return True
 
 
+def run_gateway_reach_check() -> bool:
+    """Verify the configured public inference gateway is reachable.
+
+    Skips entirely when ``OAI2_GATEWAY_API_KEY`` is not set so the
+    base local gate stays green without credentials. When the key is
+    present the check performs a single ``GET /v1/models`` against the
+    configured base URL and confirms a 2xx response. The bearer token is
+    read directly from the environment — never from the file path —
+    and never echoed into the report.
+    """
+
+    api_key = os.getenv("OAI2_GATEWAY_API_KEY", "").strip()
+    if not api_key:
+        print(
+            "SKIP gateway-reach: OAI2_GATEWAY_API_KEY not set",
+            flush=True,
+        )
+        return True
+    base_url = os.getenv(
+        "OAI2_GATEWAY_BASE_URL",
+        "https://api.orchords.com",
+    ).strip().rstrip("/") or "https://api.orchords.com"
+    expected_model = os.getenv("OAI2_GATEWAY_MODEL", "oai-1.2").strip() or "oai-1.2"
+
+    try:
+        import httpx
+    except ImportError:
+        print(
+            "FAIL gateway-reach: httpx not installed in this environment",
+            flush=True,
+        )
+        return False
+
+    try:
+        response = httpx.get(
+            f"{base_url}/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        print(
+            "FAIL gateway-reach: transport error "
+            f"({type(exc).__name__}) against {base_url}",
+            flush=True,
+        )
+        return False
+
+    if response.status_code < 200 or response.status_code >= 300:
+        print(
+            "FAIL gateway-reach: "
+            f"{base_url}/v1/models returned HTTP {response.status_code}",
+            flush=True,
+        )
+        return False
+    payload = response.json()
+    if not isinstance(payload, dict) or "data" not in payload:
+        print(
+            "FAIL gateway-reach: response payload missing 'data' array",
+            flush=True,
+        )
+        return False
+    data = payload["data"]
+    if not isinstance(data, list):
+        print(
+            "FAIL gateway-reach: 'data' is not an array",
+            flush=True,
+        )
+        return False
+    model_ids = [item.get("id") for item in data if isinstance(item, dict)]
+    if expected_model not in model_ids:
+        print(
+            "FAIL gateway-reach: expected model "
+            f"{expected_model!r} not exposed by {base_url} "
+            f"(saw {model_ids!r})",
+            flush=True,
+        )
+        return False
+    print(
+        "PASS gateway-reach: "
+        f"{base_url} exposes {expected_model} (of {len(model_ids)} models)",
+        flush=True,
+    )
+    return True
+
+
 def main() -> int:
     for name, command in CHECKS:
         if not run_check(name, command):
@@ -294,6 +379,8 @@ def main() -> int:
     if not run_public_safety_scan():
         return 1
     if not run_markdown_link_scan():
+        return 1
+    if not run_gateway_reach_check():
         return 1
     print("\nALL LOCAL CHECKS PASSED", flush=True)
     return 0
