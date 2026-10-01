@@ -9,6 +9,9 @@ work item.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -39,10 +42,18 @@ class R2InventoryObject:
     uploaded_at: float | None = None
 
     def __post_init__(self) -> None:
-        if not self.key:
-            raise ValueError("key must not be empty")
-        if self.size_bytes is not None and self.size_bytes < 0:
-            raise ValueError("size_bytes must be non-negative")
+        if not isinstance(self.key, str) or not self.key or self.key != self.key.strip():
+            raise ValueError("key must be a non-empty normalized string")
+        if self.size_bytes is not None and (
+            isinstance(self.size_bytes, bool)
+            or not isinstance(self.size_bytes, int)
+            or self.size_bytes < 0
+        ):
+            raise ValueError("size_bytes must be a non-negative integer")
+        if self.uploaded_at is not None and not _is_non_negative_number(
+            self.uploaded_at
+        ):
+            raise ValueError("uploaded_at must be a finite non-negative number")
 
 
 @dataclass(slots=True, frozen=True)
@@ -74,6 +85,15 @@ class GcDryRunReport:
     oldest_unreferenced_candidate_age_seconds: float | None
 
 
+def _reference_fingerprint(references: Mapping[str, set[str]]) -> str:
+    payload = {
+        key: sorted(knowledge_ids)
+        for key, knowledge_ids in sorted(references.items())
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 @dataclass(slots=True)
 class GcReconciliationState:
     """Resumable state for a paginated R2 inventory reconciliation.
@@ -90,6 +110,27 @@ class GcReconciliationState:
     pages_processed: int = 0
     next_cursor: str | None = None
     inventory_complete: bool = False
+    reference_fingerprint: str = ""
+
+    def __post_init__(self) -> None:
+        if not _is_non_negative_number(self.observed_at):
+            raise ValueError("observed_at must be a finite non-negative number")
+        if (
+            isinstance(self.pages_processed, bool)
+            or not isinstance(self.pages_processed, int)
+            or self.pages_processed < 0
+        ):
+            raise ValueError("pages_processed must be a non-negative integer")
+        expected = _reference_fingerprint(self.references)
+        if not self.reference_fingerprint:
+            self.reference_fingerprint = expected
+        elif self.reference_fingerprint != expected:
+            raise ValueError("reference fingerprint does not match references")
+        _validate_cursor_state(
+            pages_processed=self.pages_processed,
+            next_cursor=self.next_cursor,
+            inventory_complete=self.inventory_complete,
+        )
 
     @classmethod
     def from_rows(
@@ -103,8 +144,10 @@ class GcReconciliationState:
             key = row.r2_blob_key
             if not key:
                 continue
+            if not isinstance(key, str) or key != key.strip():
+                raise ValueError("row r2_blob_key must be a normalized string")
             references.setdefault(key, set()).add(str(row.knowledge_id))
-        return cls(observed_at=float(observed_at), references=references)
+        return cls(observed_at=observed_at, references=references)
 
     def consume_page(
         self,
@@ -112,18 +155,31 @@ class GcReconciliationState:
         *,
         next_cursor: str | None,
     ) -> None:
-        """Consume one inventory page without deleting or mutating R2."""
+        """Consume one inventory page atomically without mutating R2."""
         if self.inventory_complete:
             raise RuntimeError("inventory scan is already complete")
+        if next_cursor is not None and (
+            not isinstance(next_cursor, str) or not next_cursor
+        ):
+            raise ValueError("next_cursor must be a non-empty string or null")
 
+        page: dict[str, R2InventoryObject] = {}
         for obj in objects:
-            previous = self.inventory.get(obj.key)
-            if previous is not None and previous != obj:
+            previous_in_page = page.get(obj.key)
+            if previous_in_page is not None and previous_in_page != obj:
                 raise ValueError(
                     f"conflicting inventory metadata for object key {obj.key!r}"
                 )
-            self.inventory[obj.key] = obj
+            page[obj.key] = obj
 
+        for key, obj in page.items():
+            previous = self.inventory.get(key)
+            if previous is not None and previous != obj:
+                raise ValueError(
+                    f"conflicting inventory metadata for object key {key!r}"
+                )
+
+        self.inventory.update(page)
         self.pages_processed += 1
         self.next_cursor = next_cursor
         self.inventory_complete = next_cursor is None
@@ -131,7 +187,9 @@ class GcReconciliationState:
     def to_snapshot(self) -> dict[str, object]:
         """Return a JSON-serializable snapshot for process-level resume."""
         return {
+            "schema_version": 1,
             "observed_at": self.observed_at,
+            "reference_fingerprint": self.reference_fingerprint,
             "references": {
                 key: sorted(ids) for key, ids in sorted(self.references.items())
             },
@@ -149,10 +207,18 @@ class GcReconciliationState:
         }
 
     @classmethod
-    def from_snapshot(cls, snapshot: Mapping[str, object]) -> Self:
-        """Restore a state previously produced by :meth:`to_snapshot`."""
-        raw_references = snapshot.get("references", {})
-        raw_inventory = snapshot.get("inventory", {})
+    def from_snapshot(
+        cls,
+        snapshot: Mapping[str, object],
+        *,
+        authoritative_rows: Iterable[KnowledgeBlobRow] | None = None,
+    ) -> Self:
+        """Restore a validated snapshot, optionally checking current D1 rows."""
+        if snapshot.get("schema_version") != 1:
+            raise ValueError("unsupported or missing snapshot schema_version")
+
+        raw_references = snapshot.get("references")
+        raw_inventory = snapshot.get("inventory")
         if not isinstance(raw_references, Mapping):
             raise ValueError("snapshot references must be a mapping")
         if not isinstance(raw_inventory, Mapping):
@@ -160,16 +226,22 @@ class GcReconciliationState:
 
         references: dict[str, set[str]] = {}
         for key, raw_ids in raw_references.items():
-            if not isinstance(key, str) or not isinstance(raw_ids, list):
+            if (
+                not isinstance(key, str)
+                or not key
+                or key != key.strip()
+                or not isinstance(raw_ids, list)
+                or any(not isinstance(item, str) or not item for item in raw_ids)
+            ):
                 raise ValueError("snapshot references contain invalid data")
-            references[key] = {str(item) for item in raw_ids}
+            references[key] = set(raw_ids)
 
         inventory: dict[str, R2InventoryObject] = {}
         for key, raw_obj in raw_inventory.items():
             if not isinstance(key, str) or not isinstance(raw_obj, Mapping):
                 raise ValueError("snapshot inventory contains invalid data")
             obj = R2InventoryObject(
-                key=str(raw_obj.get("key", key)),
+                key=_required_string(raw_obj.get("key", key), "inventory key"),
                 size_bytes=_optional_int(raw_obj.get("size_bytes")),
                 uploaded_at=_optional_float(raw_obj.get("uploaded_at")),
             )
@@ -177,17 +249,49 @@ class GcReconciliationState:
                 raise ValueError("snapshot inventory key does not match object key")
             inventory[key] = obj
 
+        observed_at = _required_non_negative_float(
+            snapshot.get("observed_at"), "observed_at"
+        )
+        pages_processed = _required_non_negative_int(
+            snapshot.get("pages_processed", 0), "pages_processed"
+        )
+        inventory_complete_value = snapshot.get("inventory_complete", False)
+        if not isinstance(inventory_complete_value, bool):
+            raise ValueError("snapshot inventory_complete must be a boolean")
         next_cursor_value = snapshot.get("next_cursor")
-        if next_cursor_value is not None and not isinstance(next_cursor_value, str):
-            raise ValueError("snapshot next_cursor must be a string or null")
+        if next_cursor_value is not None and (
+            not isinstance(next_cursor_value, str) or not next_cursor_value
+        ):
+            raise ValueError("snapshot next_cursor must be a non-empty string or null")
+        _validate_cursor_state(
+            pages_processed=pages_processed,
+            next_cursor=next_cursor_value,
+            inventory_complete=inventory_complete_value,
+        )
+
+        fingerprint_value = snapshot.get("reference_fingerprint")
+        if not isinstance(fingerprint_value, str) or not fingerprint_value:
+            raise ValueError("snapshot reference_fingerprint is required")
+        expected_fingerprint = _reference_fingerprint(references)
+        if fingerprint_value != expected_fingerprint:
+            raise ValueError("snapshot reference fingerprint is invalid")
+
+        if authoritative_rows is not None:
+            current_state = cls.from_rows(
+                authoritative_rows,
+                observed_at=observed_at,
+            )
+            if current_state.reference_fingerprint != fingerprint_value:
+                raise ValueError("authoritative reference set changed since snapshot")
 
         return cls(
-            observed_at=float(snapshot["observed_at"]),
+            observed_at=observed_at,
             references=references,
             inventory=inventory,
-            pages_processed=int(snapshot.get("pages_processed", 0)),
+            pages_processed=pages_processed,
             next_cursor=next_cursor_value,
-            inventory_complete=bool(snapshot.get("inventory_complete", False)),
+            inventory_complete=inventory_complete_value,
+            reference_fingerprint=fingerprint_value,
         )
 
     def build_report(self) -> GcDryRunReport:
@@ -262,26 +366,61 @@ class GcReconciliationState:
         )
 
 
+def _validate_cursor_state(
+    *,
+    pages_processed: int,
+    next_cursor: str | None,
+    inventory_complete: bool,
+) -> None:
+    if inventory_complete and next_cursor is not None:
+        raise ValueError("completed inventory cannot have next_cursor")
+    if not inventory_complete and pages_processed > 0 and next_cursor is None:
+        raise ValueError("incomplete inventory with pages must have next_cursor")
+
+
+def _is_non_negative_number(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+        and float(value) >= 0
+    )
+
+
 def _age_seconds(observed_at: float, uploaded_at: float | None) -> float | None:
     if uploaded_at is None:
         return None
     return max(0.0, observed_at - uploaded_at)
 
 
+def _required_string(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError(f"{name} must be a non-empty normalized string")
+    return value
+
+
+def _required_non_negative_int(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return value
+
+
+def _required_non_negative_float(value: object, name: str) -> float:
+    if not _is_non_negative_number(value):
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return float(value)
+
+
 def _optional_int(value: object) -> int | None:
     if value is None:
         return None
-    if isinstance(value, bool):
-        raise ValueError("boolean is not a valid integer")
-    return int(value)
+    return _required_non_negative_int(value, "optional integer")
 
 
 def _optional_float(value: object) -> float | None:
     if value is None:
         return None
-    if isinstance(value, bool):
-        raise ValueError("boolean is not a valid float")
-    return float(value)
+    return _required_non_negative_float(value, "optional float")
 
 
 __all__ = [
