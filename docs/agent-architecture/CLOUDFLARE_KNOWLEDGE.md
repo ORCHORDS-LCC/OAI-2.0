@@ -2,7 +2,7 @@
 
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-01._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, and a conservative sweep core are implemented in source. Live Cloudflare network execution, production semantic retrieval, and a controlled private destructive-sweep demonstration remain **PROPOSED / NOT YET VERIFIED END-TO-END**.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, and a deterministic D1 deletion-lease authority model are implemented in source. Live Cloudflare network execution, production semantic retrieval, and controlled private destructive demonstrations remain **PROPOSED / NOT YET VERIFIED END-TO-END**.
 
 ## Verified architecture boundary
 
@@ -128,6 +128,42 @@ The core currently provides:
 
 Focused source evidence currently records eleven passing sweep tests plus compile/import smoke. This is **not** a live R2 deletion claim. #215 remains open for full runner-free current-main verification and a controlled private demonstration after backup/recovery prerequisites.
 
+### D1 deletion lease and writer exclusion
+
+The final reference check and the external R2 deletion cannot participate in one cross-service transaction. `oai2/knowledge/gc_lease.py` therefore defines an **EXPERIMENTAL deterministic D1-authority state model** for the live transaction layer required by #233:
+
+```mermaid
+sequenceDiagram
+    participant GC as GC worker
+    participant D1 as D1 authority
+    participant WR as knowledge writer
+    participant R2 as R2
+
+    GC->>D1: acquire claim if revision matches and no references
+    alt claim active
+        WR->>D1: add reference
+        D1-->>WR: blocked by deletion lease
+        GC->>D1: validate fencing token
+        GC->>R2: delete body
+        GC->>D1: finalize / record retryable failure
+    else reference exists
+        D1-->>GC: referenced; no claim
+    end
+```
+
+The source model currently covers:
+
+- expected-revision acquisition;
+- existing-reference rejection;
+- active/failed claim writer exclusion;
+- expired-claim takeover with old-token fencing;
+- retryable delete failure while references remain blocked;
+- token-validated release/finalize;
+- idempotent repeated finalize;
+- deleted-body tombstone that requires explicit verified restore before references can be reactivated.
+
+Focused evidence currently records ten passing tests plus compile and package-import smoke. This is **not** a live D1 transaction, schema migration, Worker integration, or R2 concurrency demonstration. The live writer path and GC worker must both use the same D1 claim protocol before #233 or #19 can close.
+
 ## q-pipe import contract
 
 Default OAI imports match q-pipe's Cloudflare export eligibility:
@@ -157,7 +193,8 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 - no production embeddings pipeline;
 - no network integration test;
 - no controlled private R2 sweep demonstration;
-- current GC/sweep evidence is focused local source testing, not a full current-main Mac preflight.
+- no live D1 claim/writer exclusion integration;
+- current GC/sweep/lease evidence is focused local source testing, not a full current-main Mac preflight.
 
 ## Public-safe deployment rule
 
