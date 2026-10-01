@@ -32,7 +32,7 @@ INSPECT -> CURRENT SOURCE -> OFFICIAL RESEARCH -> VERIFY GAP
 
 Authorized maintainers may work directly on `main` where repository rules permit it.
 
-The dependency-ordered master work map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). Commit messages should describe code/docs changes only; do not embed runner names, workflow IDs, runner logs, or operational run records.
+The dependency-ordered master work map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). Detailed work packages shall follow [ENGINEERING_ISSUE_STANDARD.md](docs/agent-architecture/ENGINEERING_ISSUE_STANDARD.md). Commit messages should describe code/docs changes only; do not embed runner names, workflow IDs, runner logs, or operational run records.
 
 ## Current verification commands
 

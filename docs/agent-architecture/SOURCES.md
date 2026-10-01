@@ -48,3 +48,18 @@ Re-check q-pipe before future migrations because its export gate can evolve.
 ## Source policy
 
 A vendor/repository statement is not an OAI-2.0 support claim. Support requires our own versioned integration/evaluation evidence.
+
+
+## Engineering / quality / AI standards
+
+The repository uses these standards as public terminology/process references only; this is not a certification claim.
+
+- ISO/IEC/IEEE 29148:2018 — Requirements engineering: https://www.iso.org/standard/72089.html
+- ISO/IEC/IEEE 12207:2026 — Software life cycle processes: https://www.iso.org/standard/90219.html
+- ISO/IEC 25010:2023 — Product quality model: https://www.iso.org/standard/78176.html
+- ISO/IEC/IEEE 29119-2:2021 — Software testing — Test processes: https://www.iso.org/standard/79428.html
+- ISO/IEC/IEEE 29119-3:2021 — Software testing — Test documentation: https://www.iso.org/standard/79429.html
+- ISO/IEC 23894:2023 — AI risk management guidance: https://www.iso.org/standard/77304.html
+- ISO/IEC 42001:2023 — AI management systems: https://www.iso.org/standard/42001.html
+
+As of 2026-10-01, ISO lists ISO/IEC/IEEE 29148:2018 as current but under revision, and ISO/IEC/IEEE 12207:2026 as the published replacement for the withdrawn 2017 edition.

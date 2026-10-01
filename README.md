@@ -119,6 +119,7 @@ Default imports now mirror q-pipe's Cloudflare export rules:
 | Security/sandboxing | [SECURITY_AND_SANDBOXING.md](docs/agent-architecture/SECURITY_AND_SANDBOXING.md) |
 | Roadmap | [ROADMAP.md](docs/agent-architecture/ROADMAP.md) |
 | Public sources | [SOURCES.md](docs/agent-architecture/SOURCES.md) |
+| Issue/traceability standard | [ENGINEERING_ISSUE_STANDARD.md](docs/agent-architecture/ENGINEERING_ISSUE_STANDARD.md) |
 
 ## ⭐ Star OAI-2.0
 
