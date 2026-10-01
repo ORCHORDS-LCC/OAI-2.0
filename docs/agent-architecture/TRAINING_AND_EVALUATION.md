@@ -17,7 +17,12 @@ Built-in offline suites cover:
 - reasoning;
 - verification;
 - vision;
-- orchestration.
+- orchestration;
+- multi-file reasoning;
+- abstention;
+- conflicting evidence.
+
+Every capability case now carries explicit preconditions, execution procedure, expected patterns/results, and expected evidence. Deterministic scoring supports both any-pattern (`regex_or`) and all-required-pattern (`regex_all`) contracts so cases that require multiple independent facts cannot pass on one incidental match.
 
 The scaffold can run locally against a runtime interface, including placeholder runtimes. OAI-2.0 acceptance is runner-free; these are foundation tests, not a claim of frontier capability.
 
