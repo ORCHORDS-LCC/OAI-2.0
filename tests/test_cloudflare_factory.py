@@ -135,3 +135,20 @@ async def test_factory_rejects_non_boolean_schema_flag() -> None:
             embedding_digest="digest-v1",
             ensure_schema=1,  # type: ignore[arg-type]
         )
+
+
+
+def test_factory_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        CloudflareKnowledgeComponents as ExportedComponents,
+    )
+    from oai2.knowledge import (
+        build_cloudflare_knowledge_components as ExportedBuilder,
+    )
+    from oai2.knowledge.cloudflare_factory import (
+        CloudflareKnowledgeComponents,
+        build_cloudflare_knowledge_components,
+    )
+
+    assert ExportedComponents is CloudflareKnowledgeComponents
+    assert ExportedBuilder is build_cloudflare_knowledge_components
