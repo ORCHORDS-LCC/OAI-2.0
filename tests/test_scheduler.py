@@ -157,6 +157,14 @@ def test_batch_plan_rejects_duplicate_session_or_mismatch() -> None:
 
 
 
+def test_non_finite_enqueue_timestamp_is_rejected() -> None:
+    scheduler = SafeBatchScheduler()
+    for bad in (float("nan"), float("inf"), -float("inf")):
+        with pytest.raises(ValueError, match="finite non-negative"):
+            scheduler.enqueue(_req(f"r-{bad}", f"s-{bad}", at=bad))
+    assert scheduler.metrics.queue_depth == 0
+
+
 def test_scheduler_symbols_are_exported_from_runtime_package() -> None:
     from oai2.runtime import SafeBatchScheduler as ExportedScheduler
     from oai2.runtime import SessionCompatibilityKey as ExportedKey

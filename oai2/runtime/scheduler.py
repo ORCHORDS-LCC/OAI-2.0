@@ -7,6 +7,7 @@ when every context identity/version that affects model output is identical.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -48,9 +49,10 @@ class ScheduledRequest:
         if (
             isinstance(self.enqueued_at_ms, bool)
             or not isinstance(self.enqueued_at_ms, (int, float))
+            or not math.isfinite(float(self.enqueued_at_ms))
             or float(self.enqueued_at_ms) < 0.0
         ):
-            raise ValueError("enqueued_at_ms must be a non-negative number")
+            raise ValueError("enqueued_at_ms must be a finite non-negative number")
 
 
 @dataclass(slots=True, frozen=True)
