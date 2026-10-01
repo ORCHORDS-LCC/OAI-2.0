@@ -19,7 +19,6 @@ from oai2.knowledge.gc import (
     GcObjectDisposition,
     GcObjectRecord,
 )
-from oai2.knowledge.gc_delete_d1_runtime import D1DeleteOutcome
 from oai2.knowledge.sweep import GcSweepDisposition, GcSweepState
 
 
