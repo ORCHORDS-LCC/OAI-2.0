@@ -234,6 +234,76 @@ def test_store_get_rejects_mismatched_blob() -> None:
         store.get(obj.knowledge_id)
 
 
+def test_store_put_writes_body_before_index() -> None:
+    """put() must write the R2 body before the D1 index so the index never
+    references a missing blob (issue #3)."""
+
+    class Recording(MockCloudflareBindings):
+        def __init__(self) -> None:
+            super().__init__()
+            self.writes: list[str] = []
+
+        def r2_put(self, key: str, body: bytes) -> None:
+            self.writes.append(("r2_put", key))
+            super().r2_put(key, body)
+
+        def d1_upsert(self, row: object) -> None:
+            self.writes.append(("d1_upsert", row.knowledge_id))
+            super().d1_upsert(row)
+
+    b = Recording()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("partial-write/order", "body-comes-first")
+    store.put(obj)
+
+    r2_events = [e for e in b.writes if e[0] == "r2_put"]
+    d1_events = [e for e in b.writes if e[0] == "d1_upsert"]
+    assert len(r2_events) == 1, b.writes
+    assert len(d1_events) == 1, b.writes
+    # r2_put must precede d1_upsert in the write log.
+    first_r2 = b.writes.index(r2_events[0])
+    first_d1 = b.writes.index(d1_events[0])
+    assert first_r2 < first_d1, b.writes
+
+
+def test_store_put_rolls_back_when_r2_fails() -> None:
+    """If r2_put fails, the D1 index must not be written (issue #3)."""
+
+    class R2Fails(MockCloudflareBindings):
+        def r2_put(self, key: str, body: bytes) -> None:
+            raise RuntimeError("simulated R2 outage")
+
+    b = R2Fails()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("partial-write/r2-fails", "will-be-rolled-back")
+
+    with pytest.raises(RuntimeError, match="R2 outage"):
+        store.put(obj)
+
+    assert b.d1_get(obj.knowledge_id) is None
+    assert b.r2_get(r2_blob_key_for(obj.content_hash)) is None
+
+
+def test_store_put_rolls_back_body_when_index_fails() -> None:
+    """If the D1 write fails after a successful R2 write, the orphan body
+    must be deleted so the next put() call has a clean slate (issue #3)."""
+
+    class D1FailsAfterR2(MockCloudflareBindings):
+        def d1_upsert(self, row: object) -> None:
+            raise RuntimeError("simulated D1 outage")
+
+    b = D1FailsAfterR2()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("partial-write/d1-fails", "orphan-body-candidate")
+    blob_key = r2_blob_key_for(obj.content_hash)
+
+    with pytest.raises(RuntimeError, match="D1 outage"):
+        store.put(obj)
+
+    # The body the adapter wrote must have been rolled back via r2_delete.
+    assert b.r2_get(blob_key) is None
+
+
 def test_store_preserves_source_uri() -> None:
     b = MockCloudflareBindings()
     store = CloudflareKnowledgeStore(b)

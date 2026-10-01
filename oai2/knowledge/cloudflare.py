@@ -166,6 +166,7 @@ class CloudflareBindingAdapter(Protocol):
     def d1_all(self) -> list[CFRow]: ...
     def r2_put(self, key: str, body: bytes) -> None: ...
     def r2_get(self, key: str) -> bytes | None: ...
+    def r2_delete(self, key: str) -> None: ...
     def vectorize_upsert(self, vid: str, vector: list[float]) -> None: ...
     def vectorize_query(
         self, vector: list[float], top_k: int
@@ -257,6 +258,9 @@ class MockCloudflareBindings:
     def r2_get(self, key: str) -> bytes | None:
         return self.blobs.get(key)
 
+    def r2_delete(self, key: str) -> None:
+        self.blobs.pop(key, None)
+
     # -- Vectorize.embeddings --
     def vectorize_upsert(self, vid: str, vector: list[float]) -> None:
         self.vectors[vid] = vector
@@ -347,9 +351,20 @@ class CloudflareKnowledgeStore(KnowledgeStore):
                 "content_hash does not match the KnowledgeObject content"
             )
         row = object_to_row(obj)
-        self._b.d1_upsert(row)
+        # Write R2 before D1. If the body write fails, the index is never
+        # persisted, so the index cannot dangle without a body. If the D1
+        # write then fails, delete the body we just wrote so the next put()
+        # call has a clean slate.
+        r2_blob_key: str | None = None
         if obj.content:
-            self._b.r2_put(r2_blob_key_for(obj.content_hash), obj.content.encode("utf-8"))
+            r2_blob_key = r2_blob_key_for(obj.content_hash)
+            self._b.r2_put(r2_blob_key, obj.content.encode("utf-8"))
+        try:
+            self._b.d1_upsert(row)
+        except BaseException:
+            if r2_blob_key is not None:
+                self._b.r2_delete(r2_blob_key)
+            raise
         self._b.bump_cache_revision()
 
     def get(self, knowledge_id: KnowledgeId) -> KnowledgeObject | None:
