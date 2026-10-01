@@ -140,11 +140,8 @@ def report_platform_check_status() -> None:
 def run_qpipe_compatibility_check() -> bool:
     """Verify an available q-pipe checkout matches the pinned import contract."""
 
-    from oai2.knowledge import (
-        QPIPE_COMPATIBILITY_SOURCE_BLOBS,
-        QPIPE_COMPATIBILITY_SOURCE_REVISION,
-    )
-
+    # Resolve the q-pipe checkout first so a missing default checkout can
+    # SKIP without ever touching the package's pinned-constants source.
     configured = os.getenv("OAI2_QPIPE_REPO")
     qpipe_root = (
         Path(configured).expanduser().resolve()
@@ -163,6 +160,43 @@ def run_qpipe_compatibility_check() -> bool:
             flush=True,
         )
         return True
+
+    # The pinned constants live in `oai2/knowledge/qpipe_import.py`. They
+    # are simple string / dict assignments, so parse them with `ast` and
+    # evaluate the literals rather than importing `oai2` — importing pulls
+    # in the package's runtime deps (pydantic, etc.) which are only present
+    # in the `uv run` environment, not in this script's bare interpreter.
+    import ast
+
+    constants_path = ROOT / "oai2" / "knowledge" / "qpipe_import.py"
+    tree = ast.parse(constants_path.read_text(encoding="utf-8"))
+    pinned_revision: str | None = None
+    pinned_blobs: dict[str, str] | None = None
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
+            target_id = node.targets[0].id
+            if target_id == "QPIPE_COMPATIBILITY_SOURCE_REVISION":
+                value = ast.literal_eval(node.value)
+                if isinstance(value, str):
+                    pinned_revision = value
+            elif target_id == "QPIPE_COMPATIBILITY_SOURCE_BLOBS":
+                value = ast.literal_eval(node.value)
+                if isinstance(value, dict) and all(
+                    isinstance(k, str) and isinstance(v, str)
+                    for k, v in value.items()
+                ):
+                    pinned_blobs = value
+    if pinned_revision is None or pinned_blobs is None:
+        print(
+            "FAIL qpipe-compat: pinned constants missing from "
+            f"{constants_path.relative_to(ROOT)}",
+            flush=True,
+        )
+        return False
 
     def git_output(*args: str) -> str | None:
         completed = subprocess.run(
@@ -185,15 +219,15 @@ def run_qpipe_compatibility_check() -> bool:
     head = git_output("rev-parse", "HEAD")
     if head is None:
         return False
-    if head != QPIPE_COMPATIBILITY_SOURCE_REVISION:
+    if head != pinned_revision:
         print(
             "FAIL qpipe-compat: source revision changed "
-            f"(pinned={QPIPE_COMPATIBILITY_SOURCE_REVISION}, current={head})",
+            f"(pinned={pinned_revision}, current={head})",
             flush=True,
         )
         return False
 
-    for relative_path, expected_blob in QPIPE_COMPATIBILITY_SOURCE_BLOBS.items():
+    for relative_path, expected_blob in pinned_blobs.items():
         actual_blob = git_output("hash-object", relative_path)
         if actual_blob is None:
             return False
@@ -206,7 +240,7 @@ def run_qpipe_compatibility_check() -> bool:
             return False
 
     print(
-        f"PASS qpipe-compat: {QPIPE_COMPATIBILITY_SOURCE_REVISION}",
+        f"PASS qpipe-compat: {pinned_revision}",
         flush=True,
     )
     return True
