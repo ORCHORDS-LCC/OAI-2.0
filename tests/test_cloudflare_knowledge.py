@@ -21,7 +21,11 @@ from oai2.knowledge import (
 
 
 def _make_obj(
-    topic: str, content: str, authority: float = 0.5, kid_suffix: str = ""
+    topic: str,
+    content: str,
+    authority: float = 0.5,
+    kid_suffix: str = "",
+    source_uri: str | None = None,
 ) -> object:
     from oai2.knowledge import KnowledgeObject
 
@@ -30,7 +34,7 @@ def _make_obj(
         topic=topic,
         content=content,
         content_hash=sha256_hex(content),
-        source_uri=None,
+        source_uri=source_uri,
         retrieved_at=0.0,
         authority=authority,
         status=Status.EXPERIMENTAL,
