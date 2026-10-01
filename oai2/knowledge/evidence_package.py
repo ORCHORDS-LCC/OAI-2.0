@@ -71,7 +71,10 @@ def build_evidence_package(
     token_counter: TokenCounter,
     max_entries: int | None = None,
 ) -> EvidencePackage:
-    """Build the largest provenance-complete package that fits the token budget."""
+    """Build a provenance-complete package within the exact rendered-text budget.
+
+    The supplied token counter must be deterministic for a fixed text.
+    """
     if isinstance(token_budget, bool) or not isinstance(token_budget, int) or token_budget <= 0:
         raise ValueError("token_budget must be a positive integer")
     if max_entries is not None and (
@@ -85,7 +88,9 @@ def build_evidence_package(
 
     candidates = {candidate.knowledge_id: candidate for candidate in result.candidates}
     selected: list[EvidencePackageEntry] = []
-    used_tokens = 0
+    used_tokens = _token_count(token_counter, "")
+    if used_tokens > token_budget:
+        raise ValueError("token_budget cannot fit the empty package encoding")
 
     objects = result.objects if max_entries is None else result.objects[:max_entries]
     for obj in objects:
@@ -106,17 +111,21 @@ def build_evidence_package(
                 f"retrieval object {obj.knowledge_id!s} has no provenance source"
             )
 
+        prefix = "\n\n".join(entry.render() for entry in selected)
+        if selected:
+            prefix += "\n\n"
         entry = _fit_entry(
             obj,
             candidate,
             source_ref=source_ref,
-            remaining_tokens=token_budget - used_tokens,
+            prefix=prefix,
+            token_budget=token_budget,
             token_counter=token_counter,
         )
         if entry is None:
             break
         selected.append(entry)
-        used_tokens += entry.tokens
+        used_tokens = _token_count(token_counter, prefix + entry.render())
 
     return EvidencePackage(
         version=EVIDENCE_PACKAGE_VERSION,
@@ -177,11 +186,10 @@ def _fit_entry(
     candidate: RetrievalCandidate,
     *,
     source_ref: str,
-    remaining_tokens: int,
+    prefix: str,
+    token_budget: int,
     token_counter: TokenCounter,
 ) -> EvidencePackageEntry | None:
-    if remaining_tokens <= 0:
-        return None
     words = " ".join(obj.content.split()).split(" ")
     # Empty bodies still need a provenance-bearing entry.
     if words == [""]:
@@ -210,12 +218,15 @@ def _fit_entry(
             tokens=tokens,
         )
 
+    def fits(entry: EvidencePackageEntry) -> bool:
+        return _token_count(token_counter, prefix + entry.render()) <= token_budget
+
     full = make(" ".join(words))
-    if full.tokens <= remaining_tokens:
+    if fits(full):
         return full
 
-    # Binary-search the largest content prefix that retains full provenance and
-    # fits the exact target tokenizer budget.
+    # Search for a provenance-complete content prefix. Check the whole joined
+    # package, since separators and tokenizer boundaries make costs non-additive.
     low = 0
     high = len(words)
     best: EvidencePackageEntry | None = None
@@ -225,7 +236,7 @@ def _fit_entry(
         if mid < len(words) and snippet:
             snippet += " …"
         entry = make(snippet)
-        if entry.tokens <= remaining_tokens:
+        if fits(entry):
             best = entry
             low = mid + 1
         else:

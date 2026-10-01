@@ -80,3 +80,29 @@ Policy outcomes are explicit: `NOT_REQUIRED`, `NEEDS_EVIDENCE`, `SUPPORTED`, `RE
 Focused fixtures cover taxonomy, state-version invalidation, current-fact expiry, conflict/refutation, wrong-evidence-class rejection, and assumption/plan/target/preference/hypothetical paths that do not require external evidence.
 
 Repository, tool/runtime, and web/external evidence paths now consume this policy through the canonical `oai2/verification/paths.py` adapters. Those adapters enforce the matching evidence classes at the path boundary and preserve state-version/freshness/refutation/conflict semantics. The remaining WI-TRUTH-001 closure boundary is current-main runner-free local verification.
+
+## Rendered evidence-context budget (WI-RET-002)
+
+`build_evidence_package(...)` applies the caller's deterministic token counter to
+the complete rendered package, including provenance and separators. Its
+`token_count` equals `token_counter(package.render())` and never exceeds the
+requested `token_budget`. Independently counted entry costs are diagnostic;
+their sum is not the package budget because concatenated text can have a
+different encoded cost.
+
+Each proposed snippet is checked together with the already selected entries.
+Provenance is never removed merely to make a snippet fit. Even an empty package
+uses the counter's empty-string cost; a budget below that cost raises
+`ValueError`. Callers must use the target runtime's tokenizer and account for
+other prompt content separately. This formatter does not guarantee globally
+maximal content selection for an arbitrary non-monotonic token counter.
+
+Focused verification in the supported project environment:
+
+```bash
+uv run pytest -W error tests/test_evidence_package_budget.py tests/test_evidence_package.py
+```
+
+The budget fixtures use deterministic synthetic counters, not measurements of
+a deployed model. Live retrieval quality, task-success improvement, and full
+supported-environment verification remain separate acceptance requirements.
