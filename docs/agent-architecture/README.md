@@ -21,7 +21,7 @@ Experimental source currently includes:
 - dynamic tool definitions and a six-gate dispatcher;
 - FURIOUS/NORMAL/DEEP/SWARM controller scaffolds;
 - multi-agent orchestration interfaces;
-- evidence/claim state models;
+- evidence/claim state models plus a versioned claim/evidence taxonomy with state-version and freshness invalidation;
 - four-view vision abstractions;
 - corrected MLX benchmark harness;
 - offline capability-evaluation scaffolds;
