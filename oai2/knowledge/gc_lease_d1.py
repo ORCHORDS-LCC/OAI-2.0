@@ -171,6 +171,58 @@ END AS lease_valid
 """.strip()
 
 
+GC_LEASE_RECORD_FAILURE_SQL = f"""
+UPDATE {GC_LEASE_TABLE}
+SET
+    state = 'delete_failed',
+    failure_count = failure_count + 1,
+    finalized_decision = 'retryable_failure_recorded',
+    authority_revision = ?4,
+    updated_at = ?3
+WHERE object_key = ?1
+  AND token = ?2
+  AND state IN ('active', 'delete_failed')
+  AND expires_at > ?3
+  AND NOT EXISTS (
+      SELECT 1
+      FROM knowledge_index
+      WHERE r2_blob_key = ?1
+  )
+""".strip()
+
+GC_LEASE_FINALIZE_SQL = f"""
+UPDATE {GC_LEASE_TABLE}
+SET
+    state = 'deleted',
+    finalized_decision = ?4,
+    authority_revision = ?5,
+    updated_at = ?3
+WHERE object_key = ?1
+  AND token = ?2
+  AND state IN ('active', 'delete_failed')
+  AND expires_at > ?3
+  AND ?4 IN ('deleted', 'already_absent')
+  AND NOT EXISTS (
+      SELECT 1
+      FROM knowledge_index
+      WHERE r2_blob_key = ?1
+  )
+""".strip()
+
+GC_LEASE_RELEASE_SQL = f"""
+UPDATE {GC_LEASE_TABLE}
+SET
+    state = 'released',
+    finalized_decision = NULL,
+    authority_revision = ?4,
+    updated_at = ?3
+WHERE object_key = ?1
+  AND token = ?2
+  AND state IN ('active', 'delete_failed')
+  AND expires_at > ?3
+""".strip()
+
+
 def gc_lease_schema_statements() -> tuple[str, ...]:
     """Return schema statements in deterministic application order."""
     return tuple(
@@ -190,5 +242,8 @@ __all__ = [
     "GC_LEASE_ACQUIRE_SQL",
     "GC_LEASE_WRITER_BLOCK_SQL",
     "GC_LEASE_VALIDATE_SQL",
+    "GC_LEASE_RECORD_FAILURE_SQL",
+    "GC_LEASE_FINALIZE_SQL",
+    "GC_LEASE_RELEASE_SQL",
     "gc_lease_schema_statements",
 ]
