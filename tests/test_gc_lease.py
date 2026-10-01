@@ -200,3 +200,13 @@ def test_wrong_token_cannot_finalize_or_release() -> None:
     )
     assert authority.release_delete_lease("oai2-blobs/a", "wrong") is False
     assert authority.validate_delete_lease("oai2-blobs/a", "lease-1", now=11.0)
+
+
+def test_gc_lease_symbols_are_exported_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        GcDeleteLeaseAuthority as ExportedAuthority,
+        GcDeleteLeaseDecision as ExportedDecision,
+    )
+
+    assert ExportedAuthority is GcDeleteLeaseAuthority
+    assert ExportedDecision is GcDeleteLeaseDecision
