@@ -154,3 +154,13 @@ def test_batch_plan_rejects_duplicate_session_or_mismatch() -> None:
             compatibility=key,
             requests=(_req("r1", "s1", key=_key(model="other")),),
         )
+
+
+
+def test_scheduler_symbols_are_exported_from_runtime_package() -> None:
+    from oai2.runtime import SafeBatchScheduler as ExportedScheduler
+    from oai2.runtime import SessionCompatibilityKey as ExportedKey
+    from oai2.runtime.scheduler import SafeBatchScheduler, SessionCompatibilityKey
+
+    assert ExportedScheduler is SafeBatchScheduler
+    assert ExportedKey is SessionCompatibilityKey
