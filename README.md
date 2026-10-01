@@ -13,7 +13,7 @@
 
 OAI-2.0 is a public next-generation coding-agent research project focused on **large intelligence capacity with dynamically small active compute**: code + vision reasoning, native dynamic tools, evidence-driven verification, adaptive reasoning depth, and conditional multi-agent execution.
 
-## Current state — 2026-10-01
+## Current state — 2026-10-02
 
 OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
 
@@ -30,9 +30,11 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Capability-eval harness | **EXPERIMENTAL** |
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
 | Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
-| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still proposed |
+| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still incomplete |
 | R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
 | Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
+| D1 GC lease binding layer | **EXPERIMENTAL source implementation** — schema, async prepare/bind/batch adapter, conditional acquire/revalidate/finalize/release; live writer/sweep proof remaining |
+| QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests; service/scheduler integration remaining |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
@@ -87,7 +89,7 @@ flowchart TD
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, and a conservative authorization/recovery-gated orphan-sweep core. It does **not** yet make live Cloudflare network calls or prove a live destructive R2 operation.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, and an async D1 binding-facing lease adapter with conditional acquire/revalidate/failure/finalize/release operations. It does **not** yet prove the complete live Worker/D1/R2/Vectorize/KV transport, a lease-aware normal writer transaction, or a live destructive R2 operation.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 
