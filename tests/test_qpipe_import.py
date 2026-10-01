@@ -311,7 +311,7 @@ def test_qpipe_compatibility_revision_is_pinned() -> None:
         QPIPE_COMPATIBILITY_SOURCE_REVISION,
     )
 
-    assert QPIPE_COMPATIBILITY_SOURCE_REVISION == "39f7e791aa38e8fd9e006aee9c15686ec51a3cf2"
+    assert QPIPE_COMPATIBILITY_SOURCE_REVISION == "2ed18c26d671559a0c82e55ce15b41a973c61f43"
     assert QPIPE_COMPATIBILITY_SOURCE_BLOBS == {
         "qpipe/cloudflare_learning.py": "3cf94523564fdd919bec177f71740ff7e979f805",
         "qpipe/memory.py": "f7188d3128e2c647ece9f457b053dcb3d7b705a8",

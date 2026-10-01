@@ -22,6 +22,12 @@ from .admission_scheduler import (
     AdmissionScheduledRequest,
     AdmissionSchedulerMetrics,
 )
+from .gateway_model_client import (
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_TEMPERATURE,
+    ChatReply,
+    GatewayModelClient,
+)
 from .gateway_runtime import (
     DEFAULT_GATEWAY_BASE_URL,
     DEFAULT_GATEWAY_MODEL,
@@ -59,11 +65,15 @@ __all__ = [
     "AdmissionReason",
     "AdmissionRequest",
     "CapacitySnapshot",
+    "ChatReply",
     "DEFAULT_GATEWAY_BASE_URL",
     "DEFAULT_GATEWAY_MODEL",
+    "DEFAULT_MAX_TOKENS",
+    "DEFAULT_TEMPERATURE",
     "DEFAULT_TIMEOUT_SECONDS",
     "GatewayConfig",
     "GatewayConfigError",
+    "GatewayModelClient",
     "GatewayRuntime",
     "GatewayRuntimeError",
     "InferenceRequest",
