@@ -218,6 +218,7 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
         GC_LEASE_SELECT_SQL,
         GC_LEASE_TABLE,
         GC_LEASE_UPSERT_SQL,
+        GC_LEASE_VALIDATE_SQL,
         GC_LEASE_WRITER_BLOCK_SQL,
         gc_lease_schema_statements,
     )
@@ -228,6 +229,7 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
         GC_LEASE_SELECT_SQL as SourceSelectSql,
         GC_LEASE_TABLE as SourceTable,
         GC_LEASE_UPSERT_SQL as SourceUpsertSql,
+        GC_LEASE_VALIDATE_SQL as SourceValidateSql,
         GC_LEASE_WRITER_BLOCK_SQL as SourceWriterBlockSql,
         gc_lease_schema_statements as SourceStatements,
     )
@@ -239,6 +241,7 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
     assert GC_LEASE_SELECT_SQL is SourceSelectSql
     assert GC_LEASE_TABLE == SourceTable == "knowledge_gc_delete_lease"
     assert GC_LEASE_UPSERT_SQL is SourceUpsertSql
+    assert GC_LEASE_VALIDATE_SQL is SourceValidateSql
     assert GC_LEASE_WRITER_BLOCK_SQL is SourceWriterBlockSql
 
 
