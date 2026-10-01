@@ -9,7 +9,7 @@ _Last reviewed: 2026-10-01._
 Repository source currently includes:
 
 - a six-gate tool dispatcher;
-- public-safety CI scanning;
+- runner-free local public-safety scanning via `scripts/verify.py`;
 - secret/private-resource exclusions in repository policy;
 - evidence/status modeling;
 - non-commercial licensing/contact policy.
