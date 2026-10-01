@@ -123,7 +123,6 @@ from .sweep import (
     GcSweepRecord,
     GcSweepState,
 )
-from .worker_transport import EmbeddingProvider, KnowledgeWorkerTransport
 from .transport import (
     TRANSPORT_VERSION,
     D1KnowledgeIndexRecord,
@@ -138,6 +137,7 @@ from .transport import (
     TransportOperation,
     VectorizeMetadata,
 )
+from .worker_transport import EmbeddingProvider, KnowledgeWorkerTransport
 
 __all__ = [
     "InMemoryKnowledgeStore",
