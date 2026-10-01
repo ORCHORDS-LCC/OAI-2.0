@@ -364,3 +364,21 @@ async def test_cached_retrieval_rejects_revision_change_during_rehydrate() -> No
     writer.read_sequence = [4, 5]
     with pytest.raises(KnowledgeConflictError, match="cached retrieval"):
         await runtime.retrieve(request)
+
+
+
+def test_async_cloudflare_runtime_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        AsyncCloudflareKnowledgeRuntime as ExportedRuntime,
+    )
+    from oai2.knowledge import KnowledgeConflictError as ExportedConflict
+    from oai2.knowledge import KnowledgeIntegrityError as ExportedIntegrity
+    from oai2.knowledge.cloudflare_runtime import (
+        AsyncCloudflareKnowledgeRuntime,
+        KnowledgeConflictError,
+        KnowledgeIntegrityError,
+    )
+
+    assert ExportedRuntime is AsyncCloudflareKnowledgeRuntime
+    assert ExportedConflict is KnowledgeConflictError
+    assert ExportedIntegrity is KnowledgeIntegrityError
