@@ -215,7 +215,7 @@ def test_synthetic_50_row_pilot_round_trip_through_cloudflare_contract() -> None
     assert len(rep.imported) == 50
 
     bindings = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(bindings)
+    store = CloudflareKnowledgeStore(bindings, embedding_digest="test-embed-digest-v1")
     for obj in rep.imported:
         store.put(obj)
 

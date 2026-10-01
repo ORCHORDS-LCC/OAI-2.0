@@ -67,7 +67,7 @@ def test_row_to_d1_round_trip() -> None:
 
 def test_store_put_get_round_trip() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("agent-loop", "see SYSTEM_ARCHITECTURE.md")
     store.put(obj)
 
@@ -81,7 +81,7 @@ def test_store_put_get_round_trip() -> None:
 
 def test_store_retrieve_filters_by_topic_and_authority() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     high = _make_obj("router", "router authority body", authority=0.9, kid_suffix="h")
     low = _make_obj("router", "low authority body", authority=0.1, kid_suffix="l")
     other = _make_obj("planner", "planner body", authority=0.9, kid_suffix="o")
@@ -120,7 +120,7 @@ def test_cache_key_changes_when_status_set_changes() -> None:
 
 def test_cache_revision_invalidates_after_write() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("cache-me", "x", kid_suffix="one")
     store.put(obj)
 
@@ -144,7 +144,7 @@ def test_cache_revision_invalidates_after_write() -> None:
 
 def test_ingestion_pipeline_populates_cloudflare_store() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     pipeline = IngestionPipeline(store)
     jobs = [
         IngestionJob(
@@ -188,7 +188,7 @@ def test_cfrrow_is_frozen() -> None:
 
 def test_all_uses_adapter_contract_not_mock_internals() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     a = _make_obj("all-a", "a", kid_suffix="a")
     b_obj = _make_obj("all-b", "b", kid_suffix="b")
     store.put(a)
@@ -205,7 +205,7 @@ def test_cache_key_changes_with_corpus_revision() -> None:
 
 def test_store_put_rejects_mismatched_content_hash() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("integrity", "trusted body")
     obj.content_hash = sha256_hex("different body")
     with pytest.raises(ValueError, match="content_hash"):
@@ -214,7 +214,7 @@ def test_store_put_rejects_mismatched_content_hash() -> None:
 
 def test_store_get_rejects_missing_blob() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("integrity", "trusted body", kid_suffix="missing")
     store.put(obj)
     del b.blobs[r2_blob_key_for(obj.content_hash)]
@@ -224,7 +224,7 @@ def test_store_get_rejects_missing_blob() -> None:
 
 def test_store_get_rejects_mismatched_blob() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("integrity", "trusted body", kid_suffix="tampered")
     store.put(obj)
     b.blobs[r2_blob_key_for(obj.content_hash)] = b"tampered body"
@@ -250,7 +250,7 @@ def test_store_put_writes_body_before_index() -> None:
             super().d1_upsert(row)
 
     b = Recording()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("partial-write/order", "body-comes-first")
     store.put(obj)
 
@@ -272,7 +272,7 @@ def test_store_put_rolls_back_when_r2_fails() -> None:
             raise RuntimeError("simulated R2 outage")
 
     b = R2Fails()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("partial-write/r2-fails", "will-be-rolled-back")
 
     with pytest.raises(RuntimeError, match="R2 outage"):
@@ -296,7 +296,7 @@ def test_store_put_preserves_shared_body_when_index_fails() -> None:
             super().d1_upsert(row)
 
     b = D1FailsOnDemand()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     retained = _make_obj("shared/original", "shared-body", kid_suffix="retained")
     failing = _make_obj("shared/new", "shared-body", kid_suffix="failing")
     blob_key = r2_blob_key_for(retained.content_hash)
@@ -316,7 +316,7 @@ def test_store_put_preserves_shared_body_when_index_fails() -> None:
 
 def test_store_preserves_source_uri() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("provenance", "source body", source_uri="https://example.test/source")
     store.put(obj)
     got = store.get(obj.knowledge_id)
@@ -326,7 +326,7 @@ def test_store_preserves_source_uri() -> None:
 
 def test_retrieve_ignores_corrupted_cache() -> None:
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="stub-v0")
     obj = _make_obj("cache-integrity", "trusted body")
     store.put(obj)
 
@@ -345,7 +345,7 @@ def test_retrieve_ignores_cache_ref_with_wrong_hash() -> None:
     from oai2.knowledge.transport import KnowledgeCacheRef, QueryCacheEnvelope
 
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="stub-v0")
     obj = _make_obj("cache-ref-integrity", "trusted body")
     store.put(obj)
 
@@ -376,7 +376,7 @@ def test_retrieve_survives_kv_get_failure() -> None:
             raise RuntimeError("simulated KV read outage")
 
     b = KVGetFails()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("kv-read-outage", "authoritative body")
     store.put(obj)
 
@@ -392,7 +392,7 @@ def test_retrieve_survives_kv_put_failure() -> None:
             raise RuntimeError("simulated KV write outage")
 
     b = KVPutFails()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("kv-write-outage", "authoritative body")
     store.put(obj)
 
@@ -411,7 +411,7 @@ def test_put_uses_atomic_index_and_revision_contract() -> None:
             return super().d1_upsert_and_bump_revision(row)
 
     b = Recording()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")
     obj = _make_obj("atomic-revision", "body")
     before = b.cache_revision()
 
@@ -426,7 +426,7 @@ def test_cache_contains_refs_not_full_bodies() -> None:
     from oai2.knowledge.transport import QueryCacheEnvelope
 
     b = MockCloudflareBindings()
-    store = CloudflareKnowledgeStore(b)
+    store = CloudflareKnowledgeStore(b, embedding_digest="stub-v0")
     obj = _make_obj("compact-cache", "body should stay in R2")
     store.put(obj)
     req = RetrievalRequest(topic="compact-cache")
@@ -440,3 +440,47 @@ def test_cache_contains_refs_not_full_bodies() -> None:
     assert len(envelope.refs) == 1
     assert envelope.refs[0].knowledge_id == obj.knowledge_id
     assert "body should stay in R2" not in raw
+
+
+def test_store_requires_explicit_embedding_digest() -> None:
+    """A silently-shared default embedding_digest would let two distinct
+    deployments collide in the same KV namespace. The constructor must
+    fail closed instead of accepting an implicit default."""
+    b = MockCloudflareBindings()
+    with pytest.raises(TypeError, match="embedding_digest"):
+        CloudflareKnowledgeStore(b)  # type: ignore[call-arg]
+
+
+def test_store_rejects_empty_embedding_digest() -> None:
+    """An empty digest would silently collapse every cache key into the
+    same namespace and produce the same silent-collision hazard as the
+    prior default. The constructor must refuse empty strings."""
+    b = MockCloudflareBindings()
+    with pytest.raises(ValueError, match="embedding_digest must be a non-empty string"):
+        CloudflareKnowledgeStore(b, embedding_digest="")
+
+
+def test_cache_key_namespace_isolated_by_embedding_digest() -> None:
+    """Two digests backed by the same bindings must NOT collide in the
+    shared KV namespace. The cache key must change when the embedding
+    digest changes, so a misconfigured deployment cannot silently read
+    another deployment's cached results."""
+    from oai2.knowledge import RetrievalRequest
+
+    b = MockCloudflareBindings()
+    store_a = CloudflareKnowledgeStore(b, embedding_digest="embed-A")
+
+    obj = _make_obj("isolated-cache", "body")
+    store_a.put(obj)
+    req = RetrievalRequest(topic="isolated-cache")
+
+    store_a.retrieve(req)
+
+    # store_a wrote a cache envelope under its own digest's key.
+    key_a = cache_key_for(req, "embed-A", b.cache_revision())
+    assert b.kv_get(key_a) is not None
+    # A different digest hashes to a different key and must observe an
+    # empty KV — not the cache envelope written by store_a.
+    key_b = cache_key_for(req, "embed-B", b.cache_revision())
+    assert key_a != key_b
+    assert b.kv_get(key_b) is None

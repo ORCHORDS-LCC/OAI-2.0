@@ -349,8 +349,10 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         self,
         bindings: CloudflareBindingAdapter,
         *,
-        embedding_digest: str = "stub-v0",
+        embedding_digest: str,
     ) -> None:
+        if not embedding_digest:
+            raise ValueError("embedding_digest must be a non-empty string")
         self._b = bindings
         self._embedding_digest = embedding_digest
 
