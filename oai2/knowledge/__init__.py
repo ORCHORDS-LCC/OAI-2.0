@@ -29,6 +29,12 @@ from .cloudflare import (
     object_to_row,
     r2_blob_key_for,
 )
+from .cloudflare_runtime import (
+    AsyncCloudflareKnowledgeRuntime,
+    KnowledgeConflictError,
+    KnowledgeIntegrityError,
+    KnowledgeRuntimeError,
+)
 from .cloudflare_bindings_runtime import (
     CloudflareKvCache,
     CloudflareR2Store,
@@ -137,6 +143,10 @@ __all__ = [
     "IngestionJob",
     "IngestionPipeline",
     "IngestionStatus",
+    "AsyncCloudflareKnowledgeRuntime",
+    "KnowledgeRuntimeError",
+    "KnowledgeConflictError",
+    "KnowledgeIntegrityError",
     "CloudflareKvCache",
     "CloudflareR2Store",
     "CloudflareVectorizeStore",
