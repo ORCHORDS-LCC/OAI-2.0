@@ -8,19 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Expanded standards-aligned work-package map through WP-69, including sandbox/source-control/build/patch/post-training/fuzz, human approvals, memory, capability registry, protocol evolution, benchmark governance, domain specialists, deterministic inference, lazy loading, prompt/intent/semantic/web/extension/device work, accessibility, Apple simulators, Cloudflare operations and temporal knowledge.
-
+- Expanded standards-aligned work-package map through WP-74, covering verification, Cloudflare knowledge, migration/retrieval, benchmarking, sparse/adaptive architecture, training/data/tokenizer, vision/tools/agents, host integrations, security/privacy/supply chain, Apple/device/accessibility integration, temporal knowledge, content-addressed garbage collection, numerical stability, architecture search, client SDKs and artifact distribution.
+- Reference-safe, non-destructive R2 liveness reconciliation with shared-body grouping, missing/orphan classification, byte/age metrics, resumable pagination and authoritative-reference fingerprinting.
+- Conservative R2 orphan sweep decision core with grace windows, immediate pre-delete D1 recheck, dry-run default, explicit authorization/recovery gates, idempotent absence handling, bounded failure resume and integrity-checked checkpoints.
 - Versioned public-safe Cloudflare knowledge transport schemas for request/response, normalized auth context, explicit errors, D1 metadata, R2 body descriptors, Vectorize metadata and KV cache envelopes.
 - Regression tests for transport contract versioning, operation requirements, response invariants, content-addressed R2 integrity, Vectorize provenance and revisioned KV envelopes.
 - q-pipe compatibility source revision/blob markers tied to the exact public q-pipe source used for importer-policy verification.
-
 - Runner-free local preflight at `scripts/verify.py` covering Ruff, MyPy, Pytest, public-safety and Markdown-link checks.
-- Standards-aligned master issue hierarchy with work packages/work items through core architecture, data/training, inference, observability, resource control, supply-chain and configuration domains.
-
+- Standards-aligned master issue hierarchy and engineering issue/traceability nomenclature.
 - Experimental OAI-2.0 Python package scaffold for protocols, reasoning, tools, agents, verification, vision abstractions, knowledge, runtime, and evaluation.
 - Corrected MLX benchmark harness with separate load, compile/warm-up, prefill/TTFT, decode, end-to-end, and memory metrics.
 - Offline capability-evaluation scaffolds for coding, tool use, bug diagnosis, reasoning, verification, vision, and orchestration.
-- Runner-free local verification is the canonical lint/test/type/public-safety workflow.
 - Application-level Cloudflare knowledge contract using logical D1/R2/Vectorize/KV roles plus deterministic mock bindings.
 - Strict q-pipe import policy aligned to q-pipe's Cloudflare export gate.
 - Synthetic 50-row q-pipe import round-trip test.
@@ -28,23 +26,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Runner-free preflight now reports explicit Apple-Silicon PASS/SKIP state and verifies a real sibling/configured q-pipe checkout against the pinned compatibility revision/blob hashes when available.
-
+- Master Issue #1 is now the canonical global map through WP-74 and issue boundary #224, with parent WP issues owning detailed work-item registries.
+- Runner-free preflight reports explicit Apple-Silicon PASS/SKIP state and verifies a real sibling/configured q-pipe checkout against pinned compatibility revision/blob hashes when available.
 - Removed GitHub Actions runner-backed workflows; OAI-2.0 acceptance is local/manual-first and runner-free.
-- Added master implementation map in GitHub Issue #1.
-
 - Architecture target supersedes the original small-model-only concept: OAI-2.0 targets **10–30B+ total specialist capacity** with difficulty-dependent active compute.
-- q-pipe knowledge imports now default to **promoted, independently verified, quality-gated rows only**.
-- Android curriculum imports now require explicit opt-in.
+- q-pipe knowledge imports default to **promoted, independently verified, quality-gated rows only**.
+- Android curriculum imports require explicit opt-in.
 - Cloudflare query caches are revision-keyed so writes invalidate earlier logical cache entries.
-- Cloudflare documentation now distinguishes application-level contracts from Cloudflare's asynchronous Worker binding APIs.
+- Cloudflare documentation distinguishes application-level contracts from asynchronous live Worker binding APIs.
 - Benchmark v0.1 numbers are historical bootstrap evidence, not pure decode evidence.
 
 ### Fixed
 
+- Closed R2 sweep race windows by adding a second authoritative reference check immediately before deletion and retiring re-referenced candidates until a fresh dry-run/grace cycle.
+- Sweep runtime now rejects non-boolean dependency results instead of coercing them into destructive decisions.
+- Sweep checkpoints now fingerprint full state, including cursor/history/retired candidates, so tampered resume state is rejected.
+- Dry-run GC page ingestion is atomic; snapshot booleans/cursors/inventory values are strictly validated; resumed scans can be checked against the current authoritative reference set.
 - Repaired the local preflight hard-coded-secret regex and excluded generated environments/caches/build trees from repository scans.
-
-- Removed stale claim that the mock Cloudflare methods map 1:1 to live Worker APIs.
+- Removed stale claim that mock Cloudflare methods map 1:1 to live Worker APIs.
 - Removed mock-internal assumptions from `KnowledgeStore.all()`.
 - Fixed q-pipe dedupe ordering so an ineligible row cannot suppress a later eligible row with the same identity.
 - Fixed q-pipe guidance hashing to match the verified exported guidance shape.
