@@ -32,6 +32,13 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
+from .regression import (
+    CapabilityRegression,
+    CapabilityRegressionThreshold,
+    HeldOutPromotionBudget,
+    HeldOutPromotionEvaluation,
+    evaluate_held_out_promotion,
+)
 from .truth import (
     TruthCandidatePromotionEvaluation,
     TruthCaseClass,
@@ -631,6 +638,11 @@ def builtin_suites() -> Iterable[CapabilitySuite]:
 
 __all__ = [
     "BUILTIN_SUITES_NAMES",
+    "CapabilityRegression",
+    "CapabilityRegressionThreshold",
+    "HeldOutPromotionBudget",
+    "HeldOutPromotionEvaluation",
+    "evaluate_held_out_promotion",
     "CapabilityCase",
     "CapabilityScore",
     "CapabilitySuite",
