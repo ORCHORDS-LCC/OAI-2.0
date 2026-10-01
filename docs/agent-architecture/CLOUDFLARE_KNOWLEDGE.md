@@ -1,8 +1,8 @@
 # Cloudflare Knowledge Architecture
 
-_Last reviewed against current Cloudflare documentation and repository source: 2026-10-01._
+_Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, and a deterministic D1 deletion-lease authority model are implemented in source. Live Cloudflare network execution, production semantic retrieval, and controlled private destructive demonstrations remain **PROPOSED / NOT YET VERIFIED END-TO-END**.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Live Worker deployment, durable global corpus/reference revision enforcement, live writer-path exclusion, production semantic retrieval, and controlled private destructive demonstrations remain **NOT YET VERIFIED END-TO-END**.
 
 ## Verified architecture boundary
 
@@ -162,7 +162,17 @@ The source model currently covers:
 - idempotent repeated finalize;
 - deleted-body tombstone that requires explicit verified restore before references can be reactivated.
 
-Focused evidence currently records ten passing tests plus compile and package-import smoke. This is **not** a live D1 transaction, schema migration, Worker integration, or R2 concurrency demonstration. The live writer path and GC worker must both use the same D1 claim protocol before #233 or #19 can close.
+Current source has advanced beyond the deterministic model:
+
+- `oai2/knowledge/gc_lease_d1.py` defines a versioned STRICT D1 persistence contract;
+- conditional acquisition refuses retained references and live leases, permits expired/released takeover, and rechecks references on conflict update;
+- pre-delete validation checks exact token, state, expiry, and authoritative retained-reference absence;
+- delete-failure, release, and delete/already-absent finalization are token/expiry guarded;
+- `oai2/knowledge/gc_lease_d1_runtime.py` consumes the documented async D1 `prepare/bind/run/first/batch` surface;
+- mutation success is fail-closed using D1 result success plus `meta.changes`;
+- focused SQLite semantics tests and async fake-binding contract tests cover these paths.
+
+This is still **not** full live-Worker proof. The repository does not yet have one durable global corpus/reference revision authority wired into every writer, the normal knowledge writer does not yet transactionally enforce the deletion lease table, the destructive sweep does not yet consume this D1-backed store end-to-end, and no controlled private Worker/D1/R2 concurrency demonstration has been recorded.
 
 ## q-pipe import contract
 
@@ -185,7 +195,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 ## Current implementation limitations
 
 - versioned transport schemas exist, but no live Worker endpoint/network adapter is verified yet;
-- no production D1 schema migration/deployment;
+- public-safe D1 lease schema and async binding adapter exist, but no production migration/deployment has been demonstrated;
 - no production R2 bucket binding;
 - no production Vectorize index binding;
 - no production KV namespace binding;
@@ -193,7 +203,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 - no production embeddings pipeline;
 - no network integration test;
 - no controlled private R2 sweep demonstration;
-- no live D1 claim/writer exclusion integration;
+- D1 claim acquisition/revalidation/outcome operations exist at binding level, but no live normal-writer transaction or sweep integration is demonstrated;
 - current GC/sweep/lease evidence is focused local source testing, not a full current-main Mac preflight.
 
 ## Public-safe deployment rule
