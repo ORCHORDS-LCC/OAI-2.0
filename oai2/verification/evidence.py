@@ -46,7 +46,15 @@ class Evidence(BaseModel):
 
 
 class EvidenceNode(BaseModel):
-    """A claim-level container that holds supporting Evidence nodes."""
+    """A claim-level container that holds supporting Evidence nodes.
+
+    ``status`` is derived from the current supporting/refuting contents and is
+    recomputed every time the node is constructed, merged, or updated. It is
+    intentionally not a free-form input: an EvidenceNode with empty
+    supporting and refuting is UNVERIFIED; supporting-only or refuting-only
+    is VERIFIED (the verdict is settled, even when negative); both is
+    CONFLICTING.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -54,6 +62,18 @@ class EvidenceNode(BaseModel):
     supporting: tuple[Evidence, ...] = Field(default_factory=tuple)
     refuting: tuple[Evidence, ...] = Field(default_factory=tuple)
     status: EvidenceStatus = EvidenceStatus.UNVERIFIED
+
+    @staticmethod
+    def _derive_status(
+        supporting: tuple[Evidence, ...], refuting: tuple[Evidence, ...]
+    ) -> EvidenceStatus:
+        has_support = bool(supporting)
+        has_refute = bool(refuting)
+        if has_support and has_refute:
+            return EvidenceStatus.CONFLICTING
+        if has_support or has_refute:
+            return EvidenceStatus.VERIFIED
+        return EvidenceStatus.UNVERIFIED
 
     @property
     def net_count(self) -> int:
@@ -73,7 +93,7 @@ class EvidenceNode(BaseModel):
             claim_id=self.claim_id,
             supporting=tuple(supporting),
             refuting=tuple(refuting),
-            status=self.status if self.status is not other.status else other.status,
+            status=self._derive_status(tuple(supporting), tuple(refuting)),
         )
 
 
@@ -92,13 +112,18 @@ class EvidenceGraph(BaseModel):
     def add(self, claim_id: str, evidence: Evidence, supports: bool) -> None:
         node = self.nodes.get(claim_id) or EvidenceNode(claim_id=claim_id)
         if supports:
-            node = node.model_copy(
-                update={"supporting": node.supporting + (evidence,)}
-            )
+            supporting = node.supporting + (evidence,)
+            refuting = node.refuting
         else:
-            node = node.model_copy(
-                update={"refuting": node.refuting + (evidence,)}
-            )
+            supporting = node.supporting
+            refuting = node.refuting + (evidence,)
+        node = node.model_copy(
+            update={
+                "supporting": supporting,
+                "refuting": refuting,
+                "status": EvidenceNode._derive_status(supporting, refuting),
+            }
+        )
         self.upsert(node)
 
     def status_for(self, claim_id: str) -> EvidenceStatus:
