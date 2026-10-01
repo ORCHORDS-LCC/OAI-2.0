@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from oai2.knowledge.gc_lease_d1 import (
+    GC_LEASE_ACQUIRE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_UPSERT_SQL,
     GC_LEASE_VALIDATE_SQL,
@@ -15,8 +16,14 @@ from oai2.knowledge.gc_lease_d1_runtime import D1GcLeaseStore
 
 
 @dataclass
+class FakeMeta:
+    changes: int = 0
+
+
+@dataclass
 class FakeResult:
     success: bool = True
+    meta: FakeMeta = field(default_factory=FakeMeta)
 
 
 @dataclass
@@ -198,3 +205,84 @@ async def test_lease_valid_fails_closed_on_non_boolean_scalar() -> None:
 
     with pytest.raises(RuntimeError, match="lease_valid"):
         await store.lease_valid("oai2-blobs/a", "lease-1", now=19.0)
+
+
+
+@pytest.mark.asyncio
+async def test_acquire_lease_uses_single_conditional_mutation_and_change_count() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_ACQUIRE_SQL] = FakeResult(
+        success=True,
+        meta=FakeMeta(changes=1),
+    )
+    store = D1GcLeaseStore(db)
+
+    acquired = await store.acquire_lease(
+        object_key="oai2-blobs/a",
+        token="lease-7",
+        owner="gc-sweep",
+        now=10.0,
+        ttl_seconds=5.0,
+        authority_revision=12,
+    )
+
+    assert acquired is True
+    stmt = db.prepared[-1]
+    assert stmt.query == GC_LEASE_ACQUIRE_SQL
+    assert stmt.bound == (
+        "oai2-blobs/a",
+        "lease-7",
+        "gc-sweep",
+        10.0,
+        15.0,
+        12,
+    )
+
+
+@pytest.mark.asyncio
+async def test_acquire_lease_returns_false_when_conditional_sql_changes_zero_rows() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_ACQUIRE_SQL] = {
+        "success": True,
+        "meta": {"changes": 0},
+    }
+    store = D1GcLeaseStore(db)
+
+    assert await store.acquire_lease(
+        object_key="oai2-blobs/a",
+        token="lease-7",
+        owner="gc-sweep",
+        now=10.0,
+        ttl_seconds=5.0,
+        authority_revision=12,
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_acquire_lease_fails_closed_on_bad_change_count_or_ttl() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_ACQUIRE_SQL] = {
+        "success": True,
+        "meta": {"changes": 2},
+    }
+    store = D1GcLeaseStore(db)
+
+    with pytest.raises(RuntimeError, match="unexpected number of rows"):
+        await store.acquire_lease(
+            object_key="oai2-blobs/a",
+            token="lease-7",
+            owner="gc-sweep",
+            now=10.0,
+            ttl_seconds=5.0,
+            authority_revision=12,
+        )
+
+    with pytest.raises(ValueError, match="ttl_seconds must be positive"):
+        await store.acquire_lease(
+            object_key="oai2-blobs/a",
+            token="lease-7",
+            owner="gc-sweep",
+            now=10.0,
+            ttl_seconds=0.0,
+            authority_revision=12,
+        )
