@@ -2,7 +2,7 @@
 
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Live Worker deployment, durable global corpus/reference revision enforcement, live writer-path exclusion, production semantic retrieval, and controlled private destructive demonstrations remain **NOT YET VERIFIED END-TO-END**.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Live Worker deployment, production semantic retrieval, destructive sweep integration against the D1-backed authority, and controlled private destructive demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision writer contract and lease-aware transactional metadata writer now exist in source.
 
 ## Verified architecture boundary
 
@@ -172,7 +172,7 @@ Current source has advanced beyond the deterministic model:
 - mutation success is fail-closed using D1 result success plus `meta.changes`;
 - focused SQLite semantics tests and async fake-binding contract tests cover these paths.
 
-This is still **not** full live-Worker proof. The repository does not yet have one durable global corpus/reference revision authority wired into every writer, the normal knowledge writer does not yet transactionally enforce the deletion lease table, the destructive sweep does not yet consume this D1-backed store end-to-end, and no controlled private Worker/D1/R2 concurrency demonstration has been recorded.
+This is still **not** full live-Worker proof. Current source now includes `oai2/knowledge/knowledge_d1.py` with a durable `knowledge_index` schema, singleton corpus-revision authority, lease-aware conditional metadata upsert, and revision-advance SQL, plus `D1KnowledgeWriter` which executes the metadata write and revision advance in one D1 batch transaction using one expected revision. A write is denied when the expected revision is stale or the target R2 key has an active deletion lease, and inconsistent mutation counts fail closed. The destructive sweep still does not consume this D1-backed store end-to-end, and no controlled private Worker/D1/R2 concurrency demonstration has been recorded.
 
 ## q-pipe import contract
 
@@ -195,7 +195,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 ## Current implementation limitations
 
 - versioned transport schemas exist, but no live Worker endpoint/network adapter is verified yet;
-- public-safe D1 lease schema and async binding adapter exist, but no production migration/deployment has been demonstrated;
+- public-safe D1 lease schema, D1 knowledge-index/corpus-revision schema, async lease adapter, and transactional metadata writer exist, but no production migration/deployment has been demonstrated;
 - no production R2 bucket binding;
 - no production Vectorize index binding;
 - no production KV namespace binding;
@@ -203,7 +203,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 - no production embeddings pipeline;
 - no network integration test;
 - no controlled private R2 sweep demonstration;
-- D1 claim acquisition/revalidation/outcome operations exist at binding level, but no live normal-writer transaction or sweep integration is demonstrated;
+- D1 claim acquisition/revalidation/outcome operations and a lease-aware normal metadata writer exist at binding level, but destructive sweep integration and live Worker deployment are not demonstrated;
 - current GC/sweep/lease evidence is focused local source testing, not a full current-main Mac preflight.
 
 ## Public-safe deployment rule
