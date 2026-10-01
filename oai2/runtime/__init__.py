@@ -25,6 +25,13 @@ from .inference import (
     default_runtime,
 )
 from .model import ModelSpec, discover_default_device, smoke_check
+from .scheduler import (
+    BatchPlan,
+    SafeBatchScheduler,
+    ScheduledRequest,
+    SchedulerMetrics,
+    SessionCompatibilityKey,
+)
 
 __all__ = [
     "AdmissionAction",
@@ -42,4 +49,9 @@ __all__ = [
     "ModelSpec",
     "discover_default_device",
     "smoke_check",
+    "SessionCompatibilityKey",
+    "ScheduledRequest",
+    "SchedulerMetrics",
+    "BatchPlan",
+    "SafeBatchScheduler",
 ]
