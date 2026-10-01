@@ -1,21 +1,110 @@
-MIT License
+OAI-2.0 NON-COMMERCIAL LICENSE
+Version 1.0 — 2026
 
-Copyright (c) 2026 ORCHORDS.COM
+Copyright (c) 2026 ORCHORDS.COM / ORCHORDS-LCC
+All rights reserved except as expressly granted below.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. NON-COMMERCIAL LICENSE GRANT
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Subject to the terms of this License, you may view, download, copy, study,
+modify, and redistribute the OAI-2.0 source code, documentation, diagrams,
+and other materials in this repository solely for non-commercial purposes.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Permitted non-commercial purposes include personal learning, independent
+research, academic research, education, experimentation, evaluation, and
+non-commercial open-source work.
+
+2. COMMERCIAL USE IS PROHIBITED
+
+You may not use, copy, modify, distribute, deploy, host, integrate, train from,
+derive a commercial system from, or otherwise exploit any part of OAI-2.0 for
+a commercial purpose.
+
+Without limiting the above, prohibited commercial use includes:
+
+- selling or licensing OAI-2.0 or a derivative work;
+- offering OAI-2.0 or a derivative work as a paid product or service;
+- using OAI-2.0 to provide paid consulting, development, hosting, inference,
+  automation, software, AI, or other commercial services;
+- incorporating OAI-2.0 or a derivative work into a commercial product,
+  commercial platform, commercial model, or paid feature;
+- using OAI-2.0 for advertising-supported, subscription-supported, or
+  transaction-supported services;
+- using OAI-2.0 internally for the operations, development, research,
+  automation, or competitive advantage of a for-profit business;
+- using OAI-2.0 to train, fine-tune, distill, benchmark for commercial
+  development, or otherwise improve a model or system intended for
+  commercial use;
+- redistributing OAI-2.0 or derivatives under terms that permit commercial use.
+
+Commercial use requires a separate written license from ORCHORDS-LCC.
+
+3. REDISTRIBUTION
+
+Non-commercial redistribution of original or modified material is permitted
+only if:
+
+- this License is included in full;
+- all copyright and attribution notices are preserved;
+- modified files are clearly identified as modified; and
+- recipients receive no broader rights than those granted by this License.
+
+You may not relicense the material under a license that permits commercial use.
+
+4. DERIVATIVE WORKS
+
+Derivative works are permitted only for non-commercial purposes and remain
+subject to this License when distributed.
+
+Nothing in this License grants permission to use derivative works commercially.
+
+5. NO TRADEMARK LICENSE
+
+This License does not grant permission to use ORCHORDS, OAI-2.0,
+"ORCHORDS — BUILD DIFFERENT.", associated logos, names, or other brand
+identifiers as trademarks, service marks, endorsements, or branding for
+another product or organization.
+
+6. CONTRIBUTIONS
+
+Unless a separate written agreement states otherwise, contributions submitted
+to this repository may be used by ORCHORDS-LCC as part of the OAI-2.0 project.
+
+Contributors represent that they have the right to submit their contribution.
+
+7. NO PATENT OR OTHER IMPLIED RIGHTS
+
+No patent, trademark, commercial-use, sublicensing, or other rights are granted
+except those expressly stated in this License.
+
+8. TERMINATION
+
+Any violation of this License automatically terminates the rights granted to
+you under it.
+
+Upon termination, you must stop using and distributing the covered material
+and any derivative works, except to the extent retention is required by law.
+
+9. NO WARRANTY
+
+THE MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+IN NO EVENT SHALL ORCHORDS.COM, ORCHORDS-LCC, OR CONTRIBUTORS BE LIABLE FOR
+ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE MATERIAL
+OR ITS USE.
+
+10. COMMERCIAL LICENSING AND QUESTIONS
+
+For commercial licensing, permissions, security reports, legal questions, or
+other repository-related contact:
+
+crm@orchords.com
+
+11. ENTIRE LICENSE
+
+This License governs the repository unless a specific file or directory
+contains an explicit different license notice.
+
+By exercising rights granted under this License, you agree to its terms.

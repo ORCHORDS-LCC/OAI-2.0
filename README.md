@@ -5,7 +5,7 @@
 # OAI-2.0
 
 [![Documentation quality](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml/badge.svg)](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![License: Non-Commercial](https://img.shields.io/badge/license-non--commercial-red.svg)](./LICENSE)
 [![Status: Research](https://img.shields.io/badge/status-research-orange.svg)](./docs/agent-architecture/README.md)
 
 > ⭐ If you find the architecture useful, consider starring the repository.
@@ -80,7 +80,7 @@ See [SUPPORT.md](SUPPORT.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Non-commercial use only — see [LICENSE](LICENSE).
 
 ## Brand
 

@@ -76,6 +76,6 @@ Additional approved visual assets can be added here later without changing the p
 
 ## Ownership
 
-The ORCHORDS brand remains associated with ORCHORDS / ORCHORDS-LCC. The repository's MIT license applies to the software/documentation content as stated in [LICENSE](LICENSE); do not assume that automatically grants trademark rights.
+The ORCHORDS brand remains associated with ORCHORDS / ORCHORDS-LCC. Repository content is licensed for non-commercial use only as stated in [LICENSE](LICENSE). No trademark rights are granted.
 
 **ORCHORDS — BUILD DIFFERENT.**
