@@ -257,7 +257,7 @@ async def test_topic_retrieve_populates_revisioned_best_effort_cache() -> None:
 
     result = await runtime.retrieve(RetrievalRequest(topic="runtime"))
 
-    assert [item.knowledge_id for item in result.objects] == [obj.knowledge_id]
+    assert [item.kg.rehydration_id for item in result.objects] == [obj.knowledge_id]
     assert len(kv.puts) == 1
     assert kv.puts[0][2] == 300
     assert writer.revision_reads == [4, 4]
@@ -344,7 +344,6 @@ async def test_valid_cache_rehydrates_through_authoritative_d1_r2() -> None:
     assert second.objects[0].knowledge_id == obj.knowledge_id
 
 
-
 @pytest.mark.asyncio
 async def test_cached_retrieval_rejects_revision_change_during_rehydrate() -> None:
     runtime, reader, writer, r2, _vectorize, _kv = _runtime()
@@ -364,19 +363,21 @@ async def test_cached_retrieval_rejects_revision_change_during_rehydrate() -> No
         await runtime.retrieve(request)
 
 
-
 def test_async_cloudflare_runtime_exports_from_knowledge_package() -> None:
     from oai2.knowledge import (
         AsyncCloudflareKnowledgeRuntime as ExportedRuntime,
     )
     from oai2.knowledge import KnowledgeConflictError as ExportedConflict
     from oai2.knowledge import KnowledgeIntegrityError as ExportedIntegrity
+    from oai2.knowledge import KnowledgeRuntimeError as ExportedRuntimeError
     from oai2.knowledge.cloudflare_runtime import (
         AsyncCloudflareKnowledgeRuntime,
         KnowledgeConflictError,
         KnowledgeIntegrityError,
+        KnowledgeRuntimeError,
     )
 
     assert ExportedRuntime is AsyncCloudflareKnowledgeRuntime
     assert ExportedConflict is KnowledgeConflictError
     assert ExportedIntegrity is KnowledgeIntegrityError
+    assert ExportedRuntimeError is KnowledgeRuntimeError
