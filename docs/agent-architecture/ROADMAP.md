@@ -55,6 +55,20 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-29 | [#82](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/82) | Repository-scale battle tests | PROPOSED |
 | WP-30 | [#83](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/83) | Supply-chain integrity | PROPOSED |
 | WP-31 | [#84](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/84) | Configuration/secrets/profiles | PROPOSED |
+| WP-32 | [#95](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/95) | Reference evaluator/distillation | PROPOSED |
+| WP-33 | [#96](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/96) | Knowledge backup/recovery | PROPOSED |
+| WP-34 | [#97](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/97) | MLX/Metal low-level optimization | PROPOSED |
+| WP-35 | [#104](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/104) | Planning/replanning/stopping | PROPOSED |
+| WP-36 | [#105](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/105) | Confidence calibration | PROPOSED |
+| WP-37 | [#106](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/106) | Embeddings/reranking/index versioning | PROPOSED |
+| WP-38 | [#107](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/107) | Offline/degraded operation | PROPOSED |
+| WP-39 | [#108](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/108) | Local serving/auth/session isolation | PROPOSED |
+| WP-40 | [#109](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/109) | Developer/operator UX | PROPOSED |
+| WP-41 | [#122](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/122) | Inference backend comparison | PROPOSED |
+| WP-42 | [#123](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/123) | Long-horizon task recovery | PROPOSED |
+| WP-43 | [#124](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/124) | Privacy/retention lifecycle | PROPOSED |
+| WP-44 | [#125](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/125) | Model export/quantization validation | PROPOSED |
+| WP-45 | [#126](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/126) | ADR/experiment registry | PROPOSED |
 
 ```mermaid
 flowchart TD
@@ -62,29 +76,59 @@ flowchart TD
     V --> P[WP-05 Performance]
     V --> E[WP-08 Evaluation]
     V --> W[WP-21 World state]
-    K --> I[WP-23 Ingestion/freshness]
+
+    K --> ING[WP-23 Ingestion]
+    ING --> EMB[WP-37 Embeddings]
+    K --> DR[WP-33 Recovery]
+    K --> OFF[WP-38 Offline/degraded]
+
     P --> A[WP-06/07/27 Architecture + decode]
     E --> A
-    W --> R[WP-22 Routing]
-    A --> T[WP-17/24 Training]
-    T --> M[WP-14 Model scaling]
-    E --> M
-    K --> M
-    V --> X[WP-09/10/11 Vision/tools/agents]
-    X --> H[WP-12 Host integration]
-    R --> H
-    M --> H
-    S[WP-13 Security/AI risk] --> M
-    S --> H
-    O[WP-18/19/25 Observability/resources/inference] --> M
-    D[WP-15/16/20/26/30/31 Data/tokenizer/release/docs/supply/config] --> M
-    B[WP-29 Battle tests] --> M
-    L[WP-28 Continual learning] --> K
+    A --> KERN[WP-34 MLX/Metal optimization]
+    A --> BACK[WP-41 Backend comparison]
+
+    W --> PLAN[WP-35 Planning]
+    PLAN --> ROUTE[WP-22 Routing]
+    CONF[WP-36 Confidence] --> ROUTE
+
+    DATA[WP-15 Data] --> TRAIN[WP-17/24 Training]
+    TOK[WP-16 Tokenizer] --> TRAIN
+    TEACH[WP-32 Teacher/distillation] --> TRAIN
+    A --> TRAIN
+
+    TRAIN --> EXPORT[WP-44 Export/quantization]
+    EXPORT --> BACK
+    BACK --> INF[WP-25 Inference]
+    RES[WP-19 Resources] --> INF
+    OBS[WP-18 Observability] --> INF
+    CFG[WP-31 Config] --> INF
+
+    INF --> SERV[WP-39 Service]
+    VIS[WP-09 Vision] --> HOST[WP-12 Hosts]
+    TOOL[WP-10 Tools] --> HOST
+    AGT[WP-11 Agents] --> HOST
+    ROUTE --> AGT
+    SERV --> HOST
+    TASK[WP-42 Task recovery] --> HOST
+
+    E --> SCEN[WP-29 Battle tests]
+    SCEN --> MODEL[WP-14 Final model acceptance]
+    TRAIN --> MODEL
+    HOST --> MODEL
+    SEC[WP-13 Security/AI risk] --> MODEL
+    PRIV[WP-43 Privacy] --> MODEL
+    SUP[WP-30 Supply chain] --> MODEL
+    REL[WP-20 Release] --> MODEL
+    DOC[WP-26 Docs/traceability] --> MODEL
+    ADR[WP-45 ADR/experiments] --> MODEL
+    DEVX[WP-40 Developer UX] --> MODEL
+    LEARN[WP-28 Continual learning] --> K
 ```
+
 
 ## Current verification status
 
-A runner-free local preflight now exists at `scripts/verify.py` and includes dependency sync, Ruff, MyPy, Pytest, public-safety scanning, and Markdown link checks. Its implementation was repaired to avoid generated-environment recursion and to fix the hard-coded-secret regex. **WP-01 is not complete until the local preflight is actually executed and the required evidence is recorded.**
+A runner-free local preflight now exists at `scripts/verify.py` and includes dependency sync, Ruff, MyPy, Pytest, public-safety scanning, and Markdown link checks. Its implementation was repaired to avoid generated-environment recursion and to fix the hard-coded-secret regex. **WP-01 is not complete until the local preflight is actually executed and the required evidence is recorded.** Knowledge-store reads now also verify stored content hashes, with regression coverage on current `main`.
 
 ## Immediate dependency-ordered gates
 
