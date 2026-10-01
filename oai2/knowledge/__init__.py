@@ -29,12 +29,6 @@ from .cloudflare import (
     object_to_row,
     r2_blob_key_for,
 )
-from .cloudflare_runtime import (
-    AsyncCloudflareKnowledgeRuntime,
-    KnowledgeConflictError,
-    KnowledgeIntegrityError,
-    KnowledgeRuntimeError,
-)
 from .cloudflare_bindings_runtime import (
     CloudflareKvCache,
     CloudflareR2Store,
@@ -43,6 +37,12 @@ from .cloudflare_bindings_runtime import (
     R2BucketBinding,
     R2ObjectBodyBinding,
     VectorizeIndexBinding,
+)
+from .cloudflare_runtime import (
+    AsyncCloudflareKnowledgeRuntime,
+    KnowledgeConflictError,
+    KnowledgeIntegrityError,
+    KnowledgeRuntimeError,
 )
 from .gc import (
     GcDryRunReport,
