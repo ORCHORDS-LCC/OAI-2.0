@@ -219,3 +219,25 @@ def test_invalid_token_counter_fails_closed() -> None:
             token_budget=100,
             token_counter=bad_counter,
         )
+
+
+
+def test_evidence_package_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import EVIDENCE_PACKAGE_VERSION as ExportedVersion
+    from oai2.knowledge import EvidencePackage as ExportedPackage
+    from oai2.knowledge import EvidencePackageEntry as ExportedEntry
+    from oai2.knowledge import RetrievalMetrics as ExportedMetrics
+    from oai2.knowledge import build_evidence_package as ExportedBuild
+    from oai2.knowledge import evaluate_retrieval_package as ExportedEvaluate
+    from oai2.knowledge.evidence_package import (
+        EvidencePackage,
+        EvidencePackageEntry,
+        RetrievalMetrics,
+    )
+
+    assert ExportedVersion == EVIDENCE_PACKAGE_VERSION == "1"
+    assert ExportedPackage is EvidencePackage
+    assert ExportedEntry is EvidencePackageEntry
+    assert ExportedMetrics is RetrievalMetrics
+    assert ExportedBuild is build_evidence_package
+    assert ExportedEvaluate is evaluate_retrieval_package
