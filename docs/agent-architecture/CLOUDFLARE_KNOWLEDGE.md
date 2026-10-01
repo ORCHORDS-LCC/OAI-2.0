@@ -165,7 +165,7 @@ The source model currently covers:
 Current source has advanced beyond the deterministic model:
 
 - `oai2/knowledge/gc_lease_d1.py` defines a versioned STRICT D1 persistence contract;
-- conditional acquisition refuses retained references and live leases, permits expired/released takeover, and rechecks references on conflict update;
+- conditional acquisition refuses stale corpus revisions, retained references and live leases, permits expired/released takeover, and rechecks both authoritative corpus revision and references on conflict update;
 - pre-delete validation checks exact token, state, expiry, and authoritative retained-reference absence;
 - delete-failure, release, and delete/already-absent finalization are token/expiry guarded;
 - `oai2/knowledge/gc_lease_d1_runtime.py` consumes the documented async D1 `prepare/bind/run/first/batch` surface;
