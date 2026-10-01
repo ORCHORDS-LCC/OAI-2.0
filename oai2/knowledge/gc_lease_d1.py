@@ -104,6 +104,27 @@ END AS writer_blocked
 """.strip()
 
 
+GC_LEASE_VALIDATE_SQL = f"""
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM {GC_LEASE_TABLE}
+        WHERE object_key = ?1
+          AND token = ?2
+          AND state IN ('active', 'delete_failed')
+          AND expires_at > ?3
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM knowledge_index
+        WHERE r2_blob_key = ?1
+    )
+    THEN 1
+    ELSE 0
+END AS lease_valid
+""".strip()
+
+
 def gc_lease_schema_statements() -> tuple[str, ...]:
     """Return schema statements in deterministic application order."""
     return tuple(
@@ -121,5 +142,6 @@ __all__ = [
     "GC_LEASE_REFERENCE_COUNT_SQL",
     "GC_LEASE_UPSERT_SQL",
     "GC_LEASE_WRITER_BLOCK_SQL",
+    "GC_LEASE_VALIDATE_SQL",
     "gc_lease_schema_statements",
 ]
