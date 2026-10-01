@@ -67,3 +67,12 @@ Current source includes a versioned reference precision policy and structured nu
 A speed improvement is rejected if verified capability materially regresses.
 
 Current QoS source separates research targets from service budgets and records first-useful-action, end-to-end p95/p99, verified-success, false-success, and deadline-miss metrics. The source-level promotion gate now rejects candidates whose p95/p99 or deadline-miss rate regress versus the baseline even when mean decode throughput improves. Admission/backpressure policy evidence and sustained target-hardware measurements must still be included for concurrent-service promotion.
+
+
+## Adversarial truth promotion
+
+Current source now includes a deterministic held-out truth-case runner. The candidate runtime receives only a public `CandidateTruthInput(case_id, prompt)`; hidden verifier evidence and the case class remain available only to the independent verifier callback. The runner maps independent verdicts into supported, correct/unnecessary abstention, unsupported claim, false success, stale claim and ignored-contradiction outcomes while preserving evidence-policy/runtime/source versions.
+
+Truth promotion is also coupled to verified-task regression. A speedup is recorded as evidence only; it cannot override a truth-budget failure or an excessive verified-task regression. This prevents a faster/shorter candidate from being promoted solely because throughput improved while misleading claims worsened.
+
+The remaining WI-TRUTH-002 boundary is empirical: execute a genuinely held-out corpus against a baseline and candidate, keep verifier evidence inaccessible during generation, and record materially lower fabrication/false-success rates without unacceptable verified-task loss.
