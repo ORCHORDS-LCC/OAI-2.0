@@ -41,8 +41,8 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — admission policy and p95/p99/deadline promotion gate; live service/MLX integration remaining |
 | Safe session batching scheduler | **EXPERIMENTAL source implementation** — exact-compatibility isolation/batching core exists; final-model/service performance proof remains |
 | q-pipe compatibility/import gate | **IMPLEMENTED compatibility work item / CLOSED #20**; real 10–100 row migration remains **OPEN #21** |
-| Async Cloudflare knowledge runtime | **EXPERIMENTAL source implementation** — D1/R2/Vectorize/KV orchestration with revision/integrity checks; authenticated Worker/network proof remaining |
-| Live Cloudflare Worker transport | **PROPOSED / NOT YET VERIFIED** |
+| Async Cloudflare knowledge runtime | **EXPERIMENTAL source implementation** — D1/R2/Vectorize/KV orchestration with revision/integrity checks, authenticated framework-neutral transport handler, and bound-component factory; deployed Worker/network proof remaining |
+| Live Cloudflare Worker transport | **EXPERIMENTAL source handler / NOT YET DEPLOYED** — authenticated transport handler exists; actual Cloudflare HTTP entrypoint/private binding deployment remains unverified |
 | Vectorize-backed semantic retrieval | **EXPERIMENTAL source path** — runtime semantic-query path exists; deployed production index/query proof remains |
 | Custom 10–30B+ specialist model | **PROPOSED** |
 | Android Studio / Hermes / OpenCode adapters | **PROPOSED** |
