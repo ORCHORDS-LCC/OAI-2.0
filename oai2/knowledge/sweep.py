@@ -10,13 +10,19 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Self
 
 from .gc import GcDryRunReport, GcObjectDisposition
+from .gc_delete_d1_runtime import (
+    D1DeleteOutcome,
+    D1DeleteResult,
+    delete_candidate_with_d1_lease,
+)
 from .gc_lease import GcDeleteLeaseAuthority, GcDeleteLeaseDecision
+from .gc_lease_d1_runtime import D1GcLeaseStore
 
 
 class GcSweepDisposition(StrEnum):
@@ -357,6 +363,164 @@ class GcSweepState:
             complete=complete,
         )
 
+    async def aprocess_batch(
+        self,
+        *,
+        now: float,
+        grace_seconds: float,
+        reference_lookup: Callable[[str], Awaitable[Iterable[str]]],
+        blob_exists: Callable[[str], Awaitable[bool]],
+        delete_blob: Callable[[str], Awaitable[None]],
+        destructive: bool = False,
+        authorized: bool = False,
+        recovery_ready: bool = False,
+        max_items: int = 100,
+        lease_store: D1GcLeaseStore | None = None,
+        expected_revision: int = 0,
+        lease_ttl_seconds: float = 60.0,
+    ) -> GcSweepBatchResult:
+        """Async counterpart to :meth:`process_batch` over the live D1/R2 boundary.
+
+        Honors the same grace, authorization, and recovery-readiness gates as
+        the synchronous path. The destructive path delegates to
+        :func:`delete_candidate_with_d1_lease`, so a candidate is deleted only
+        while an authoritative D1 lease remains valid and the final reference
+        recheck passes through the async adapter. ``lease_store`` is required
+        when ``destructive=True``; the call fails closed otherwise.
+
+        ``expected_revision`` MUST match the D1 corpus/reference revision the
+        caller intends the sweep to operate under. A mismatch causes the lease
+        acquisition to be rejected by the D1 lease schema, which the planner
+        surfaces as :attr:`GcSweepDisposition.LEASE_DENIED`.
+        """
+        _require_non_negative_number(now, "now")
+        _require_non_negative_number(grace_seconds, "grace_seconds")
+        _require_positive_int(max_items, "max_items")
+        _require_bool(destructive, "destructive")
+        _require_bool(authorized, "authorized")
+        _require_bool(recovery_ready, "recovery_ready")
+        _require_non_negative_int(expected_revision, "expected_revision")
+        if lease_store is not None:
+            _require_positive_number(lease_ttl_seconds, "lease_ttl_seconds")
+        if destructive and lease_store is None:
+            raise ValueError(
+                "destructive async sweeps require an authoritative D1 lease_store"
+            )
+
+        emitted: list[GcSweepRecord] = []
+        attempted = 0
+        while self.cursor < len(self.candidates) and attempted < max_items:
+            candidate = self.candidates[self.cursor]
+            if candidate.key in self.retired_keys:
+                self.cursor += 1
+                continue
+            attempted += 1
+            age = max(0.0, float(now) - candidate.first_seen_at)
+
+            if age < float(grace_seconds):
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.DEFERRED_GRACE,
+                    processed_at=float(now),
+                    detail="grace period has not elapsed",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            try:
+                knowledge_ids = tuple(
+                    sorted(
+                        {
+                            str(value)
+                            for value in await reference_lookup(candidate.key)
+                        }
+                    )
+                )
+            except Exception:
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.FAILED,
+                    processed_at=float(now),
+                    detail="authoritative reference lookup failed",
+                )
+                self._record_without_advance(record, emitted)
+                break
+
+            if knowledge_ids:
+                self.retired_keys.add(candidate.key)
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.RE_REFERENCED,
+                    processed_at=float(now),
+                    knowledge_ids=knowledge_ids,
+                    detail="authoritative reference exists",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            if not destructive:
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.DRY_RUN,
+                    processed_at=float(now),
+                    detail="destructive mode is disabled",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            if not authorized:
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.UNAPPROVED,
+                    processed_at=float(now),
+                    detail="destructive authorization is missing",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            if not recovery_ready:
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.RECOVERY_BLOCKED,
+                    processed_at=float(now),
+                    detail="recovery prerequisite is not satisfied",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            # The destructive path delegates the entire
+            # acquire → revalidate → delete → finalize/failure flow to the
+            # async boundary so the planner cannot accidentally bypass any step.
+            lease_store_for_call = lease_store
+            assert lease_store_for_call is not None  # validated above
+            result = await delete_candidate_with_d1_lease(
+                key=candidate.key,
+                lease_store=lease_store_for_call,
+                expected_revision=int(expected_revision),
+                now=float(now),
+                lease_ttl_seconds=float(lease_ttl_seconds),
+                blob_exists=blob_exists,
+                delete_blob=delete_blob,
+                owner="gc-sweep",
+            )
+            record = _sweep_record_from_d1_result(
+                candidate=candidate, now=float(now), result=result
+            )
+            if record.disposition is GcSweepDisposition.LEASE_DENIED:
+                self._record_and_advance(record, emitted)
+                continue
+            if record.disposition is GcSweepDisposition.FAILED:
+                self._record_without_advance(record, emitted)
+                break
+            self._record_and_advance(record, emitted)
+
+        complete = self.cursor >= len(self.candidates)
+        return GcSweepBatchResult(
+            records=tuple(emitted),
+            next_cursor=None if complete else self.cursor,
+            complete=complete,
+        )
+
     def start_next_pass(self) -> None:
         """Restart candidate evaluation after a completed pass."""
         if self.cursor != len(self.candidates):
@@ -529,6 +693,39 @@ def _finalize_lease(
         )
     except Exception:
         pass
+
+
+def _sweep_record_from_d1_result(
+    *,
+    candidate: GcSweepCandidate,
+    now: float,
+    result: D1DeleteResult,
+) -> GcSweepRecord:
+    """Translate a :class:`D1DeleteResult` into a sweep evidence record.
+
+    The mapping preserves the planner's public-safe vocabulary while pinning the
+    detail string to the boundary's authoritative reason. Any unexpected
+    outcome is recorded as :attr:`GcSweepDisposition.FAILED` so the planner
+    never silently overstates the destructive result.
+    """
+    detail = result.detail or "d1 delete boundary returned no detail"
+    if result.outcome is D1DeleteOutcome.DELETED:
+        disposition = GcSweepDisposition.DELETED
+    elif result.outcome is D1DeleteOutcome.ALREADY_ABSENT:
+        disposition = GcSweepDisposition.ALREADY_ABSENT
+    elif result.outcome is D1DeleteOutcome.LEASE_DENIED:
+        disposition = GcSweepDisposition.LEASE_DENIED
+    elif result.outcome is D1DeleteOutcome.FAILED:
+        disposition = GcSweepDisposition.FAILED
+    else:  # pragma: no cover - defensive: StrEnum guards exhaustiveness
+        disposition = GcSweepDisposition.FAILED
+        detail = f"unknown d1 delete outcome: {result.outcome}"
+    return GcSweepRecord(
+        key=candidate.key,
+        disposition=disposition,
+        processed_at=float(now),
+        detail=detail,
+    )
 
 
 def _snapshot_fingerprint(payload: Mapping[str, object]) -> str:
