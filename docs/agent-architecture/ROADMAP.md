@@ -100,7 +100,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-72 | [#211](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/211) | Architecture/hyperparameter search | PROPOSED |
 | WP-73 | [#212](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/212) | Client SDKs / typed APIs | PROPOSED |
 | WP-74 | [#213](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/213) | Artifact registry / distribution integrity | PROPOSED |
-| WP-75 | [#226](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/226) | Claim/evidence truth enforcement | EXPERIMENTAL evidence graph + versioned taxonomy/freshness/invalidation policy + repository/tool/web adapters; current-main local verification for #227 and adversarial gates #228 remaining |
+| WP-75 | [#226](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/226) | Claim/evidence truth enforcement | EXPERIMENTAL policy/adapters + hidden-evidence truth runner + truth/capability promotion gate; empirical held-out baseline/candidate evidence and current-main local verification remaining |
 | WP-76 | [#230](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/230) | End-to-end QoS / tail latency / admission | EXPERIMENTAL metrics + admission policy + safe batching scheduler + tail/deadline promotion gate; live service integration remaining |
 
 ```mermaid
