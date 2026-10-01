@@ -147,3 +147,15 @@ def test_speedup_ratio_is_optional_but_must_be_positive_when_present() -> None:
             reference_path="reference",
             speedup_ratio=0.0,
         )
+
+
+
+def test_numerical_promotion_exports_from_model_package() -> None:
+    from oai2.model import NumericalCandidateKind as ExportedKind
+    from oai2.model import NumericalPromotionEvidence as ExportedEvidence
+    from oai2.model import evaluate_numerical_candidate as ExportedEvaluate
+
+    assert ExportedKind is NumericalCandidateKind
+    from oai2.model.numerical_promotion import NumericalPromotionEvidence
+    assert ExportedEvidence is NumericalPromotionEvidence
+    assert ExportedEvaluate is evaluate_numerical_candidate
