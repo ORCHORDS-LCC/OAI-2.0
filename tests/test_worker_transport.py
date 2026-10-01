@@ -253,3 +253,16 @@ async def test_transport_can_be_configured_for_trusted_no_auth_local_path() -> N
 
     assert response.ok is True
     assert response.knowledge is not None
+
+
+
+def test_worker_transport_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import EmbeddingProvider as ExportedEmbeddingProvider
+    from oai2.knowledge import KnowledgeWorkerTransport as ExportedTransport
+    from oai2.knowledge.worker_transport import (
+        EmbeddingProvider,
+        KnowledgeWorkerTransport,
+    )
+
+    assert ExportedEmbeddingProvider is EmbeddingProvider
+    assert ExportedTransport is KnowledgeWorkerTransport
