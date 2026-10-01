@@ -56,6 +56,11 @@ from .gc_lease_d1 import (
     GC_LEASE_WRITER_BLOCK_SQL,
     gc_lease_schema_statements,
 )
+from .gc_lease_d1_runtime import (
+    D1DatabaseBinding,
+    D1GcLeaseStore,
+    D1PreparedStatementBinding,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
@@ -131,6 +136,9 @@ __all__ = [
     "GC_LEASE_UPSERT_SQL",
     "GC_LEASE_WRITER_BLOCK_SQL",
     "gc_lease_schema_statements",
+    "D1PreparedStatementBinding",
+    "D1DatabaseBinding",
+    "D1GcLeaseStore",
     "GcSweepBatchResult",
     "GcSweepCandidate",
     "GcSweepDisposition",
