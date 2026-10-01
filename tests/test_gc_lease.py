@@ -240,3 +240,21 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
     assert GC_LEASE_TABLE == SourceTable == "knowledge_gc_delete_lease"
     assert GC_LEASE_UPSERT_SQL is SourceUpsertSql
     assert GC_LEASE_WRITER_BLOCK_SQL is SourceWriterBlockSql
+
+
+
+def test_gc_lease_d1_runtime_symbols_are_exported_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        D1DatabaseBinding as ExportedDatabaseBinding,
+        D1GcLeaseStore as ExportedLeaseStore,
+        D1PreparedStatementBinding as ExportedStatementBinding,
+    )
+    from oai2.knowledge.gc_lease_d1_runtime import (
+        D1DatabaseBinding,
+        D1GcLeaseStore,
+        D1PreparedStatementBinding,
+    )
+
+    assert ExportedDatabaseBinding is D1DatabaseBinding
+    assert ExportedLeaseStore is D1GcLeaseStore
+    assert ExportedStatementBinding is D1PreparedStatementBinding
