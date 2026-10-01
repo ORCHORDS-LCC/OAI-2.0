@@ -45,6 +45,11 @@ class TruthSample:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
+        for name, enum_type in (("case_class", TruthCaseClass), ("outcome", TruthOutcome)):
+            try:
+                object.__setattr__(self, name, enum_type(getattr(self, name)))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} must be a recognized {enum_type.__name__} value") from exc
 
 
 @dataclass(slots=True, frozen=True)
@@ -111,8 +116,10 @@ def summarize_truth(samples: list[TruthSample]) -> TruthReport:
     outcomes = Counter(sample.outcome for sample in samples)
     classes = Counter(sample.case_class for sample in samples)
     n = len(samples)
+
     def rate(outcome: TruthOutcome) -> float:
         return outcomes[outcome] / n
+
     return TruthReport(
         sample_count=n,
         by_outcome=dict(outcomes),
@@ -181,11 +188,38 @@ def _rate(value: object, name: str) -> float:
     return float(value)
 
 
+def _validate_truth_report(report: TruthReport) -> None:
+    """Reject malformed evidence, including mutations of a frozen report's dicts."""
+    n = report.sample_count
+    if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
+        raise ValueError("sample_count must be a positive integer")
+    for name, enum_type in (("by_outcome", TruthOutcome), ("by_case_class", TruthCaseClass)):
+        counts = getattr(report, name)
+        if not isinstance(counts, dict):
+            raise ValueError(f"{name} must be a count dictionary")
+        for label, count in counts.items():
+            try:
+                enum_type(label)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} contains an unrecognized label") from exc
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(f"{name} counts must be non-negative integers")
+        if sum(counts.values()) != n:
+            raise ValueError(f"{name} counts must sum to sample_count")
+    for outcome in TruthOutcome:
+        name = f"{outcome.value}_rate"
+        actual = _rate(getattr(report, name), name)
+        expected = report.by_outcome.get(outcome, 0) / n
+        if actual != expected:
+            raise ValueError(f"{name} must equal its outcome count divided by sample_count")
+
+
 def evaluate_truth_promotion(
     report: TruthReport,
     budget: TruthPromotionBudget,
 ) -> TruthPromotionEvaluation:
-    """Reject candidates that exceed any predeclared misleading-claim budget."""
+    """Validate report integrity, then apply the predeclared misleading-claim budget."""
+    _validate_truth_report(report)
     failures: list[str] = []
     checks = (
         ("false_success_rate", report.false_success_rate, budget.max_false_success_rate),

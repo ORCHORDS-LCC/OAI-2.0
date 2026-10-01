@@ -83,6 +83,25 @@ Truth promotion is also coupled to verified-task regression. A speedup is record
 The remaining WI-TRUTH-002 boundary is empirical: execute a genuinely held-out corpus against a baseline and candidate, keep verifier evidence inaccessible during generation, and record materially lower fabrication/false-success rates without unacceptable verified-task loss.
 
 
+
+## Truth-report integrity (WI-TRUTH-002)
+
+`TruthSample` normalizes recognized serialized case/outcome labels and rejects unknown labels. `evaluate_truth_promotion(...)` validates the report before applying the unchanged promotion budget; the combined truth/capability gate uses the same validation boundary.
+
+A report must have a positive integer sample count, recognized histogram labels, non-negative integer counts, and histogram totals matching the sample count. Every outcome rate must be finite, between zero and one, and equal to its outcome count divided by the sample count. Keep unrounded rates in machine-readable reports; round only their presentation. Booleans are not valid counts or rates.
+
+Malformed reports raise `ValueError`; they are not successful evaluations. Histogram dictionaries are checked at every promotion call, including after mutation of a frozen report's nested dictionaries. Valid supported/abstention reports and ordinary budget rejections retain their existing behavior.
+
+Focused regression command in the supported project environment:
+
+```bash
+uv run pytest -W error tests/test_truth_report_validation.py tests/test_truth_evals.py
+```
+
+These deterministic validation tests are not evidence of improved model accuracy or completion of the held-out corpus requirement. Full project acceptance still requires `uv run python scripts/verify.py` and the applicable integration evidence.
+
+Implementation references checked for the project's Python 3.14 API contract: [finite-number checks](https://docs.python.org/3.14/library/math.html#math.isfinite), [enumeration value lookup](https://docs.python.org/3.14/library/enum.html), and [frozen dataclasses](https://docs.python.org/3.14/library/dataclasses.html#frozen-instances).
+
 ## Held-out capability regression gate
 
 WI-EVAL-002 now has a source-level held-out promotion gate in `oai2/evals/regression.py`.
