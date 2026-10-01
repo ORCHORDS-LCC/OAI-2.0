@@ -76,6 +76,6 @@ The current policy surface:
 - promotes long-waiting work after a bounded starvation threshold;
 - removes cancelled queued work immediately.
 
-Deterministic tests cover overload, queue-full behavior, SWARM aggregate memory, deadline expiry, starvation prevention, and cancellation. This policy is **not yet integrated** with the live service/inference scheduler, actual model/expert residency accounting, or sustained target-hardware tail-latency testing.
+Deterministic tests cover overload, queue-full behavior, SWARM aggregate memory, deadline expiry, starvation prevention, and cancellation. Current source also includes `SafeBatchScheduler`, which batches only requests with identical model/tokenizer/prefix/tool-schema/world-state/security compatibility keys, keeps one queued request per session, bounds batch size, and isolates cancellation. Admission and safe batching are still **not yet integrated** with the live MLX/service execution loop, actual model/expert residency accounting, or sustained target-hardware tail-latency testing.
 
 Promotion now has an explicit source-level regression gate: candidate p95/p99 and deadline-miss rate are compared against the baseline and can block promotion even when mean token throughput improves. False-success/verified-work service budgets remain separate mandatory gates.
