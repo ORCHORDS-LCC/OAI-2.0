@@ -390,7 +390,12 @@ class CloudflareKnowledgeStore(KnowledgeStore):
             cached_objs = [
                 KnowledgeObject.model_validate(o) for o in payload["objects"]
             ]
-            return RetrievalResult(topic=request.topic, objects=cached_objs)
+            if all(
+                sha256_hex(obj.content) == obj.content_hash
+                for obj in cached_objs
+            ):
+                return RetrievalResult(topic=request.topic, objects=cached_objs)
+            # Ignore a corrupted cache entry and rebuild from D1/R2.
 
         rows = self._b.d1_query(
             topic_substring=request.topic,
