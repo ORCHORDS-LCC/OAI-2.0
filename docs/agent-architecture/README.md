@@ -1,6 +1,6 @@
 # OAI-2.0 Agent Architecture
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 This folder is the public architecture source for OAI-2.0. It now documents both the **PROPOSED final architecture** and the **EXPERIMENTAL scaffold that exists on current main**.
 
@@ -27,6 +27,9 @@ Experimental source currently includes:
 - offline capability-evaluation scaffolds;
 - application-level Cloudflare knowledge contract + deterministic mocks;
 - versioned public-safe Cloudflare transport/schema models;
+- reference-safe R2 reconciliation and conservative sweep core;
+- deterministic GC lease state model plus versioned D1 lease schema and async binding-facing adapter;
+- QoS workload/tail/useful-work metrics and deterministic admission/backpressure policy core;
 - strict q-pipe verified-import policy.
 
 Not yet implemented as production capabilities:
@@ -35,7 +38,7 @@ Not yet implemented as production capabilities:
 - trained dynamic expert router/adaptive depth;
 - real multimodal vision encoder;
 - real parallel swarm inference;
-- live Cloudflare Worker transport;
+- full live Cloudflare Worker transport (D1 lease binding primitives exist, but end-to-end Worker/R2/Vectorize/KV transport is not verified);
 - production Vectorize semantic retrieval;
 - Android Studio/Hermes/OpenCode integrations.
 
