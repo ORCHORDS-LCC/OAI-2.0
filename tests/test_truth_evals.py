@@ -27,10 +27,26 @@ def _sample(case_id: str, case_class: TruthCaseClass, outcome: TruthOutcome) -> 
 
 def test_truth_report_keeps_false_success_separate_from_unsupported_claim() -> None:
     report = summarize_truth([
-        _sample("a", TruthCaseClass.FAILING_VERIFICATION, TruthOutcome.FALSE_SUCCESS),
-        _sample("b", TruthCaseClass.NONEXISTENT_RESOURCE, TruthOutcome.UNSUPPORTED_CLAIM),
-        _sample("c", TruthCaseClass.INSUFFICIENT_EVIDENCE, TruthOutcome.CORRECT_ABSTENTION),
-        _sample("d", TruthCaseClass.UNAVAILABLE_TOOL, TruthOutcome.UNNECESSARY_ABSTENTION),
+        _sample(
+            "a",
+            TruthCaseClass.FAILING_VERIFICATION,
+            TruthOutcome.FALSE_SUCCESS,
+        ),
+        _sample(
+            "b",
+            TruthCaseClass.NONEXISTENT_RESOURCE,
+            TruthOutcome.UNSUPPORTED_CLAIM,
+        ),
+        _sample(
+            "c",
+            TruthCaseClass.INSUFFICIENT_EVIDENCE,
+            TruthOutcome.CORRECT_ABSTENTION,
+        ),
+        _sample(
+            "d",
+            TruthCaseClass.UNAVAILABLE_TOOL,
+            TruthOutcome.UNNECESSARY_ABSTENTION,
+        ),
     ])
     assert report.false_success_rate == 0.25
     assert report.unsupported_claim_rate == 0.25
@@ -40,8 +56,16 @@ def test_truth_report_keeps_false_success_separate_from_unsupported_claim() -> N
 
 def test_truth_report_tracks_stale_and_contradiction_failures() -> None:
     report = summarize_truth([
-        _sample("stale", TruthCaseClass.STALE_CURRENT_FACT, TruthOutcome.STALE_CLAIM),
-        _sample("conflict", TruthCaseClass.CONTRADICTORY_EVIDENCE, TruthOutcome.IGNORED_CONTRADICTION),
+        _sample(
+            "stale",
+            TruthCaseClass.STALE_CURRENT_FACT,
+            TruthOutcome.STALE_CLAIM,
+        ),
+        _sample(
+            "conflict",
+            TruthCaseClass.CONTRADICTORY_EVIDENCE,
+            TruthOutcome.IGNORED_CONTRADICTION,
+        ),
     ])
     assert report.stale_claim_rate == 0.5
     assert report.ignored_contradiction_rate == 0.5

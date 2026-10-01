@@ -102,7 +102,8 @@ def summarize_truth(samples: list[TruthSample]) -> TruthReport:
     outcomes = Counter(sample.outcome for sample in samples)
     classes = Counter(sample.case_class for sample in samples)
     n = len(samples)
-    rate = lambda outcome: outcomes[outcome] / n
+    def rate(outcome: TruthOutcome) -> float:
+        return outcomes[outcome] / n
     return TruthReport(
         sample_count=n,
         by_outcome=dict(outcomes),
