@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from ..core import KnowledgeId
 from .abstraction import (
     KnowledgeObject,
+    RetrievalCandidate,
     RetrievalRequest,
     RetrievalResult,
     sha256_hex,
@@ -135,26 +136,32 @@ class AsyncCloudflareKnowledgeRuntime:
             start_revision,
         )
 
-        cached = await self._cache_get(cache_key)
-        if cached is not None:
-            cached_result = await self._try_cached_result(
-                request,
-                cache_key,
-                start_revision,
-                cached,
-            )
-            if cached_result is not None:
-                end_revision = await self._writer.corpus_revision()
-                if end_revision != start_revision:
-                    raise KnowledgeConflictError(
-                        "corpus revision changed during cached retrieval; retry against fresh state"
-                    )
-                return cached_result
+        if query_vector is None:
+            cached = await self._cache_get(cache_key)
+            if cached is not None:
+                cached_result = await self._try_cached_result(
+                    request,
+                    cache_key,
+                    start_revision,
+                    cached,
+                )
+                if cached_result is not None:
+                    end_revision = await self._writer.corpus_revision()
+                    if end_revision != start_revision:
+                        raise KnowledgeConflictError(
+                            "corpus revision changed during cached retrieval; retry against fresh state"
+                        )
+                    return cached_result
 
+        semantic_scores: dict[KnowledgeId, float] = {}
         if query_vector is None:
             rows = await self._reader.query_rows(request)
         else:
-            rows = await self._semantic_rows(request, query_vector)
+            semantic_rows = await self._semantic_rows(request, query_vector)
+            rows = [row for row, _score in semantic_rows]
+            semantic_scores = {
+                row.knowledge_id: score for row, score in semantic_rows
+            }
 
         objects = [await self._hydrate(row) for row in rows]
         end_revision = await self._writer.corpus_revision()
@@ -163,44 +170,59 @@ class AsyncCloudflareKnowledgeRuntime:
                 "corpus revision changed during retrieval; retry against fresh state"
             )
 
-        envelope = QueryCacheEnvelope(
-            corpus_revision=start_revision,
-            embedding_digest=self._embedding_digest,
-            request_fingerprint=cache_key,
-            refs=[
-                KnowledgeCacheRef(
+        if query_vector is None:
+            envelope = QueryCacheEnvelope(
+                corpus_revision=start_revision,
+                embedding_digest=self._embedding_digest,
+                request_fingerprint=cache_key,
+                refs=[
+                    KnowledgeCacheRef(
+                        knowledge_id=obj.knowledge_id,
+                        content_hash=obj.content_hash,
+                    )
+                    for obj in objects
+                ],
+            )
+            try:
+                await self._kv.put_text(
+                    cache_key,
+                    envelope.model_dump_json(),
+                    ttl_seconds=300,
+                )
+            except Exception:
+                # KV is explicitly non-authoritative and best-effort.
+                pass
+
+        return RetrievalResult(
+            topic=request.topic,
+            objects=objects,
+            candidates=[
+                RetrievalCandidate(
                     knowledge_id=obj.knowledge_id,
                     content_hash=obj.content_hash,
+                    source_uri=obj.source_uri,
+                    score=semantic_scores.get(obj.knowledge_id),
                 )
                 for obj in objects
             ],
         )
-        try:
-            await self._kv.put_text(
-                cache_key,
-                envelope.model_dump_json(),
-                ttl_seconds=300,
-            )
-        except Exception:
-            # KV is explicitly non-authoritative and best-effort.
-            pass
-
-        return RetrievalResult(topic=request.topic, objects=objects)
 
     async def _semantic_rows(
         self,
         request: RetrievalRequest,
         query_vector: Sequence[float],
-    ) -> list[CFRow]:
-        top_k = min(max(int(request.limit), 1), 100)
+    ) -> list[tuple[CFRow, float]]:
+        # Over-fetch before authoritative D1 filtering so an ineligible top
+        # vector cannot hide an eligible lower-ranked candidate.
+        top_k = min(max(int(request.limit) * 4, 8), 100)
         matches = await self._vectorize.query(query_vector, top_k=top_k)
-        rows: list[CFRow] = []
-        for vector_id, _score in matches:
+        rows: list[tuple[CFRow, float]] = []
+        for vector_id, score in matches:
             row = await self._reader.get_row(KnowledgeId(vector_id))
             if row is None:
-                raise KnowledgeIntegrityError(
-                    f"Vectorize result {vector_id!r} has no authoritative D1 row"
-                )
+                # Vectorize is eventually consistent and non-authoritative.
+                # A stale/deleted vector must not become a final candidate.
+                continue
             if row.vectorize_id != vector_id:
                 raise KnowledgeIntegrityError(
                     f"Vectorize result {vector_id!r} disagrees with D1 vectorize_id"
@@ -209,7 +231,7 @@ class AsyncCloudflareKnowledgeRuntime:
                 continue
             if row.status not in request.include_status:
                 continue
-            rows.append(row)
+            rows.append((row, score))
             if len(rows) >= request.limit:
                 break
         return rows
@@ -277,7 +299,18 @@ class AsyncCloudflareKnowledgeRuntime:
             except KnowledgeIntegrityError:
                 return None
             objects.append(obj)
-        return RetrievalResult(topic=request.topic, objects=objects)
+        return RetrievalResult(
+            topic=request.topic,
+            objects=objects,
+            candidates=[
+                RetrievalCandidate(
+                    knowledge_id=obj.knowledge_id,
+                    content_hash=obj.content_hash,
+                    source_uri=obj.source_uri,
+                )
+                for obj in objects
+            ],
+        )
 
 
 def _non_negative_number(value: object, name: str) -> float:
