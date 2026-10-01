@@ -344,3 +344,23 @@ async def test_valid_cache_rehydrates_through_authoritative_d1_r2() -> None:
     second = await runtime.retrieve(request)
     assert len(second.objects) == 1
     assert second.objects[0].knowledge_id == obj.knowledge_id
+
+
+
+@pytest.mark.asyncio
+async def test_cached_retrieval_rejects_revision_change_during_rehydrate() -> None:
+    runtime, reader, writer, r2, _vectorize, _kv = _runtime()
+    obj = _obj()
+    row = _row(obj, vectorized=False)
+    reader.rows[str(obj.knowledge_id)] = row
+    reader.query_result = [row]
+    assert row.r2_blob_key is not None
+    r2.values[row.r2_blob_key] = obj.content
+
+    request = RetrievalRequest(topic="runtime")
+    first = await runtime.retrieve(request)
+    assert len(first.objects) == 1
+
+    writer.read_sequence = [4, 5]
+    with pytest.raises(KnowledgeConflictError, match="cached retrieval"):
+        await runtime.retrieve(request)
