@@ -46,6 +46,16 @@ from .gc_lease import (
     GcDeleteLeaseState,
     GcReferenceDecision,
 )
+from .gc_lease_d1 import (
+    GC_LEASE_REFERENCE_COUNT_SQL,
+    GC_LEASE_SCHEMA_SQL,
+    GC_LEASE_SCHEMA_VERSION,
+    GC_LEASE_SELECT_SQL,
+    GC_LEASE_TABLE,
+    GC_LEASE_UPSERT_SQL,
+    GC_LEASE_WRITER_BLOCK_SQL,
+    gc_lease_schema_statements,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
@@ -113,6 +123,14 @@ __all__ = [
     "GcDeleteLeaseResult",
     "GcDeleteLeaseState",
     "GcReferenceDecision",
+    "GC_LEASE_SCHEMA_VERSION",
+    "GC_LEASE_TABLE",
+    "GC_LEASE_SCHEMA_SQL",
+    "GC_LEASE_SELECT_SQL",
+    "GC_LEASE_REFERENCE_COUNT_SQL",
+    "GC_LEASE_UPSERT_SQL",
+    "GC_LEASE_WRITER_BLOCK_SQL",
+    "gc_lease_schema_statements",
     "GcSweepBatchResult",
     "GcSweepCandidate",
     "GcSweepDisposition",
