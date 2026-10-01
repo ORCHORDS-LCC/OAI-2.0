@@ -1,8 +1,8 @@
 # Cloudflare Knowledge Architecture
 
-_Last reviewed against current Cloudflare documentation: 2026-10-01._
+_Last reviewed against current Cloudflare documentation and repository source: 2026-10-01._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, and versioned transport/schema models are implemented in source. Live Cloudflare network execution and production semantic retrieval remain **PROPOSED** until locally verified end-to-end.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, non-destructive R2 liveness reconciliation, and a conservative sweep core are implemented in source. Live Cloudflare network execution, production semantic retrieval, and a controlled private destructive-sweep demonstration remain **PROPOSED / NOT YET VERIFIED END-TO-END**.
 
 ## Verified architecture boundary
 
@@ -18,11 +18,13 @@ flowchart LR
     W --> R[R2 bodies]
     W --> V[Vectorize embeddings]
     W --> K[KV query cache]
+    D --> GC[Reference-safe R2 reconciliation]
+    R --> GC
 ```
 
 ## Versioned transport contract
 
-Current source now defines:
+Current source defines:
 
 - `TRANSPORT_VERSION`;
 - `KnowledgeTransportRequest` / `KnowledgeTransportResponse`;
@@ -39,7 +41,7 @@ These are contract/schema objects only. They do **not** prove a live Worker, liv
 
 ### D1
 
-Source/index metadata and pointers. The logical adapter stores one metadata row per `KnowledgeObject`.
+Source/index metadata and pointers. The logical adapter stores one metadata row per `KnowledgeObject`. D1 metadata and revision state are authoritative for lifecycle decisions.
 
 ### R2
 
@@ -55,17 +57,80 @@ Cloudflare's current Vectorize API uses vector objects such as `{id, values, met
 
 Best-effort query-result cache only. KV is eventually consistent, so it must never be the authority for knowledge lifecycle state or write-after-write correctness.
 
-Current logical cache keys include both an embedding-version digest and a corpus revision. A future live adapter should persist/bump the corpus revision in an authoritative store such as D1 rather than relying on KV for revision correctness.
+Current logical cache keys include both an embedding-version digest and a corpus revision. Corpus revision belongs in an authoritative store such as D1, not KV.
 
 ## Cache correctness
 
-A write increments the logical corpus revision. Retrieval cache keys include that revision, preventing old cached query results from being selected after a corpus change.
+A write advances the logical corpus revision through the application-level atomic D1 operation. Retrieval cache keys include that revision, preventing old cached query results from being selected after a corpus change.
 
-This fixes the earlier scaffold behavior where a cached query could remain stale after `put()`.
+KV reads/writes are best-effort. Cached references are rehydrated and content-hash checked through authoritative D1/R2 state; malformed, stale, wrong-hash, or unavailable KV entries do not become authoritative knowledge.
+
+## Content-addressed R2 body lifecycle
+
+### Non-destructive reconciliation
+
+`oai2/knowledge/gc.py` implements an **EXPERIMENTAL source-level dry-run reconciler**:
+
+```mermaid
+flowchart LR
+    D1[D1 authoritative rows] --> MARK[Referenced R2 keys]
+    R2[R2 inventory] --> RECON[Reconcile]
+    MARK --> RECON
+    RECON --> PRESENT[Referenced present]
+    RECON --> MISSING[Referenced missing]
+    RECON --> ORPHAN[Unreferenced candidate]
+    RECON --> REPORT[Non-destructive report]
+```
+
+The reconciler:
+
+- groups shared content-addressed bodies by all referring knowledge IDs;
+- distinguishes referenced-present, referenced-missing, and unreferenced-candidate states;
+- records available count, byte, and age information;
+- supports paginated/resumable inventory state;
+- validates snapshot schema, cursor/completion consistency, inventory metadata, and authoritative-reference fingerprint;
+- rejects a conflicting page atomically;
+- never deletes R2 data.
+
+Focused source evidence currently records nine passing dry-run tests. Full current-main Mac preflight remains required before #214 can close.
+
+### Conservative sweep core
+
+`oai2/knowledge/sweep.py` implements an **EXPERIMENTAL source-level sweep decision core** behind dry-run and explicit safeguards:
+
+```mermaid
+flowchart TD
+    REPORT[Completed dry-run report] --> GRACE{Grace elapsed?}
+    GRACE -->|no| DEFER[Defer]
+    GRACE -->|yes| REF1[Authoritative reference lookup]
+    REF1 -->|referenced| RETIRE[Retire candidate]
+    REF1 -->|unreferenced| MODE{Destructive + authorized + recovery ready?}
+    MODE -->|no| SAFE[Dry-run / unapproved / recovery-blocked]
+    MODE -->|yes| EXISTS[Check body]
+    EXISTS --> REF2[Final authoritative lookup immediately before delete]
+    REF2 -->|referenced| RETIRE
+    REF2 -->|unreferenced| DELETE[Delete exact key]
+    DELETE --> VERIFY[Verify absent]
+```
+
+The core currently provides:
+
+- grace-period deferral before any destructive dependency call;
+- two authoritative reference checks, including one immediately before deletion;
+- retirement of re-referenced candidates so a new dry-run/grace cycle is required before future deletion eligibility;
+- dry-run default;
+- separate destructive authorization and recovery-readiness gates;
+- strict boolean dependency results and fail-closed behavior;
+- explicit deleted, already-absent, failed, unapproved, recovery-blocked, deferred, and re-referenced outcomes;
+- bounded processing with retry at the failed cursor;
+- idempotent repeated execution;
+- versioned, integrity-fingerprinted checkpoints.
+
+Focused source evidence currently records eleven passing sweep tests plus compile/import smoke. This is **not** a live R2 deletion claim. #215 remains open for full runner-free current-main verification and a controlled private demonstration after backup/recovery prerequisites.
 
 ## q-pipe import contract
 
-Default OAI imports now match q-pipe's Cloudflare export eligibility:
+Default OAI imports match q-pipe's Cloudflare export eligibility:
 
 - `scenario-forge` and `terminal-bench-2.1` are default sources;
 - `android-curriculum-oss` requires explicit operator opt-in;
@@ -90,11 +155,13 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 - no production KV namespace binding;
 - no real q-pipe corpus migration;
 - no production embeddings pipeline;
-- no network integration test.
+- no network integration test;
+- no controlled private R2 sweep demonstration;
+- current GC/sweep evidence is focused local source testing, not a full current-main Mac preflight.
 
 ## Public-safe deployment rule
 
-Real account IDs, database IDs, bucket names when private, namespace IDs, API tokens, and private endpoints belong only in deployment secrets/configuration—not public Markdown/source.
+Real account IDs, database IDs, private bucket names, namespace IDs, API tokens, and private endpoints belong only in deployment secrets/configuration—not public Markdown/source.
 
 ## Official references
 
