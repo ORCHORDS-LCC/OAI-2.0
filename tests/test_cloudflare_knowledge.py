@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from oai2.core import KnowledgeId, Status
@@ -227,3 +229,20 @@ def test_store_get_rejects_mismatched_blob() -> None:
     with pytest.raises(ValueError, match="hash"):
         store.get(obj.knowledge_id)
 \n\ndef test_store_preserves_source_uri() -> None:\n    b = MockCloudflareBindings()\n    store = CloudflareKnowledgeStore(b)\n    obj = _make_obj("provenance", "source body", source_uri="https://example.test/source")\n    store.put(obj)\n    got = store.get(obj.knowledge_id)\n    assert got is not None\n    assert got.source_uri == "https://example.test/source"\n
+
+def test_retrieve_ignores_corrupted_cache() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("cache-integrity", "trusted body")
+    store.put(obj)
+
+    from oai2.knowledge import RetrievalRequest
+
+    req = RetrievalRequest(topic="cache-integrity")
+    key = cache_key_for(req, "stub-v0", b.cache_revision())
+    cached = obj.model_dump()
+    cached["content"] = "tampered body"
+    b.kv_put(key, json.dumps({"objects": [cached]}))
+
+    result = store.retrieve(req)
+    assert [item.content for item in result.objects] == ["trusted body"]
