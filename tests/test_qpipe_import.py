@@ -261,3 +261,16 @@ def test_absolute_path_detection_rejects_unix_and_windows_paths() -> None:
 
     assert import_qpipe_rows([_row(sid="u", ext="unix", body=unix)]).imported == []
     assert import_qpipe_rows([_row(sid="w", ext="win", body=windows)]).imported == []
+
+
+def test_qpipe_compatibility_revision_is_pinned() -> None:
+    from oai2.knowledge.qpipe_import import (
+        QPIPE_COMPATIBILITY_SOURCE_BLOBS,
+        QPIPE_COMPATIBILITY_SOURCE_REVISION,
+    )
+
+    assert QPIPE_COMPATIBILITY_SOURCE_REVISION == "39f7e791aa38e8fd9e006aee9c15686ec51a3cf2"
+    assert QPIPE_COMPATIBILITY_SOURCE_BLOBS == {
+        "qpipe/cloudflare_learning.py": "3cf94523564fdd919bec177f71740ff7e979f805",
+        "qpipe/memory.py": "f7188d3128e2c647ece9f457b053dcb3d7b705a8",
+    }

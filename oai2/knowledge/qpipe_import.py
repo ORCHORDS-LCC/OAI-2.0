@@ -45,6 +45,15 @@ from enum import StrEnum
 from ..core import KnowledgeId, Status
 from .abstraction import KnowledgeObject, now_epoch, sha256_hex
 
+# Exact public q-pipe source revision used to verify this compatibility gate.
+# Update this marker only after re-reading q-pipe's export/memory contracts and
+# updating the compatibility fixtures in tests/test_qpipe_import.py.
+QPIPE_COMPATIBILITY_SOURCE_REVISION = "39f7e791aa38e8fd9e006aee9c15686ec51a3cf2"
+QPIPE_COMPATIBILITY_SOURCE_BLOBS = {
+    "qpipe/cloudflare_learning.py": "3cf94523564fdd919bec177f71740ff7e979f805",
+    "qpipe/memory.py": "f7188d3128e2c647ece9f457b053dcb3d7b705a8",
+}
+
 
 class QPipeSource(StrEnum):
     """Allow-listed q-pipe sources for OAI knowledge imports."""
@@ -389,6 +398,8 @@ def import_qpipe_rows(
 
 
 __all__ = [
+    "QPIPE_COMPATIBILITY_SOURCE_REVISION",
+    "QPIPE_COMPATIBILITY_SOURCE_BLOBS",
     "QPipeSource",
     "QPipeStatus",
     "QPIPE_TO_OAI_STATUS",

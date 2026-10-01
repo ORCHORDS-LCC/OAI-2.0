@@ -31,6 +31,8 @@ from .cloudflare import (
 )
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
+    QPIPE_COMPATIBILITY_SOURCE_BLOBS,
+    QPIPE_COMPATIBILITY_SOURCE_REVISION,
     ImportPolicy,
     ImportReport,
     QPipeRow,
@@ -62,6 +64,8 @@ __all__ = [
     "r2_blob_key_for",
     "sha256_hex",
     "now_epoch",
+    "QPIPE_COMPATIBILITY_SOURCE_REVISION",
+    "QPIPE_COMPATIBILITY_SOURCE_BLOBS",
     "ImportPolicy",
     "ImportReport",
     "QPipeRow",
