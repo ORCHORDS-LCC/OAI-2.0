@@ -72,7 +72,7 @@ The final sparse/adaptive model is still **PROPOSED**. Supporting truth/evidence
 
 ## Numerical-safety foundation
 
-WP-71 now has a versioned reference precision/sentinel policy and the MLX smoke probe consumes the sentinel path. This is infrastructure evidence only; backend/quantized/custom-kernel numerical equivalence and overhead/fallback measurements remain open.
+WP-71 now has a versioned reference precision/sentinel policy, a reference-vs-optimized tolerance/fallback matrix, and a canonical backend/export/kernel promotion gate. The gate carries the applicable tolerance profile and artifact identity and refuses speed-only promotion. The MLX smoke probe consumes the sentinel path, but real backend/quantized/custom-kernel numerical equivalence, overhead and fallback measurements remain open.
 
 ## Current evidence
 
