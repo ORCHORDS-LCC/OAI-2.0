@@ -91,15 +91,40 @@ HTTP status code is preserved on `exc.status_code`.
 
 ## Status of the wire
 
-| Layer                           | Status      | Notes                                                  |
-|----------------------------------|-------------|--------------------------------------------------------|
-| `oai2.runtime.GatewayRuntime`   | IMPLEMENTED | 15/15 unit tests, mock-transport only.                 |
-| `oai2.runtime.GatewayConfig`    | IMPLEMENTED | `repr()` redacts the API key.                          |
-| `scripts/gateway_smoke.py`      | IMPLEMENTED | Single-shot end-to-end probe.                          |
-| `scripts/verify.py gateway-reach` | IMPLEMENTED | SKIP by default, live when key is set.             |
-| End-to-end from P50             | OPEN        | Not yet exercised — pending operator-supplied token.    |
-| api.orchords.com model list      | OPEN        | Cloud currently exposes 4 models; local qpipe exposes 1. |
-| Knowledge transport worker       | PROPOSED    | Cloudflare Worker entrypoint in design phase.          |
+| Layer                                                | Status      | Notes                                                                              |
+|-------------------------------------------------------|-------------|------------------------------------------------------------------------------------|
+| `oai2.runtime.GatewayRuntime`                        | IMPLEMENTED | 15 unit tests + 39 completion-contract tests, mock-transport only.                 |
+| `oai2.runtime.GatewayConfig`                         | IMPLEMENTED | `repr()` redacts the API key.                                                      |
+| `oai2.runtime.GatewayModelClient`                    | IMPLEMENTED | 14 unit tests; flattens messages, propagates `GatewayRuntimeError` unchanged.       |
+| `scripts/gateway_smoke.py`                           | IMPLEMENTED | Single-shot end-to-end probe; 9 dedicated CLI tests covering every `main()` branch. |
+| `scripts/bench.py --backend=gateway`                 | IMPLEMENTED | Drives `GatewayModelClient` end-to-end; 7 dedicated tests; clean SKIP without API key. |
+| Cross-repo Protocol conformance (OAI-2.0 ↔ q-pipe)   | IMPLEMENTED | 10 tests in `tests/test_gateway_model_client_protocol.py`; `isinstance(client, qpipe.ModelClient)` is True. |
+| `scripts/verify.py gateway-reach`                    | IMPLEMENTED | SKIP by default, live when key is set.                                             |
+| End-to-end from P50                                  | OPEN        | Not yet exercised — pending operator-supplied token.                                |
+| api.orchords.com model list                          | OPEN        | Cloud currently exposes 4 models; local qpipe exposes 1.                           |
+| Knowledge transport worker                           | PROPOSED    | Cloudflare Worker entrypoint in design phase.                                      |
+
+## Test surface (cloud-touching layers)
+
+All tests below pass under `httpx.MockTransport` and exercise the wire
+path without a live endpoint. The runner-free `scripts/verify.py` cycle
+runs the full set; live acceptance still requires
+`OAI2_GATEWAY_API_KEY`.
+
+| File                                              | Tests | Slice SHA  | Coverage                                                                 |
+|---------------------------------------------------|-------|------------|--------------------------------------------------------------------------|
+| `tests/test_gateway_runtime.py`                   | 15    | `2828a05`  | Request build, response parse, error mapping, lifecycle, key redaction.  |
+| `tests/test_gateway_completion_contract.py`       | 39    | `2828a05`  | Malformed envelopes, finish-reason propagation, tool-call preservation.  |
+| `tests/test_gateway_model_client.py`              | 14    | `56eab61`  | Structural adapter contract, message flattening, default substitution.    |
+| `tests/test_gateway_smoke.py`                     |  9    | `6a4fb5f`  | CLI `main()` exit codes (0/1/2), JSON + human paths, `--model` override. |
+| `tests/test_bench_gateway.py`                     |  7    | `53b546a`  | `bench.py --backend=gateway` end-to-end + key redaction in metrics.       |
+| `tests/test_gateway_model_client_protocol.py`     | 10    | `33b76fb`  | Cross-repo `isinstance(client, qpipe.ModelClient)` + signature parity.    |
+| **Total cloud-touching tests**                    | **94**|            |                                                                          |
+
+Cross-repo Protocol tests discover q-pipe via the same convention
+`scripts/verify.py` uses (`$OAI2_QPIPE_REPO` overrides;
+`<repo-parent>/q-pipe` default) and `pytest.skip` cleanly when q-pipe
+is unreachable.
 
 ## Status of the related q-pipe cloud
 
@@ -129,14 +154,32 @@ and a `tool_calls` finish reason without calls raise `GatewayRuntimeError`. Part
 text at a token limit remains available alongside its original termination
 reason; it is not silently discarded or represented as a completed answer.
 
+#238 evidence chain (slice-by-slice, latest first):
+
+| SHA         | Subject                                                                        |
+|-------------|--------------------------------------------------------------------------------|
+| `33b76fb`   | Cross-repo `ModelClient` Protocol conformance (10 tests).                      |
+| `6a4fb5f`   | Smoke-CLI test coverage (9 tests on `scripts/gateway_smoke.py`).               |
+| `2f29287`   | Mypy clean-up on `scripts/bench.py` (silences 2 long-standing errors).         |
+| `53b546a`   | `bench.py --backend=gateway` integration + 7 dedicated tests.                   |
+| `2828a05`   | Completion-outcome preservation (finish_reason, tool_calls).                   |
+| `56eab61`   | `GatewayModelClient` adapter for q-pipe `ModelClient` seam.                     |
+
 Focused verification in the supported project environment:
 
 ```bash
-uv run pytest -W error tests/test_gateway_completion_contract.py tests/test_gateway_runtime.py tests/test_gateway_model_client.py
+uv run pytest -W error \
+    tests/test_gateway_runtime.py \
+    tests/test_gateway_completion_contract.py \
+    tests/test_gateway_model_client.py \
+    tests/test_gateway_smoke.py \
+    tests/test_bench_gateway.py \
+    tests/test_gateway_model_client_protocol.py
 ```
 
 These tests use HTTPX mock transport. They are not live gateway, ZCode, model
 quality, or cross-repository acceptance evidence. #238 remains open for live
-integration evidence.
+integration evidence (operator-supplied `OAI2_GATEWAY_API_KEY`) and for the
+q-pipe `HeldOutRunner` round-trip (operator-action item).
 
 Protocol reference: [Chat Completions response contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/).
