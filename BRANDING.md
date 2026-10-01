@@ -4,7 +4,7 @@
 
 # OAI-2.0 Branding
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 ## Brand hierarchy
 
@@ -12,7 +12,7 @@ _Last reviewed: 2026-10-01._
 **Project:** OAI-2.0  
 **Tagline:** **ORCHORDS — BUILD DIFFERENT.**
 
-OAI-2.0 is a public ORCHORDS research and engineering project. The repository now contains an **experimental implementation scaffold**, while the custom large-capacity dynamically activated model remains **PROPOSED**.
+OAI-2.0 is a public ORCHORDS research and engineering project. The repository contains an **experimental implementation stack** spanning runner-free verification, typed agent/runtime scaffolding, Cloudflare knowledge/storage contracts and local GC/QoS primitives. The trained large-capacity dynamically activated model, production host integrations, and fully verified live service remain **PROPOSED / IN DEVELOPMENT**.
 
 ## Approved public presentation
 
@@ -22,9 +22,9 @@ Use:
 - **ORCHORDS OAI-2.0**
 - **ORCHORDS — BUILD DIFFERENT.**
 - **Next-generation coding-agent architecture and research**
-- **Experimental implementation scaffold**
+- **Experimental implementation stack**
 
-Do not present the proposed 10–30B+ specialist model, live Cloudflare backend, production vision stack, or host integrations as released capabilities.
+Do not present the proposed 10–30B+ specialist model, a fully deployed Cloudflare knowledge service, production vision stack, or host integrations as released capabilities. Source-level adapters/contracts and focused local tests must be described as such.
 
 ## Repository banner
 

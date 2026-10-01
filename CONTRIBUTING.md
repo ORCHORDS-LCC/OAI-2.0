@@ -1,6 +1,6 @@
 # Contributing to OAI-2.0
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 OAI-2.0 is a public, non-commercial research and engineering repository. Read current source before treating any architecture document as implemented behavior.
 
@@ -22,12 +22,16 @@ OAI-2.0 is a public, non-commercial research and engineering repository. Read cu
 7. Do not claim tests, benchmarks, Cloudflare connectivity, model capability, or host compatibility that was not actually demonstrated.
 8. OAI-2.0 is runner-free: do not add GitHub-hosted or self-hosted Actions runners as an acceptance dependency.
 
+## Parallel-agent synchronization
+
+Multiple AIs may work on `main` concurrently. While actively editing, re-fetch remote `main` approximately every 3 minutes and **always** immediately before a commit. If remote `main` moved, inspect the new commits/diffs and discard or reconcile duplicated local work instead of overwriting it.
+
 ## Engineering workflow
 
 ```text
 INSPECT -> CURRENT SOURCE -> OFFICIAL RESEARCH -> VERIFY GAP
 -> IMPLEMENT -> TEST -> BENCHMARK WHEN RELEVANT
--> RECHECK -> COMMIT MAIN -> VERIFY RESULT
+-> RECHECK REMOTE MAIN -> RECONCILE CONCURRENT WORK -> COMMIT MAIN -> VERIFY REMOTE RESULT
 ```
 
 Authorized maintainers may work directly on `main` where repository rules permit it.
@@ -48,7 +52,7 @@ It runs dependency sync, Ruff, MyPy, pytest, a public-safety scan, and a Markdow
 
 Read [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
 
-The current repository has a tested **application-level contract and mock bindings**, not a verified live Cloudflare Worker deployment. Any live adapter must map correctly to current asynchronous D1, R2, Vectorize, and KV APIs.
+The current repository has tested application-level contracts/mocks plus source-level D1/R2/KV/GC adapter primitives. It still does **not** have a fully verified live Worker/D1/R2/Vectorize/KV end-to-end deployment. Any live adapter must map correctly to current asynchronous D1, R2, Vectorize, and KV APIs.
 
 q-pipe imports default to q-pipe's verified Cloudflare export rules: promoted rows, independent verification, quality gates, approved source allow-list, and explicit Android-curriculum opt-in.
 

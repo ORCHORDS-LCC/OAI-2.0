@@ -15,12 +15,15 @@ OAI-2.0 is a public next-generation coding-agent research project focused on **l
 
 ## Current state — 2026-10-02
 
+_Documentation reconciled against `main` cc0a32588779aae42182b2e092582dddbcf11734 immediately before this docs update._
+
 OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
 
 The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). This project intentionally uses **runner-free local verification**; GitHub Actions runners are not part of the acceptance workflow. A local preflight exists at `scripts/verify.py`; it must be executed locally for acceptance evidence.
 
 | Area | Current status |
 | --- | --- |
+| Runner-free verification baseline (WP-01) | **IMPLEMENTED / CLOSED** — local preflight, failure semantics, platform/q-pipe PASS/FAIL/SKIP evidence |
 | Python package, typed core/protocols | **EXPERIMENTAL** |
 | Six-gate tool dispatcher | **EXPERIMENTAL** |
 | FURIOUS / NORMAL / DEEP / SWARM controllers | **EXPERIMENTAL scaffold** |
@@ -30,13 +33,13 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Capability-eval harness | **EXPERIMENTAL** |
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
 | Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
-| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still incomplete |
-| R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
-| Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
-| D1 knowledge + GC transaction layer | **EXPERIMENTAL source implementation** — durable corpus revision, lease-aware metadata writer, async lease acquire/revalidate/finalize/release, and async D1/R2 delete boundary; live planner/deployment proof remaining |
+| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — D1/R2/KV wrappers and D1 knowledge writer/delete-boundary pieces exist; live Worker + Vectorize + end-to-end network proof still incomplete |
+| R2 liveness dry-run reconciliation | **IMPLEMENTED work item / CLOSED #214** — non-destructive reconciliation and acceptance evidence recorded |
+| Conservative R2 orphan sweep core | **EXPERIMENTAL / OPEN #215** — grace/recheck/idempotent decision core exists; controlled live destructive proof remains |
+| D1 knowledge + GC transaction layer | **EXPERIMENTAL / OPEN #233** — durable revision/writer, lease persistence/runtime, and async D1/R2 delete boundary exist; sweep-planner/live concurrency proof remaining |
 | R2 / KV Worker binding wrappers | **EXPERIMENTAL source implementation** — async R2 body/existence/delete and best-effort KV get/put wrappers; deployment proof remaining |
 | QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests plus p95/p99/deadline promotion gate; service/scheduler integration remaining |
-| q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
+| q-pipe compatibility/import gate | **IMPLEMENTED compatibility work item / CLOSED #20**; real 10–100 row migration remains **OPEN #21** |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
 | Custom 10–30B+ specialist model | **PROPOSED** |
@@ -64,7 +67,7 @@ The corrected v0.2 benchmark harness has one committed smoke result for `mlx-com
 - generated: 32 tokens;
 - prefill / TTFT: ~25.44 ms;
 - prefill throughput: ~5,227.9 tok/s;
-- pure decode throughput: ~198.47 tok/s;
+- MLX-reported generation throughput: ~198.47 tok/s;
 - end-to-end generation phase: ~191.10 ms;
 - peak MLX memory: ~0.402 GB.
 

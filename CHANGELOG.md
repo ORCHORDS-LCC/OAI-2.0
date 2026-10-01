@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Repository-wide Markdown reconciliation against current source/issues on 2026-10-02, including corrected closed/open status, Cloudflare progress, benchmark terminology, runner-free verification policy, and WP-76 mapping.
+- Async R2 and KV binding wrappers plus D1 knowledge-table/schema export coverage for the evolving live Cloudflare adapter surface.
+
 - Expanded standards-aligned work-package map through WP-76, including claim-level evidence enforcement/hallucination resistance and end-to-end service-quality budgets.
 - D1-authoritative GC deletion-lease state contract with expected-revision acquisition, writer exclusion, expired-owner takeover/fencing, retryable failure, idempotent finalize/release, deleted-body tombstones and verified restore semantics.
 - Reference-safe, non-destructive R2 liveness reconciliation with shared-body grouping, missing/orphan classification, byte/age metrics, resumable pagination and authoritative-reference fingerprinting.
@@ -26,6 +29,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Public architecture, branding, support, security, contribution, stars, and donation/sponsorship documentation.
 
 ### Changed
+
+- WP-01 verification baseline and WI-VV-001/WI-VV-002 are now completed/closed; q-pipe compatibility WI-MIG-001 is also closed, while the real migration pilot remains open.
+- R2 liveness reconciliation WI-GC-001 (#214) is closed; destructive sweep (#215) and D1 deletion-lease/live-concurrency work (#233) remain open.
+- Benchmark documentation now calls the v0.2 decode-rate field **MLX-reported generation throughput** rather than overstating it as kernel-level “pure decode.”
 
 - Master Issue #1 is the canonical global map through WP-76 and issue boundary #233, with parent WP issues owning detailed work-item registries.
 - Runner-free preflight reports explicit Apple-Silicon PASS/SKIP state and verifies a real sibling/configured q-pipe checkout against pinned compatibility revision/blob hashes when available.

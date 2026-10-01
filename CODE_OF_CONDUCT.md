@@ -1,6 +1,6 @@
 # Code of Conduct
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 ## Our standard
 
@@ -14,7 +14,7 @@ This applies to repository discussions, issues, pull requests, reviews, and othe
 
 ## Technical discussion
 
-Architecture proposals should clearly distinguish measured results from targets, and implemented behavior from experimental/proposed work. Disagreement over technical design is welcome when it remains evidence-based and respectful.
+Architecture proposals should clearly distinguish measured results from targets, source-level/focused-test evidence from live end-to-end proof, and implemented behavior from experimental/proposed work. Disagreement over technical design is welcome when it remains evidence-based and respectful.
 
 ## Enforcement
 
