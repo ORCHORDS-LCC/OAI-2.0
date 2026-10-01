@@ -16,7 +16,27 @@ from .abstraction import (
     now_epoch,
     sha256_hex,
 )
+from .cloudflare import (
+    CFPlan,
+    CFPrimitive,
+    CFRow,
+    CloudflareKnowledgeStore,
+    MockCloudflareBindings,
+    cache_key_for,
+    hash_topic,
+    object_to_row,
+    r2_blob_key_for,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
+from .qpipe_import import (
+    ImportReport,
+    QPipeRow,
+    QPipeSource,
+    QPipeStatus,
+    derive_authority,
+    import_qpipe_rows,
+    row_to_knowledge_object,
+)
 
 __all__ = [
     "InMemoryKnowledgeStore",
@@ -27,6 +47,22 @@ __all__ = [
     "IngestionJob",
     "IngestionPipeline",
     "IngestionStatus",
+    "CFPlan",
+    "CFPrimitive",
+    "CFRow",
+    "CloudflareKnowledgeStore",
+    "MockCloudflareBindings",
+    "cache_key_for",
+    "hash_topic",
+    "object_to_row",
+    "r2_blob_key_for",
     "sha256_hex",
     "now_epoch",
+    "ImportReport",
+    "QPipeRow",
+    "QPipeSource",
+    "QPipeStatus",
+    "derive_authority",
+    "import_qpipe_rows",
+    "row_to_knowledge_object",
 ]

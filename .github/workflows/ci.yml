@@ -1,10 +1,12 @@
 name: CI
 
+# Direct uploads to main are the canonical workflow; the runner should
+# not fire on those. CI runs when a pull request is opened against main
+# or when it is manually dispatched via the Actions tab.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
