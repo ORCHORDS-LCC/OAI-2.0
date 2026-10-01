@@ -282,24 +282,36 @@ def test_store_put_rolls_back_when_r2_fails() -> None:
     assert b.r2_get(r2_blob_key_for(obj.content_hash)) is None
 
 
-def test_store_put_rolls_back_body_when_index_fails() -> None:
-    """If the D1 write fails after a successful R2 write, the orphan body
-    must be deleted so the next put() call has a clean slate (issue #3)."""
+def test_store_put_preserves_shared_body_when_index_fails() -> None:
+    """A failed D1 write must not delete a body retained by another row (#209)."""
 
-    class D1FailsAfterR2(MockCloudflareBindings):
+    class D1FailsOnDemand(MockCloudflareBindings):
+        def __init__(self) -> None:
+            super().__init__()
+            self.fail_writes = False
+
         def d1_upsert(self, row: object) -> None:
-            raise RuntimeError("simulated D1 outage")
+            if self.fail_writes:
+                raise RuntimeError("simulated D1 outage")
+            super().d1_upsert(row)
 
-    b = D1FailsAfterR2()
+    b = D1FailsOnDemand()
     store = CloudflareKnowledgeStore(b)
-    obj = _make_obj("partial-write/d1-fails", "orphan-body-candidate")
-    blob_key = r2_blob_key_for(obj.content_hash)
+    retained = _make_obj("shared/original", "shared-body", kid_suffix="retained")
+    failing = _make_obj("shared/new", "shared-body", kid_suffix="failing")
+    blob_key = r2_blob_key_for(retained.content_hash)
+
+    store.put(retained)
+    b.fail_writes = True
 
     with pytest.raises(RuntimeError, match="D1 outage"):
-        store.put(obj)
+        store.put(failing)
 
-    # The body the adapter wrote must have been rolled back via r2_delete.
-    assert b.r2_get(blob_key) is None
+    assert b.d1_get(failing.knowledge_id) is None
+    got = store.get(retained.knowledge_id)
+    assert got is not None
+    assert got.content == "shared-body"
+    assert b.r2_get(blob_key) == b"shared-body"
 
 
 def test_store_preserves_source_uri() -> None:

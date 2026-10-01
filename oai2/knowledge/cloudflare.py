@@ -362,19 +362,14 @@ class CloudflareKnowledgeStore(KnowledgeStore):
             )
         row = object_to_row(obj)
         # Write R2 before D1. If the body write fails, the index is never
-        # persisted, so the index cannot dangle without a body. If the D1
-        # write then fails, delete the body we just wrote so the next put()
-        # call has a clean slate.
-        r2_blob_key: str | None = None
+        # persisted, so the index cannot dangle without a body. If D1 fails,
+        # keep the content-addressed body: its key may already be shared by a
+        # retained row, and inline deletion would corrupt that row. The
+        # reference-safe GC lifecycle handles genuinely unreferenced bodies.
         if obj.content:
             r2_blob_key = r2_blob_key_for(obj.content_hash)
             self._b.r2_put(r2_blob_key, obj.content.encode("utf-8"))
-        try:
-            self._b.d1_upsert_and_bump_revision(row)
-        except BaseException:
-            if r2_blob_key is not None:
-                self._b.r2_delete(r2_blob_key)
-            raise
+        self._b.d1_upsert_and_bump_revision(row)
 
     def get(self, knowledge_id: KnowledgeId) -> KnowledgeObject | None:
         row = self._b.d1_get(knowledge_id)
