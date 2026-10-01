@@ -65,7 +65,7 @@ Current source includes QoS/tail/deadline promotion checks, admission/backpressu
 
 ## Numerical promotion gate
 
-Current source includes a versioned reference precision policy and structured numerical sentinels. Candidate backends/quantization/custom kernels must still pass WI-NUM-002 reference/tolerance/fallback evidence before numerical optimizations can be promoted.
+Current source includes a versioned reference precision policy, structured numerical sentinels, a reference-vs-optimized tolerance/fallback matrix, and a canonical `evaluate_numerical_candidate(...)` promotion gate for backend/export/kernel candidates. The gate records optional speedup evidence but never lets speed override numerical, finite-state, capability-regression or fallback failures. Real optimized backend/export/kernel measurements and local reproduction remain required before those paths are promoted.
 
 ## Promotion gate
 
