@@ -1,6 +1,6 @@
 # Training and Evaluation Strategy
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Training status:** no final OAI-2.0 specialist model has been trained.  
 > **Evaluation status:** an **EXPERIMENTAL** offline capability-eval scaffold exists.
@@ -51,3 +51,5 @@ External evaluators/teachers may generate critique or scenarios, but determinist
 ## Promotion gate
 
 A speed improvement is rejected if verified capability materially regresses.
+
+Current QoS source also separates research targets from service budgets and records first-useful-action, end-to-end p95/p99, verified-success and false-success metrics. A candidate with better mean throughput must still fail promotion when tail latency, deadline misses, false-success, memory stability, or verified useful work violate the declared service budget. Admission/backpressure policy evidence must eventually be included for concurrent-service promotion.
