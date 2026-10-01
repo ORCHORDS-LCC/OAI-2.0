@@ -1,34 +1,53 @@
-"""OAI-2.0 MLX benchmark harness — properly separated prefill / decode / TTFT.
+"""OAI-2.0 benchmark harness — properly separated prefill / decode / TTFT.
 
 Run with:    uv run python scripts/bench.py [args]
 NOT with:    python3 scripts/bench.py   # ModuleNotFoundError: mlx_lm
 
 This script imports :mod:`mlx_lm` (a project dependency declared in
-``pyproject.toml``). It runs under the project venv created by ``uv sync``,
-i.e. via ``uv run python scripts/bench.py ...``. A plain ``python3``
-invocation will fail with :class:`ModuleNotFoundError` because the system
-interpreter does not see project-scoped dependencies. The :func:`run_one`
-guard below converts that failure into an actionable one-line error.
+``pyproject.toml``) for the ``mlx`` backend and :mod:`httpx` for the
+``gateway`` backend. It runs under the project venv created by ``uv
+sync``, i.e. via ``uv run python scripts/bench.py ...``. A plain
+``python3`` invocation will fail with :class:`ModuleNotFoundError` for
+the ``mlx`` backend because the system interpreter does not see
+project-scoped dependencies. The :func:`run_one` guard below converts
+that failure into an actionable one-line error.
 
-This harness is the source of truth for measured Apple Silicon MLX
-performance on the OAI-2.0 reference machines. It supersedes v0.1.0's
-``scripts/bench.py``, which incorrectly attributed prefill time to
-``decode_seconds``.
+This harness is the source of truth for measured performance on the
+OAI-2.0 reference machines. It supersedes v0.1.0's ``scripts/bench.py``,
+which incorrectly attributed prefill time to ``decode_seconds``.
+
+Two backends are supported via ``--backend``:
+
+- ``mlx`` (default) — Apple Silicon MLX, local weights, streaming
+  token-by-token. Imports ``mlx_lm`` and reports MLX memory metrics.
+
+- ``gateway`` — :class:`oai2.runtime.GatewayModelClient` driving
+  ``https://api.orchords.com``. Requires ``OAI2_GATEWAY_API_KEY`` in
+  the environment (or ``--gateway-api-key``). The gateway returns the
+  full reply in a single HTTP response, so ``prefill_seconds ==
+  end_to_end_seconds`` and ``decode_seconds`` is reported as ``0.0`` by
+  convention. Memory metrics are ``None`` because the model runs in the
+  cloud, not on this host.
 
 Measured quantities (per run):
 
-- ``load_seconds`` — model load + first-compile wall time.
+- ``load_seconds`` — model load + first-compile wall time (MLX only;
+  ``None`` for gateway because there is no local load step).
 - ``compile_seconds`` — warm-up run (compiled/uncached path).
 - ``warm_run_seconds`` — second warm-up run.
-- ``prompt_tokens`` — tokenized prompt size.
-- ``prefill_seconds`` — wall time from prompt submitted to first token yielded.
-  This is the *Time-To-First-Token* (TTFT).
+- ``prompt_tokens`` — tokenized prompt size (MLX) or ``len(prompt.split())``
+  approximation (gateway).
+- ``prefill_seconds`` — wall time from prompt submitted to first token
+  yielded. This is the *Time-To-First-Token* (TTFT).
 - ``prefill_tokens_per_second`` — ``prompt_tokens / prefill_seconds``.
-- ``decode_seconds`` — wall time from first token yielded to last token yielded.
-- ``generation_tokens`` — actual number of tokens generated (excluding prefill).
+- ``decode_seconds`` — wall time from first token yielded to last token
+  yielded. ``0.0`` for the gateway backend because it returns all at once.
+- ``generation_tokens`` — actual number of tokens generated (excluding
+  prefill).
 - ``decode_tokens_per_second`` — ``generation_tokens / decode_seconds``.
 - ``end_to_end_seconds`` — ``prefill_seconds + decode_seconds``.
 - ``peak_memory_gb`` — peak unified-memory residency reported by MLX.
+  ``None`` for the gateway backend.
 - ``active_memory_gb`` — active (live) MLX memory after run.
 - ``cache_memory_gb`` — MLX cache memory after run.
 
@@ -414,6 +433,135 @@ def _print_run_table(model_id: str, prompt_label: str, runs: list[RunMetrics]) -
         print(f"  AGG {name}: {s}")
 
 
+def run_one_gateway(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    prompt: str,
+    prompt_label: str,
+    max_tokens: int,
+    timeout_seconds: float,
+    warm: bool,
+) -> RunMetrics:
+    """Single measured chat-completion round-trip through GatewayModelClient.
+
+    The gateway returns the full reply in one HTTP response so the
+    prefill/decode split collapses:
+
+    - ``prefill_seconds`` == ``end_to_end_seconds`` (full round-trip).
+    - ``decode_seconds`` is reported as ``0.0`` by convention because
+      the gateway does not stream tokens incrementally.
+    - All MLX memory fields are ``None`` (model runs in the cloud).
+    - ``generation_tokens`` is a coarse ``max(1, len(text.split()))``
+      approximation because the gateway does not return a usage block
+      in every code path. ``notes`` records the source.
+    """
+
+    run_id = f"bench_{uuid.uuid4().hex[:10]}"
+    sys_info = _system_info()
+    notes: list[str] = []
+
+    # Local import so --help speed is not gated on httpx.
+    from oai2.runtime import GatewayConfig, GatewayModelClient, GatewayRuntime
+
+    config = GatewayConfig(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        timeout_seconds=timeout_seconds,
+    )
+
+    prefill_seconds: float | None = None
+    decode_seconds: float | None = None
+    end_to_end: float | None = None
+    generation_tokens: int | None = None
+    output_text = ""
+
+    warm_run_seconds: float | None = None
+    compile_seconds: float | None = None
+
+    with GatewayRuntime(config) as runtime:
+        client = GatewayModelClient(runtime)
+        # ---- Warm-up: forces gateway-side cache priming; excluded
+        #      from measured runs below. ----
+        if warm:
+            try:
+                t_warm = time.perf_counter()
+                warm_reply = client.chat(
+                    [{"role": "user", "content": prompt}],
+                    max_tokens=8,
+                    temperature=0.0,
+                )
+                warm_run_seconds = time.perf_counter() - t_warm
+                if not warm_reply.content:
+                    notes.append("warmup-empty-reply")
+            except Exception as exc:
+                notes.append(f"warmup-failed: {type(exc).__name__}: {exc}")
+                warm_run_seconds = None
+                compile_seconds = None
+
+        # ---- Measured round-trip ----
+        try:
+            t_start = time.perf_counter()
+            reply = client.chat(
+                [{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=0.0,
+            )
+            t_end = time.perf_counter()
+
+            end_to_end = t_end - t_start
+            # Gateway returns the full reply in one HTTP response, so
+            # TTFT == end_to_end and decode is zero by convention.
+            prefill_seconds = end_to_end
+            decode_seconds = 0.0
+            output_text = reply.content
+            # The orchords gateway may not always include usage; fall
+            # back to a coarse word-count approximation and record it.
+            generation_tokens = max(1, len(output_text.split()))
+            notes.append("gateway: prefill==end_to_end; decode=0.0 by convention")
+        except Exception as exc:
+            notes.append(f"generate-failed: {type(exc).__name__}: {exc}")
+            prefill_seconds = None
+            decode_seconds = None
+            end_to_end = None
+            generation_tokens = None
+
+    prompt_tokens = len(prompt.split())
+    prefill_tps = (
+        prompt_tokens / prefill_seconds if prefill_seconds and prefill_seconds > 0 else None
+    )
+    decode_tps = None  # decode_seconds == 0 by convention; no tps to report
+
+    return RunMetrics(
+        run_id=run_id,
+        timestamp=time.time(),
+        model=f"gateway:{model}",
+        quantization=None,
+        prompt_label=prompt_label,
+        prompt_tokens=prompt_tokens,
+        max_tokens=max_tokens,
+        load_seconds=None,  # No local load for the gateway backend.
+        compile_seconds=compile_seconds,
+        warm_run_seconds=warm_run_seconds,
+        prefill_seconds=prefill_seconds,
+        prefill_tokens_per_second=prefill_tps,
+        decode_seconds=decode_seconds,
+        decode_tokens_per_second=decode_tps,
+        end_to_end_seconds=end_to_end,
+        generation_tokens=generation_tokens,
+        peak_memory_gb=None,  # Model runs in the cloud, not on this host.
+        active_memory_gb=None,
+        cache_memory_gb=None,
+        device=f"gateway:{base_url}",
+        sys_info=sys_info,
+        output_text=output_text,
+        output_excerpt=output_text[:240],
+        notes=notes,
+    )
+
+
 def _fmt(v: float | None) -> str:
     if v is None:
         return "n/a"
@@ -425,8 +573,16 @@ def _fmt(v: float | None) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
+        "--backend",
+        choices=("mlx", "gateway"),
+        default="mlx",
+        help="Inference backend: mlx (local Apple Silicon weights) or gateway "
+        "(OAI-2.0 GatewayModelClient driving api.orchords.com).",
+    )
+    parser.add_argument(
         "--model",
         default="mlx-community/SmolLM-135M-Instruct-4bit",
+        help="HuggingFace model id for the mlx backend, or model name for the gateway backend.",
     )
     parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument(
@@ -452,20 +608,81 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional label for the run; included in the summary file name.",
     )
+    parser.add_argument(
+        "--gateway-base-url",
+        default=None,
+        help="Gateway backend only. Override OAI2_GATEWAY_BASE_URL.",
+    )
+    parser.add_argument(
+        "--gateway-api-key",
+        default=None,
+        help="Gateway backend only. Override OAI2_GATEWAY_API_KEY (never echoed).",
+    )
+    parser.add_argument(
+        "--gateway-timeout-seconds",
+        type=float,
+        default=None,
+        help="Gateway backend only. Override OAI2_GATEWAY_TIMEOUT_SECONDS.",
+    )
     args = parser.parse_args(argv)
+
+    # ---- Gateway-backend prerequisite resolution ----
+    gateway_base_url: str | None = None
+    gateway_api_key: str | None = None
+    gateway_timeout_seconds: float | None = None
+    if args.backend == "gateway":
+        # Allow CLI flags to override env vars; fall back to env-only.
+        import os
+
+        from oai2.runtime import load_gateway_config_from_env
+
+        env_base = args.gateway_base_url or os.environ.get("OAI2_GATEWAY_BASE_URL")
+        env_key = args.gateway_api_key or os.environ.get("OAI2_GATEWAY_API_KEY")
+        env_timeout_raw = args.gateway_timeout_seconds
+        if env_timeout_raw is None:
+            env_timeout_raw_str = os.environ.get("OAI2_GATEWAY_TIMEOUT_SECONDS")
+            env_timeout_raw = float(env_timeout_raw_str) if env_timeout_raw_str else None
+
+        config = load_gateway_config_from_env(
+            {
+                **os.environ,
+                **({"OAI2_GATEWAY_API_KEY": env_key} if env_key else {}),
+                **({"OAI2_GATEWAY_BASE_URL": env_base} if env_base else {}),
+                **(
+                    {"OAI2_GATEWAY_TIMEOUT_SECONDS": str(env_timeout_raw)}
+                    if env_timeout_raw is not None
+                    else {}
+                ),
+            }
+        )
+        if config is None:
+            print(
+                "SKIP gateway-bench: OAI2_GATEWAY_API_KEY not set. "
+                "Set it in the environment or pass --gateway-api-key.",
+                file=sys.stderr,
+            )
+            return 0
+        gateway_base_url = config.base_url
+        gateway_api_key = config.api_key
+        gateway_timeout_seconds = config.timeout_seconds
 
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    tag = args.tag or args.model.split("/")[-1]
+    if args.backend == "gateway":
+        tag = args.tag or f"gateway-{args.model}"
+    else:
+        tag = args.tag or args.model.split("/")[-1]
     print(
-        f"benchmark: model={args.model} max_tokens={args.max_tokens} "
-        f"repetitions={args.repetitions} warmup={not args.no_warmup} tag={tag}",
+        f"benchmark: backend={args.backend} model={args.model} "
+        f"max_tokens={args.max_tokens} repetitions={args.repetitions} "
+        f"warmup={not args.no_warmup} tag={tag}",
         file=sys.stderr,
     )
 
     summary: dict[str, object] = {
         "tag": tag,
+        "backend": args.backend,
         "model": args.model,
         "max_tokens": args.max_tokens,
         "repetitions": args.repetitions,
@@ -480,13 +697,28 @@ def main(argv: list[str] | None = None) -> int:
         runs: list[RunMetrics] = []
         for i in range(args.repetitions):
             print(f"--- {prompt_label} rep {i + 1}/{args.repetitions} ---", file=sys.stderr)
-            r = run_one(
-                model_id=args.model,
-                prompt=prompt,
-                prompt_label=prompt_label,
-                max_tokens=args.max_tokens,
-                warm=not args.no_warmup,
-            )
+            if args.backend == "gateway":
+                assert gateway_base_url is not None
+                assert gateway_api_key is not None
+                assert gateway_timeout_seconds is not None
+                r = run_one_gateway(
+                    base_url=gateway_base_url,
+                    api_key=gateway_api_key,
+                    model=args.model,
+                    prompt=prompt,
+                    prompt_label=prompt_label,
+                    max_tokens=args.max_tokens,
+                    timeout_seconds=gateway_timeout_seconds,
+                    warm=not args.no_warmup,
+                )
+            else:
+                r = run_one(
+                    model_id=args.model,
+                    prompt=prompt,
+                    prompt_label=prompt_label,
+                    max_tokens=args.max_tokens,
+                    warm=not args.no_warmup,
+                )
             runs.append(r)
             run_file = out_dir / f"{r.run_id}.json"
             run_file.write_text(json.dumps(asdict(r), indent=2, default=str))
