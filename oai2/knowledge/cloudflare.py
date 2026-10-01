@@ -6,7 +6,7 @@ The goal is to lock the contract so the rest of the agent can be written
 against a real binding surface, while a mock implementation is used by
 tests and local development.
 
-Logical layout (one Worker, five Cloudflare primitives):
+Logical layout (one Worker plus four bound storage services):
 
     +-----------------------+
     |  Cloudflare Worker    |  <-- public HTTP entrypoint
@@ -32,8 +32,11 @@ Responsibilities per primitive (logical, not implementation):
 * ``KV.query_cache`` — best-effort query results, keyed by the hash of
   the (topic, min_authority, status_set) triple + embedding digest.
 
-Status: PROPOSED. Wire to live Cloudflare only after secrets are
-moved to a deploy-only path; the contract is stable.
+Status: PROPOSED. This module is an application-level storage contract,
+not a drop-in copy of Cloudflare's low-level runtime APIs. A live Worker
+adapter must translate these operations to the current asynchronous D1,
+R2, Vectorize, and KV binding APIs. Wire it to live Cloudflare only after
+secrets are moved to a deploy-only path.
 """
 
 from __future__ import annotations
@@ -143,48 +146,49 @@ def r2_blob_key_for(content_hash: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-class _D1(Protocol):
-    def prepare(self, sql: str) -> _D1Stmt: ...
+class CloudflareBindingAdapter(Protocol):
+    """Application-level storage operations required by the knowledge store.
 
+    This protocol deliberately does not mirror Cloudflare runtime signatures.
+    A live Worker implementation must await and translate native D1, R2, KV,
+    and Vectorize calls into this synchronous application contract.
+    """
 
-class _D1Stmt(Protocol):
-    def bind(self, *args: Any) -> _D1Stmt: ...
-    def all(self) -> list[dict[str, Any]]: ...
-    def first(self) -> dict[str, Any] | None: ...
-    def run(self) -> None: ...
-
-
-class _R2(Protocol):
-    def put(self, key: str, value: bytes) -> None: ...
-    def get(self, key: str) -> bytes | None: ...
-    def delete(self, key: str) -> None: ...
-
-
-class _Vectorize(Protocol):
-    def insert(self, ids: list[str], vectors: list[list[float]]) -> None: ...
-    def query(
+    def d1_upsert(self, row: CFRow) -> None: ...
+    def d1_get(self, knowledge_id: KnowledgeId) -> CFRow | None: ...
+    def d1_query(
+        self,
+        topic_substring: str,
+        min_authority: float,
+        statuses: Iterable[Status],
+        limit: int,
+    ) -> list[CFRow]: ...
+    def d1_all(self) -> list[CFRow]: ...
+    def r2_put(self, key: str, body: bytes) -> None: ...
+    def r2_get(self, key: str) -> bytes | None: ...
+    def vectorize_upsert(self, vid: str, vector: list[float]) -> None: ...
+    def vectorize_query(
         self, vector: list[float], top_k: int
     ) -> list[tuple[str, float]]: ...
-    def delete_by_ids(self, ids: list[str]) -> None: ...
-
-
-class _KV(Protocol):
-    def get(self, key: str) -> str | None: ...
-    def put(self, key: str, value: str, expiration_ttl: int | None = None) -> None: ...
+    def kv_get(self, key: str) -> str | None: ...
+    def kv_put(self, key: str, value: str, ttl: int | None = None) -> None: ...
+    def cache_revision(self) -> int: ...
+    def bump_cache_revision(self) -> int: ...
 
 
 @dataclass(slots=True)
 class MockCloudflareBindings:
-    """In-memory stand-in for the live Worker bindings.
+    """In-memory implementation of the application-level binding adapter.
 
-    Every method maps 1:1 to the binding call a real Worker would make.
-    No network involved; fully deterministic.
+    No network is involved. A production Worker must translate these methods
+    to Cloudflare's current asynchronous binding APIs.
     """
 
     rows: dict[KnowledgeId, dict[str, Any]] = None  # type: ignore[assignment]
     blobs: dict[str, bytes] = None  # type: ignore[assignment]
     vectors: dict[str, list[float]] = None  # type: ignore[assignment]
     cache: dict[str, str] = None  # type: ignore[assignment]
+    revision: int = 0
 
     def __post_init__(self) -> None:
         if self.rows is None:
@@ -238,6 +242,14 @@ class MockCloudflareBindings:
         out.sort(key=lambda r: (r.authority, r.retrieved_at), reverse=True)
         return out[:limit]
 
+    def d1_all(self) -> list[CFRow]:
+        rows: list[CFRow] = []
+        for knowledge_id in tuple(self.rows.keys()):
+            row = self.d1_get(knowledge_id)
+            if row is not None:
+                rows.append(row)
+        return rows
+
     # -- R2.artifact_blob --
     def r2_put(self, key: str, body: bytes) -> None:
         self.blobs[key] = body
@@ -279,17 +291,28 @@ class MockCloudflareBindings:
         # ttl is ignored in the mock; live Worker enforces expiry.
         self.cache[key] = value
 
+    def cache_revision(self) -> int:
+        return self.revision
+
+    def bump_cache_revision(self) -> int:
+        self.revision += 1
+        return self.revision
+
 
 # ---------------------------------------------------------------------------
 # Adapter — translates KnowledgeStore operations into binding calls.
 # ---------------------------------------------------------------------------
 
 
-def cache_key_for(request: RetrievalRequest, embedding_digest: str) -> str:
-    """Stable cache key for a retrieval request + embedding digest.
+def cache_key_for(
+    request: RetrievalRequest,
+    embedding_digest: str,
+    corpus_revision: int = 0,
+) -> str:
+    """Stable key for request, embedding version, and corpus revision.
 
-    The embedding digest is content-addressed; mixing it in means a
-    re-embedding of the same content does NOT invalidate the cache.
+    Changing either the embedding digest or corpus revision invalidates older
+    query-result cache entries without requiring global KV key deletion.
     """
     payload = {
         "topic": request.topic,
@@ -297,6 +320,7 @@ def cache_key_for(request: RetrievalRequest, embedding_digest: str) -> str:
         "min_authority": request.min_authority,
         "include_status": sorted(s.value for s in request.include_status),
         "embedding_digest": embedding_digest,
+        "corpus_revision": corpus_revision,
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return "q:" + hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
@@ -309,7 +333,7 @@ class CloudflareKnowledgeStore(KnowledgeStore):
 
     def __init__(
         self,
-        bindings: MockCloudflareBindings,
+        bindings: CloudflareBindingAdapter,
         *,
         embedding_digest: str = "stub-v0",
     ) -> None:
@@ -321,6 +345,7 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         self._b.d1_upsert(row)
         if obj.content:
             self._b.r2_put(r2_blob_key_for(obj.content_hash), obj.content.encode("utf-8"))
+        self._b.bump_cache_revision()
 
     def get(self, knowledge_id: KnowledgeId) -> KnowledgeObject | None:
         row = self._b.d1_get(knowledge_id)
@@ -342,7 +367,11 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         )
 
     def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
-        cache_key = cache_key_for(request, self._embedding_digest)
+        cache_key = cache_key_for(
+            request,
+            self._embedding_digest,
+            self._b.cache_revision(),
+        )
         cached = self._b.kv_get(cache_key)
         if cached is not None:
             payload = json.loads(cached)
@@ -376,8 +405,8 @@ class CloudflareKnowledgeStore(KnowledgeStore):
 
     def all(self) -> Iterable[KnowledgeObject]:
         out: list[KnowledgeObject] = []
-        for kid in tuple(self._b.rows.keys()):
-            obj = self.get(kid)
+        for row in self._b.d1_all():
+            obj = self.get(row.knowledge_id)
             if obj is not None:
                 out.append(obj)
         return tuple(out)
@@ -395,6 +424,7 @@ __all__ = [
     "CFPrimitive",
     "CFRow",
     "CFPlan",
+    "CloudflareBindingAdapter",
     "MockCloudflareBindings",
     "CloudflareKnowledgeStore",
     "cache_key_for",

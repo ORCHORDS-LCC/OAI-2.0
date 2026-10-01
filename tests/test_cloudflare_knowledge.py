@@ -98,7 +98,7 @@ def test_cache_key_is_stable_for_same_request() -> None:
 
     r1 = RetrievalRequest(topic="x", limit=8, min_authority=0.0)
     r2 = RetrievalRequest(topic="x", limit=8, min_authority=0.0)
-    assert cache_key_for(r1, "v1") == cache_key_for(r2, "v1")
+    assert cache_key_for(r1, "v1", 7) == cache_key_for(r2, "v1", 7)
 
 
 def test_cache_key_changes_when_status_set_changes() -> None:
@@ -109,13 +109,13 @@ def test_cache_key_changes_when_status_set_changes() -> None:
         topic="x",
         include_status=(Status.IMPLEMENTED,),
     )
-    assert cache_key_for(r1, "v1") != cache_key_for(r2, "v1")
+    assert cache_key_for(r1, "v1", 7) != cache_key_for(r2, "v1", 7)
 
 
-def test_cache_hit_returns_same_objects() -> None:
+def test_cache_revision_invalidates_after_write() -> None:
     b = MockCloudflareBindings()
     store = CloudflareKnowledgeStore(b)
-    obj = _make_obj("cache-me", "x")
+    obj = _make_obj("cache-me", "x", kid_suffix="one")
     store.put(obj)
 
     from oai2.knowledge import RetrievalRequest
@@ -123,13 +123,17 @@ def test_cache_hit_returns_same_objects() -> None:
     req = RetrievalRequest(topic="cache-me")
     r1 = store.retrieve(req)
     assert len(r1.objects) == 1
+    revision_before = b.cache_revision()
 
-    # Mutate the underlying store; cached retrieval should still match.
-    other = _make_obj("cache-me", "should-not-appear")
+    other = _make_obj("cache-me", "now-appears", kid_suffix="two")
     store.put(other)
+    assert b.cache_revision() == revision_before + 1
 
     r2 = store.retrieve(req)
-    assert [o.knowledge_id for o in r2.objects] == [obj.knowledge_id]
+    assert {o.knowledge_id for o in r2.objects} == {
+        obj.knowledge_id,
+        other.knowledge_id,
+    }
 
 
 def test_ingestion_pipeline_populates_cloudflare_store() -> None:
@@ -174,3 +178,20 @@ def test_cfrrow_is_frozen() -> None:
     except (AttributeError, dataclasses.FrozenInstanceError):
         return
     raise AssertionError("CFRow should be frozen")
+
+
+def test_all_uses_adapter_contract_not_mock_internals() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    a = _make_obj("all-a", "a", kid_suffix="a")
+    b_obj = _make_obj("all-b", "b", kid_suffix="b")
+    store.put(a)
+    store.put(b_obj)
+    assert {o.knowledge_id for o in store.all()} == {a.knowledge_id, b_obj.knowledge_id}
+
+
+def test_cache_key_changes_with_corpus_revision() -> None:
+    from oai2.knowledge import RetrievalRequest
+
+    req = RetrievalRequest(topic="x")
+    assert cache_key_for(req, "v1", 1) != cache_key_for(req, "v1", 2)
