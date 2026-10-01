@@ -9,8 +9,19 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Protocol
 
-from . import SuiteReport
+
+class CapabilityScoreLike(Protocol):
+    case_id: str
+
+
+class SuiteReportLike(Protocol):
+    capability: str
+    n_cases: int
+    n_passed: int
+    mean_score: float
+    scores: list[CapabilityScoreLike]
 
 
 @dataclass(slots=True, frozen=True)
@@ -68,8 +79,8 @@ class HeldOutPromotionEvaluation:
 
 def evaluate_held_out_promotion(
     *,
-    baseline_reports: tuple[SuiteReport, ...] | list[SuiteReport],
-    candidate_reports: tuple[SuiteReport, ...] | list[SuiteReport],
+    baseline_reports: tuple[SuiteReportLike, ...] | list[SuiteReportLike],
+    candidate_reports: tuple[SuiteReportLike, ...] | list[SuiteReportLike],
     budget: HeldOutPromotionBudget,
     training_case_ids: set[str] | frozenset[str],
     candidate_abstention_accuracy: float,
@@ -147,18 +158,18 @@ def evaluate_held_out_promotion(
 
 
 def _reports_by_capability(
-    reports: tuple[SuiteReport, ...] | list[SuiteReport],
+    reports: tuple[SuiteReportLike, ...] | list[SuiteReportLike],
     name: str,
-) -> dict[str, list[SuiteReport]]:
+) -> dict[str, list[SuiteReportLike]]:
     if not reports:
         raise ValueError(f"{name}_reports must not be empty")
-    out: dict[str, list[SuiteReport]] = {}
+    out: dict[str, list[SuiteReportLike]] = {}
     for report in reports:
         out.setdefault(report.capability, []).append(report)
     return out
 
 
-def _case_ids(reports: tuple[SuiteReport, ...] | list[SuiteReport]) -> set[str]:
+def _case_ids(reports: tuple[SuiteReportLike, ...] | list[SuiteReportLike]) -> set[str]:
     ids: set[str] = set()
     for report in reports:
         for score in report.scores:
@@ -170,7 +181,7 @@ def _case_ids(reports: tuple[SuiteReport, ...] | list[SuiteReport]) -> set[str]:
     return ids
 
 
-def _aggregate_reports(reports: list[SuiteReport]) -> tuple[float, float]:
+def _aggregate_reports(reports: list[SuiteReportLike]) -> tuple[float, float]:
     total_cases = sum(report.n_cases for report in reports)
     if total_cases <= 0:
         raise ValueError("capability reports must contain cases")
