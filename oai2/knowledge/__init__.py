@@ -1,8 +1,9 @@
-"""External knowledge abstraction backed by Cloudflare (scaffold only).
+"""External knowledge contracts for OAI-2.0.
 
-Status: PROPOSED. No live network calls in v0.1.0; the abstraction is
-defined, the contract is fixed, and the local in-memory implementation is
-exercised by unit tests. Real Cloudflare binding lands in a later release.
+The current package contains a tested application-level Cloudflare storage
+contract, deterministic mock bindings, and a strict q-pipe import gate.
+Live Cloudflare network wiring remains PROPOSED until a Worker transport is
+implemented and verified against production-safe bindings.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from .cloudflare import (
     CFPlan,
     CFPrimitive,
     CFRow,
+    CloudflareBindingAdapter,
     CloudflareKnowledgeStore,
     MockCloudflareBindings,
     cache_key_for,
@@ -29,6 +31,7 @@ from .cloudflare import (
 )
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
+    ImportPolicy,
     ImportReport,
     QPipeRow,
     QPipeSource,
@@ -50,6 +53,7 @@ __all__ = [
     "CFPlan",
     "CFPrimitive",
     "CFRow",
+    "CloudflareBindingAdapter",
     "CloudflareKnowledgeStore",
     "MockCloudflareBindings",
     "cache_key_for",
@@ -58,6 +62,7 @@ __all__ = [
     "r2_blob_key_for",
     "sha256_hex",
     "now_epoch",
+    "ImportPolicy",
     "ImportReport",
     "QPipeRow",
     "QPipeSource",
