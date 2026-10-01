@@ -89,6 +89,52 @@ ON CONFLICT(object_key) DO UPDATE SET
     updated_at = excluded.updated_at
 """.strip()
 
+
+GC_LEASE_ACQUIRE_SQL = f"""
+INSERT INTO {GC_LEASE_TABLE} (
+    object_key,
+    token,
+    owner,
+    acquired_at,
+    expires_at,
+    state,
+    failure_count,
+    finalized_decision,
+    authority_revision,
+    updated_at
+)
+SELECT
+    ?1, ?2, ?3, ?4, ?5, 'active', 0, NULL, ?6, ?4
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM knowledge_index
+    WHERE r2_blob_key = ?1
+)
+ON CONFLICT(object_key) DO UPDATE SET
+    token = excluded.token,
+    owner = excluded.owner,
+    acquired_at = excluded.acquired_at,
+    expires_at = excluded.expires_at,
+    state = 'active',
+    failure_count = 0,
+    finalized_decision = NULL,
+    authority_revision = excluded.authority_revision,
+    updated_at = excluded.updated_at
+WHERE
+    (
+        {GC_LEASE_TABLE}.state IN ('released', 'replaced')
+        OR (
+            {GC_LEASE_TABLE}.state IN ('active', 'delete_failed')
+            AND {GC_LEASE_TABLE}.expires_at <= excluded.acquired_at
+        )
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM knowledge_index
+        WHERE r2_blob_key = excluded.object_key
+    )
+""".strip()
+
 GC_LEASE_WRITER_BLOCK_SQL = f"""
 SELECT CASE
     WHEN EXISTS (
@@ -141,6 +187,7 @@ __all__ = [
     "GC_LEASE_SELECT_SQL",
     "GC_LEASE_REFERENCE_COUNT_SQL",
     "GC_LEASE_UPSERT_SQL",
+    "GC_LEASE_ACQUIRE_SQL",
     "GC_LEASE_WRITER_BLOCK_SQL",
     "GC_LEASE_VALIDATE_SQL",
     "gc_lease_schema_statements",
