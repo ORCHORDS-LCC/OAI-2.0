@@ -147,7 +147,7 @@ class GcSweepState:
         _require_bool(authorized, "authorized")
         _require_bool(recovery_ready, "recovery_ready")
         if lease_authority is not None:
-            _require_non_negative_number(lease_ttl_seconds, "lease_ttl_seconds")
+            _require_positive_number(lease_ttl_seconds, "lease_ttl_seconds")
 
         emitted: list[GcSweepRecord] = []
         attempted = 0
@@ -299,6 +299,19 @@ class GcSweepState:
                     )
                     self._record_and_advance(record, emitted)
                     continue
+
+            if lease_authority is not None and lease_token is not None:
+                if not lease_authority.validate_delete_lease(
+                    candidate.key, lease_token, now=float(now)
+                ):
+                    record = GcSweepRecord(
+                        key=candidate.key,
+                        disposition=GcSweepDisposition.LEASE_DENIED,
+                        processed_at=float(now),
+                        detail="d1-authoritative lease invalid before deletion",
+                    )
+                    self._record_without_advance(record, emitted)
+                    break
 
             try:
                 delete_blob(candidate.key)
@@ -547,6 +560,13 @@ def _require_non_negative_number(value: object, name: str) -> float:
     ):
         raise ValueError(f"{name} must be a finite non-negative number")
     return float(value)
+
+
+def _require_positive_number(value: object, name: str) -> float:
+    result = _require_non_negative_number(value, name)
+    if result <= 0:
+        raise ValueError(f"{name} must be greater than zero")
+    return result
 
 
 def _require_non_negative_int(value: object, name: str) -> int:

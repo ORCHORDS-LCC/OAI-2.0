@@ -446,3 +446,49 @@ def test_sweep_lease_authority_records_failure_when_delete_fails() -> None:
         authority.try_add_reference("oai2-blobs/a", "ko-recover")
         is GcReferenceDecision.BLOCKED_BY_DELETE_LEASE
     )
+
+
+
+def test_sweep_lease_authority_revalidates_before_delete() -> None:
+    """An invalidated lease must fail closed without deleting the body."""
+    blobs = {"oai2-blobs/a"}
+
+    class InvalidatingAuthority(GcDeleteLeaseAuthority):
+        def validate_delete_lease(self, key: str, token: str, *, now: float) -> bool:
+            return False
+
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+    result = state.process_batch(
+        now=100.0,
+        grace_seconds=0.0,
+        destructive=True,
+        authorized=True,
+        recovery_ready=True,
+        reference_lookup=lambda _key: (),
+        blob_exists=lambda key: key in blobs,
+        delete_blob=blobs.remove,
+        lease_authority=InvalidatingAuthority(),
+    )
+
+    assert result.records[0].disposition is GcSweepDisposition.LEASE_DENIED
+    assert result.complete is False
+    assert state.cursor == 0
+    assert blobs == {"oai2-blobs/a"}
+
+
+def test_sweep_lease_ttl_must_be_positive() -> None:
+    state = GcSweepState.from_report(_report("oai2-blobs/a"))
+
+    with pytest.raises(ValueError, match="lease_ttl_seconds must be greater than zero"):
+        state.process_batch(
+            now=100.0,
+            grace_seconds=0.0,
+            destructive=True,
+            authorized=True,
+            recovery_ready=True,
+            reference_lookup=lambda _key: (),
+            blob_exists=lambda _key: True,
+            delete_blob=lambda _key: None,
+            lease_authority=GcDeleteLeaseAuthority(),
+            lease_ttl_seconds=0.0,
+        )
