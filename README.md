@@ -15,7 +15,7 @@ OAI-2.0 is a public next-generation coding-agent research project focused on **l
 
 ## Current state — 2026-10-02
 
-_Documentation reconciled against `main` cc0a32588779aae42182b2e092582dddbcf11734 immediately before this docs update._
+_Documentation reconciled against current `main` during the 2026-10-02 repository-wide Markdown refresh; because parallel agents are active, the live branch may advance after this commit._
 
 OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
 
@@ -33,12 +33,13 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Capability-eval harness | **EXPERIMENTAL** |
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
 | Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
-| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — D1/R2/KV wrappers and D1 knowledge writer/delete-boundary pieces exist; live Worker + Vectorize + end-to-end network proof still incomplete |
+| Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — D1 reader/writer, R2/KV/Vectorize wrappers, and D1/R2 delete-boundary pieces exist; authenticated Worker + private end-to-end proof still incomplete |
 | R2 liveness dry-run reconciliation | **IMPLEMENTED work item / CLOSED #214** — non-destructive reconciliation and acceptance evidence recorded |
 | Conservative R2 orphan sweep core | **EXPERIMENTAL / OPEN #215** — grace/recheck/idempotent decision core exists; controlled live destructive proof remains |
 | D1 knowledge + GC transaction layer | **EXPERIMENTAL / OPEN #233** — durable revision/writer, lease persistence/runtime, and async D1/R2 delete boundary exist; sweep-planner/live concurrency proof remaining |
 | R2 / KV / Vectorize Worker binding wrappers | **EXPERIMENTAL source implementation** — async R2 body/existence/delete, best-effort KV get/put, and Vectorize upsert/query wrappers; deployment proof remaining |
-| QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — admission policy, exact-compatibility safe batching scheduler, and p95/p99/deadline promotion gate; live service/MLX integration remaining |
+| QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — admission policy and p95/p99/deadline promotion gate; live service/MLX integration remaining |
+| Safe session batching scheduler | **EXPERIMENTAL source implementation** — exact-compatibility isolation/batching core exists; final-model/service performance proof remains |
 | q-pipe compatibility/import gate | **IMPLEMENTED compatibility work item / CLOSED #20**; real 10–100 row migration remains **OPEN #21** |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
@@ -93,7 +94,7 @@ flowchart TD
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, an async D1 lease adapter with conditional acquire/revalidate/failure/finalize/release operations, and a durable D1 knowledge-index/corpus-revision writer that transactionally gates metadata writes on expected revision plus deletion-lease state; GC lease acquisition is now bound to the same authoritative corpus revision. Async D1, R2, KV, and Vectorize binding-facing primitives now exist, but source does **not** yet prove the complete authenticated Worker transport, end-to-end put/get/update/retrieve orchestration, sweep-planner integration against the D1-backed delete boundary, or a controlled live destructive R2 workflow.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, async D1 knowledge reader/writer plus R2/KV/Vectorize binding-facing primitives, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, an async D1 lease adapter with conditional acquire/revalidate/failure/finalize/release operations, and a durable D1 knowledge-index/corpus-revision writer that transactionally gates metadata writes on expected revision plus deletion-lease state; GC lease acquisition is now bound to the same authoritative corpus revision. Async D1, R2, KV, and Vectorize binding-facing primitives now exist, but source does **not** yet prove the complete authenticated Worker transport, end-to-end put/get/update/retrieve orchestration, sweep-planner integration against the D1-backed delete boundary, or a controlled live destructive R2 workflow.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 

@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Async D1 knowledge reader/query contracts and focused tests for the evolving live Cloudflare adapter surface.
+- Safe session-batching scheduler core with exact-compatibility isolation tests for concurrent inference groundwork.
+
 - Repository-wide Markdown reconciliation against current source/issues on 2026-10-02, including corrected closed/open status, Cloudflare progress, benchmark terminology, runner-free verification policy, and WP-76 mapping.
 - Async R2 and KV binding wrappers plus D1 knowledge-table/schema export coverage for the evolving live Cloudflare adapter surface.
 

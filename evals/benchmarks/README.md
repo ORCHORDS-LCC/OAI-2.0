@@ -1,12 +1,12 @@
 # OAI-2.0 MLX Benchmarks
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 ## Which numbers are current?
 
-Use **v0.2+ benchmark records** for prefill/TTFT/decode claims.
+Use **v0.2+ benchmark records** for prefill/TTFT and MLX-reported generation-throughput claims.
 
-The original v0.1 `bench_*.json` files are retained as historical bootstrap evidence only. They used a short `mlx_lm.generate` wall-clock interval that included prompt work, so their ~102–334 tok/s figures must **not** be described as clean pure-decode results.
+The original v0.1 `bench_*.json` files are retained as historical bootstrap evidence only. They used a short `mlx_lm.generate` wall-clock interval that included prompt work, so their ~102–334 tok/s figures must **not** be described as clean kernel-only decode results.
 
 ## Hardware for committed local records
 
@@ -35,13 +35,17 @@ Model: `mlx-community/Qwen2.5-0.5B-Instruct-4bit`
 | Prefill / TTFT | ~0.02544 s |
 | Prefill throughput | ~5,227.9 tok/s |
 | Decode | ~0.16566 s |
-| Pure decode throughput | ~198.47 tok/s |
+| MLX-reported generation throughput | ~198.47 tok/s |
 | End-to-end generation phase | ~0.19110 s |
 | Peak MLX memory | ~0.402 GB |
 | Active MLX memory | ~0.282 GB |
 | Cache memory | ~0.00869 GB |
 
-This is a **single smoke repetition**. It proves the corrected harness works; it does not establish stable model throughput.
+This is a **single smoke repetition**. It proves the harness records separated timing fields; it does not establish stable model throughput.
+
+## Terminology caveat
+
+`decode_tokens_per_second` is populated from MLX-LM's reported `generation_tps`. The local `decode_seconds` field measures the wall interval after the first yielded token. Therefore documentation calls the throughput figure **MLX-reported generation throughput**, not kernel-only or universally “pure decode” throughput.
 
 ## Harness
 
@@ -52,7 +56,7 @@ This is a **single smoke repetition**. It proves the corrected harness works; it
 - warm-up;
 - TTFT/prefill;
 - prefill tok/s;
-- pure decode duration/tok/s;
+- first-yield-to-end decode interval plus MLX-reported generation tok/s;
 - end-to-end generation;
 - actual generation token count;
 - MLX memory;

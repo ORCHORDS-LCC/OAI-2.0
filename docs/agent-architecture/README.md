@@ -26,10 +26,9 @@ Experimental source currently includes:
 - corrected MLX benchmark harness;
 - offline capability-evaluation scaffolds;
 - application-level Cloudflare knowledge contract + deterministic mocks;
-- versioned public-safe Cloudflare transport/schema models plus source-level async D1/R2/KV/Vectorize binding wrappers;
+- versioned public-safe Cloudflare transport/schema models plus source-level async D1 reader/writer and R2/KV/Vectorize binding wrappers;
 - reference-safe R2 reconciliation and conservative sweep core;
 - deterministic GC lease state model plus versioned D1 lease schema, async binding-facing adapter, durable D1 knowledge-index/corpus-revision writer, and async D1/R2 delete boundary;
-- async R2, KV, and Vectorize Worker-binding wrappers;
 - QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, exact-compatibility safe batching scheduler, and p95/p99/deadline promotion regression gate;
 - strict q-pipe verified-import policy.
 
