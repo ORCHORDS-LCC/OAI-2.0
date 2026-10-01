@@ -119,6 +119,7 @@ from .sweep import (
     GcSweepRecord,
     GcSweepState,
 )
+from .worker_transport import EmbeddingProvider, KnowledgeWorkerTransport
 from .transport import (
     TRANSPORT_VERSION,
     D1KnowledgeIndexRecord,
@@ -225,6 +226,8 @@ __all__ = [
     "derive_authority",
     "import_qpipe_rows",
     "row_to_knowledge_object",
+    "EmbeddingProvider",
+    "KnowledgeWorkerTransport",
     "TRANSPORT_VERSION",
     "TransportOperation",
     "TransportErrorCode",
