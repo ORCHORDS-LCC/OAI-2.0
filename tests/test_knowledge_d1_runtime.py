@@ -117,3 +117,26 @@ async def test_write_metadata_fails_closed_on_inconsistent_batch_counts() -> Non
     writer = D1KnowledgeWriter(db)
     with pytest.raises(RuntimeError, match="inconsistent mutation counts"):
         await writer.write_metadata(_row(), expected_revision=7, now=12.0)
+
+
+
+def test_d1_knowledge_writer_exports() -> None:
+    from oai2.knowledge import (
+        D1KnowledgeWriter as ExportedWriter,
+        KNOWLEDGE_CORPUS_ADVANCE_SQL as ExportedAdvance,
+        KNOWLEDGE_CORPUS_REVISION_SQL as ExportedRevision,
+        KNOWLEDGE_SCHEMA_VERSION as ExportedVersion,
+        KNOWLEDGE_WRITER_UPSERT_SQL as ExportedUpsert,
+    )
+    from oai2.knowledge.knowledge_d1 import (
+        KNOWLEDGE_CORPUS_ADVANCE_SQL,
+        KNOWLEDGE_CORPUS_REVISION_SQL,
+        KNOWLEDGE_SCHEMA_VERSION,
+        KNOWLEDGE_WRITER_UPSERT_SQL,
+    )
+
+    assert ExportedWriter is D1KnowledgeWriter
+    assert ExportedAdvance is KNOWLEDGE_CORPUS_ADVANCE_SQL
+    assert ExportedRevision is KNOWLEDGE_CORPUS_REVISION_SQL
+    assert ExportedUpsert is KNOWLEDGE_WRITER_UPSERT_SQL
+    assert ExportedVersion == KNOWLEDGE_SCHEMA_VERSION == 1
