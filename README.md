@@ -34,7 +34,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
 | Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
 | D1 knowledge + GC transaction layer | **EXPERIMENTAL source implementation** — durable corpus revision, lease-aware metadata writer, async lease acquire/revalidate/finalize/release; live sweep/deployment proof remaining |
-| QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests; service/scheduler integration remaining |
+| QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests plus p95/p99/deadline promotion gate; service/scheduler integration remaining |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
