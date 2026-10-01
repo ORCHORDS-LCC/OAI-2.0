@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import Status
+from ..model import NumericalOperation, check_numerics
 
 
 class ModelSpec(BaseModel):
@@ -60,6 +61,11 @@ def smoke_check() -> tuple[bool, str]:
         a = mx.array([1.0, 2.0, 3.0])
         b = mx.array([[1.0], [1.0], [1.0]])
         out = (a @ b).item()
+        check_numerics(
+            [float(out)],
+            operation=NumericalOperation.LONG_CONTEXT_REDUCTION,
+            stage="runtime.smoke.matmul_reduction",
+        )
         device = str(mx.default_device())
     except Exception as exc:  # pragma: no cover
         return False, f"{type(exc).__name__}: {exc}"

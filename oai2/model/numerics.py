@@ -40,7 +40,9 @@ REFERENCE_PRECISION_RULES: dict[NumericalOperation, PrecisionRule] = {
     NumericalOperation.NORMALIZATION: PrecisionRule("fp32", "bf16", "fp32"),
     NumericalOperation.ROUTER_PROBABILITIES: PrecisionRule("fp32", "bf16", "fp32"),
     NumericalOperation.LOSS: PrecisionRule("fp32", "fp32", "fp32"),
-    NumericalOperation.QUANTIZE_DEQUANTIZE: PrecisionRule("fp32", "int4_or_int8", "fp32"),
+    NumericalOperation.QUANTIZE_DEQUANTIZE: PrecisionRule(
+        "fp32", "int4_or_int8", "fp32"
+    ),
     NumericalOperation.LONG_CONTEXT_REDUCTION: PrecisionRule("fp32", "bf16", "fp32"),
 }
 
