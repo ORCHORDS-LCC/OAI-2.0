@@ -33,3 +33,25 @@ def test_iter_text_files_skips_virtualenv_and_cache_dirs(tmp_path: Path) -> None
         assert "__pycache__/x.py" not in found
     finally:
         verify.ROOT = old_root
+
+
+def test_run_check_reports_failure(monkeypatch) -> None:
+    class Result:
+        returncode = 7
+
+    monkeypatch.setattr(verify.subprocess, "run", lambda *args, **kwargs: Result())
+    assert verify.run_check("controlled-failure", ("false-command",)) is False
+
+
+def test_main_returns_nonzero_on_mandatory_check_failure(monkeypatch) -> None:
+    monkeypatch.setattr(verify, "CHECKS", (("controlled-failure", ("false-command",)),))
+    monkeypatch.setattr(verify, "run_check", lambda name, command: False)
+    assert verify.main() == 1
+
+
+def test_main_reaches_success_when_all_gates_pass(monkeypatch) -> None:
+    monkeypatch.setattr(verify, "CHECKS", (("controlled-pass", ("true-command",)),))
+    monkeypatch.setattr(verify, "run_check", lambda name, command: True)
+    monkeypatch.setattr(verify, "run_public_safety_scan", lambda: True)
+    monkeypatch.setattr(verify, "run_markdown_link_scan", lambda: True)
+    assert verify.main() == 0
