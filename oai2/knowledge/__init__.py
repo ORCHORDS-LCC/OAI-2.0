@@ -32,9 +32,11 @@ from .cloudflare import (
 from .cloudflare_bindings_runtime import (
     CloudflareKvCache,
     CloudflareR2Store,
+    CloudflareVectorizeStore,
     KvNamespaceBinding,
     R2BucketBinding,
     R2ObjectBodyBinding,
+    VectorizeIndexBinding,
 )
 from .gc import (
     GcDryRunReport,
@@ -135,9 +137,11 @@ __all__ = [
     "IngestionStatus",
     "CloudflareKvCache",
     "CloudflareR2Store",
+    "CloudflareVectorizeStore",
     "KvNamespaceBinding",
     "R2BucketBinding",
     "R2ObjectBodyBinding",
+    "VectorizeIndexBinding",
     "CFPlan",
     "CFPrimitive",
     "CFRow",
