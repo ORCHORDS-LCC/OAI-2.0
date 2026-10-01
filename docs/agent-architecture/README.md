@@ -53,9 +53,18 @@ Not yet implemented as production capabilities:
 11. [Security and sandboxing](SECURITY_AND_SANDBOXING.md)
 12. [Roadmap](ROADMAP.md)
 13. [Sources](SOURCES.md)
+14. [Engineering issue/traceability standard](ENGINEERING_ISSUE_STANDARD.md)
 
 ## Design principle
 
 > **LARGE TOTAL INTELLIGENCE CAPACITY, SMALL DYNAMIC INSTANTANEOUS COMPUTE.**
 
 The goal is not a tiny model with retrieval. The target is a large-capacity multimodal coding intelligence whose active experts/depth scale with task difficulty.
+
+
+## Implementation issue hierarchy
+
+- **Master implementation map:** [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1)
+- Detailed work packages and work items use `WP-*`, `WI-*`, `REQ-*`, `AC-*`, `VER-*`, `RISK-*`, `DEP-*`, and `EVID-*` identifiers.
+- The issue hierarchy is canonical for dependency/acceptance tracking; Markdown describes the architecture and current public-safe state.
+- OAI-2.0 remains **runner-free**: no GitHub-hosted or self-hosted runner is an acceptance mechanism.

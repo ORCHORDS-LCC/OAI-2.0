@@ -17,7 +17,7 @@ OAI-2.0 is a public next-generation coding-agent research project focused on **l
 
 OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
 
-The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). This project intentionally uses **runner-free local verification**; GitHub Actions runners are not part of the acceptance workflow.
+The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). This project intentionally uses **runner-free local verification**; GitHub Actions runners are not part of the acceptance workflow. A local preflight exists at `scripts/verify.py`; it must be executed locally for acceptance evidence.
 
 | Area | Current status |
 | --- | --- |
