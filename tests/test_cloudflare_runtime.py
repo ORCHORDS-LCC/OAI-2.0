@@ -448,14 +448,17 @@ def test_async_cloudflare_runtime_exports_from_knowledge_package() -> None:
     from oai2.knowledge import KnowledgeConflictError as ExportedConflict
     from oai2.knowledge import KnowledgeIntegrityError as ExportedIntegrity
     from oai2.knowledge import KnowledgeRuntimeError as ExportedRuntimeError
+    from oai2.knowledge import RetrievalCandidate as ExportedCandidate
     from oai2.knowledge.cloudflare_runtime import (
         AsyncCloudflareKnowledgeRuntime,
         KnowledgeConflictError,
         KnowledgeIntegrityError,
         KnowledgeRuntimeError,
     )
+    from oai2.knowledge.abstraction import RetrievalCandidate
 
     assert ExportedRuntime is AsyncCloudflareKnowledgeRuntime
     assert ExportedConflict is KnowledgeConflictError
     assert ExportedIntegrity is KnowledgeIntegrityError
     assert ExportedRuntimeError is KnowledgeRuntimeError
+    assert ExportedCandidate is RetrievalCandidate
