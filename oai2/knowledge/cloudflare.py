@@ -341,6 +341,11 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         self._embedding_digest = embedding_digest
 
     def put(self, obj: KnowledgeObject) -> None:
+        expected_hash = sha256_hex(obj.content)
+        if obj.content_hash != expected_hash:
+            raise ValueError(
+                "content_hash does not match the KnowledgeObject content"
+            )
         row = object_to_row(obj)
         self._b.d1_upsert(row)
         if obj.content:
@@ -351,8 +356,15 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         row = self._b.d1_get(knowledge_id)
         if row is None:
             return None
-        blob = self._b.r2_get(row.r2_blob_key) if row.r2_blob_key else None
-        content = blob.decode("utf-8") if blob is not None else ""
+        blob = self._b.r2_get(row.r2_blob_key) if row.r2_blob_key else b""
+        if blob is None:
+            raise ValueError("content blob is missing for the indexed knowledge row")
+        try:
+            content = blob.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("content blob is not valid UTF-8") from exc
+        if sha256_hex(content) != row.content_hash:
+            raise ValueError("content blob hash does not match the indexed row")
         return KnowledgeObject(
             knowledge_id=row.knowledge_id,
             topic=row.topic,
