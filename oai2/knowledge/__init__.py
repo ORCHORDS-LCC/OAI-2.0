@@ -38,6 +38,10 @@ from .cloudflare_bindings_runtime import (
     R2ObjectBodyBinding,
     VectorizeIndexBinding,
 )
+from .cloudflare_factory import (
+    CloudflareKnowledgeComponents,
+    build_cloudflare_knowledge_components,
+)
 from .cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
@@ -144,6 +148,8 @@ __all__ = [
     "IngestionJob",
     "IngestionPipeline",
     "IngestionStatus",
+    "CloudflareKnowledgeComponents",
+    "build_cloudflare_knowledge_components",
     "AsyncCloudflareKnowledgeRuntime",
     "KnowledgeRuntimeError",
     "KnowledgeConflictError",
