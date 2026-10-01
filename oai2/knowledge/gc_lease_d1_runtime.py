@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol, Self
 
 from .gc_lease_d1 import (
+    GC_LEASE_ACQUIRE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_UPSERT_SQL,
     GC_LEASE_VALIDATE_SQL,
@@ -64,6 +65,42 @@ class D1GcLeaseStore:
             .first("retained_reference_count")
         )
         return _non_negative_int(value, "retained_reference_count")
+
+    async def acquire_lease(
+        self,
+        *,
+        object_key: str,
+        token: str,
+        owner: str,
+        now: float,
+        ttl_seconds: float,
+        authority_revision: int,
+    ) -> bool:
+        """Atomically claim an unreferenced object when no live lease blocks takeover."""
+        key = _normalized(object_key, "object_key")
+        lease_token = _normalized(token, "token")
+        lease_owner = _normalized(owner, "owner")
+        acquired = _finite_non_negative(now, "now")
+        ttl = _finite_positive(ttl_seconds, "ttl_seconds")
+        revision = _non_negative_int(authority_revision, "authority_revision")
+        result = await (
+            self._db.prepare(GC_LEASE_ACQUIRE_SQL)
+            .bind(
+                key,
+                lease_token,
+                lease_owner,
+                acquired,
+                acquired + ttl,
+                revision,
+            )
+            .run()
+        )
+        if not _result_success(result):
+            raise RuntimeError("D1 lease acquisition reported an unsuccessful statement")
+        changes = _result_changes(result)
+        if changes not in (0, 1):
+            raise RuntimeError("D1 lease acquisition changed an unexpected number of rows")
+        return changes == 1
 
     async def writer_blocked(self, object_key: str, *, now: float) -> bool:
         """Return whether an active, unexpired lease blocks a new reference."""
@@ -146,6 +183,18 @@ def _result_success(result: object) -> bool:
     return value
 
 
+def _result_changes(result: object) -> int:
+    if isinstance(result, Mapping):
+        meta = result.get("meta")
+    else:
+        meta = getattr(result, "meta", None)
+    if isinstance(meta, Mapping):
+        changes = meta.get("changes")
+    else:
+        changes = getattr(meta, "changes", None)
+    return _non_negative_int(changes, "changes")
+
+
 def _normalized(value: object, name: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty normalized string")
@@ -161,6 +210,13 @@ def _finite_non_negative(value: object, name: str) -> float:
     ):
         raise ValueError(f"{name} must be a finite non-negative number")
     return float(value)
+
+
+def _finite_positive(value: object, name: str) -> float:
+    result = _finite_non_negative(value, name)
+    if result <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return result
 
 
 def _non_negative_int(value: object, name: str) -> int:
