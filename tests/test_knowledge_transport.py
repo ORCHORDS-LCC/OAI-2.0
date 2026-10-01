@@ -188,3 +188,69 @@ def test_auth_context_contains_identity_not_credentials() -> None:
     )
     dumped = auth.model_dump()
     assert set(dumped) == {"subject", "capabilities", "expires_at"}
+
+
+def test_transport_symbols_are_exported_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        TRANSPORT_VERSION as ExportedTransportVersion,
+    )
+    from oai2.knowledge import (
+        D1KnowledgeIndexRecord as ExportedD1Record,
+    )
+    from oai2.knowledge import (
+        KnowledgeCacheRef as ExportedCacheRef,
+    )
+    from oai2.knowledge import (
+        KnowledgeTransportRequest as ExportedRequest,
+    )
+    from oai2.knowledge import (
+        KnowledgeTransportResponse as ExportedResponse,
+    )
+    from oai2.knowledge import (
+        QueryCacheEnvelope as ExportedQueryEnvelope,
+    )
+    from oai2.knowledge import (
+        R2BodyDescriptor as ExportedR2Descriptor,
+    )
+    from oai2.knowledge import (
+        TransportAuthContext as ExportedAuthContext,
+    )
+    from oai2.knowledge import (
+        TransportError as ExportedTransportError,
+    )
+    from oai2.knowledge import (
+        TransportErrorCode as ExportedErrorCode,
+    )
+    from oai2.knowledge import (
+        TransportOperation as ExportedOperation,
+    )
+    from oai2.knowledge import (
+        VectorizeMetadata as ExportedVectorizeMetadata,
+    )
+    from oai2.knowledge.transport import (
+        TRANSPORT_VERSION,
+        D1KnowledgeIndexRecord,
+        KnowledgeCacheRef,
+        KnowledgeTransportRequest,
+        KnowledgeTransportResponse,
+        QueryCacheEnvelope,
+        R2BodyDescriptor,
+        TransportAuthContext,
+        TransportError,
+        TransportErrorCode,
+        TransportOperation,
+        VectorizeMetadata,
+    )
+
+    assert ExportedTransportVersion is TRANSPORT_VERSION
+    assert ExportedD1Record is D1KnowledgeIndexRecord
+    assert ExportedCacheRef is KnowledgeCacheRef
+    assert ExportedRequest is KnowledgeTransportRequest
+    assert ExportedResponse is KnowledgeTransportResponse
+    assert ExportedQueryEnvelope is QueryCacheEnvelope
+    assert ExportedR2Descriptor is R2BodyDescriptor
+    assert ExportedAuthContext is TransportAuthContext
+    assert ExportedTransportError is TransportError
+    assert ExportedErrorCode is TransportErrorCode
+    assert ExportedOperation is TransportOperation
+    assert ExportedVectorizeMetadata is VectorizeMetadata
