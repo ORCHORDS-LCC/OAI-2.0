@@ -49,6 +49,15 @@ from .cloudflare_runtime import (
     KnowledgeIntegrityError,
     KnowledgeRuntimeError,
 )
+from .evidence_package import (
+    EVIDENCE_PACKAGE_VERSION,
+    EvidencePackage,
+    EvidencePackageEntry,
+    RetrievalMetrics,
+    TokenCounter,
+    build_evidence_package,
+    evaluate_retrieval_package,
+)
 from .gc import (
     GcDryRunReport,
     GcObjectDisposition,
@@ -173,6 +182,13 @@ __all__ = [
     "hash_topic",
     "object_to_row",
     "r2_blob_key_for",
+    "EVIDENCE_PACKAGE_VERSION",
+    "TokenCounter",
+    "EvidencePackageEntry",
+    "EvidencePackage",
+    "RetrievalMetrics",
+    "build_evidence_package",
+    "evaluate_retrieval_package",
     "D1DeleteOutcome",
     "D1DeleteResult",
     "delete_candidate_with_d1_lease",
