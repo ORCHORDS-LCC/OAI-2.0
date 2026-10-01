@@ -7,6 +7,8 @@ endpoints, or credentials.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 
@@ -34,6 +36,16 @@ class KvNamespaceBinding(Protocol):
         *,
         expirationTtl: int | None = None,
     ) -> None: ...
+
+
+class VectorizeIndexBinding(Protocol):
+    async def upsert(self, vectors: Sequence[Mapping[str, object]]) -> object: ...
+
+    async def query(
+        self,
+        vector: Sequence[float],
+        options: Mapping[str, object] | None = None,
+    ) -> object: ...
 
 
 class CloudflareR2Store:
@@ -69,6 +81,68 @@ class CloudflareR2Store:
         await self._bucket.delete(key)
 
 
+class CloudflareVectorizeStore:
+    """Minimal async adapter over a bound Cloudflare Vectorize index.
+
+    Upserts are eventually query-visible; callers must not treat successful
+    upsert return as proof that a subsequent query can already observe it.
+    """
+
+    def __init__(self, index: VectorizeIndexBinding) -> None:
+        self._index = index
+
+    async def upsert(
+        self,
+        vector_id: str,
+        values: Sequence[float],
+        *,
+        metadata: Mapping[str, object] | None = None,
+    ) -> object:
+        vid = _normalized(vector_id, "vector_id")
+        normalized = _vector(values)
+        payload: dict[str, object] = {
+            "id": vid,
+            "values": normalized,
+        }
+        if metadata is not None:
+            payload["metadata"] = dict(metadata)
+        result = await self._index.upsert([payload])
+        if result is None:
+            raise RuntimeError("Vectorize upsert returned no mutation result")
+        return result
+
+    async def query(
+        self,
+        values: Sequence[float],
+        *,
+        top_k: int = 5,
+    ) -> list[tuple[str, float]]:
+        normalized = _vector(values)
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 100:
+            raise ValueError("top_k must be an integer between 1 and 100")
+        result = await self._index.query(normalized, {"topK": top_k})
+        matches = _field(result, "matches")
+        if not isinstance(matches, Sequence) or isinstance(
+            matches, (str, bytes, bytearray)
+        ):
+            raise RuntimeError("Vectorize query result does not expose a matches sequence")
+
+        out: list[tuple[str, float]] = []
+        for match in matches:
+            vector_id = _field(match, "id")
+            score = _field(match, "score")
+            if not isinstance(vector_id, str) or not vector_id.strip():
+                raise RuntimeError("Vectorize match has an invalid id")
+            if (
+                isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(float(score))
+            ):
+                raise RuntimeError("Vectorize match has an invalid score")
+            out.append((vector_id, float(score)))
+        return out
+
+
 class CloudflareKvCache:
     """Best-effort text cache wrapper over a bound Workers KV namespace."""
 
@@ -100,6 +174,27 @@ class CloudflareKvCache:
         await self._namespace.put(key, value, expirationTtl=ttl_seconds)
 
 
+def _field(value: object, name: str) -> object | None:
+    if isinstance(value, Mapping):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _vector(values: Sequence[float]) -> list[float]:
+    if isinstance(values, (str, bytes, bytearray)) or not values:
+        raise ValueError("vector values must be a non-empty numeric sequence")
+    out: list[float] = []
+    for value in values:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+        ):
+            raise ValueError("vector values must be finite numbers")
+        out.append(float(value))
+    return out
+
+
 def _normalized(value: object, name: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{name} must be a non-empty normalized string")
@@ -110,6 +205,8 @@ __all__ = [
     "R2ObjectBodyBinding",
     "R2BucketBinding",
     "KvNamespaceBinding",
+    "VectorizeIndexBinding",
     "CloudflareR2Store",
+    "CloudflareVectorizeStore",
     "CloudflareKvCache",
 ]
