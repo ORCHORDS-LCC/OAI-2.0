@@ -15,8 +15,18 @@ from oai2.runtime import PlaceholderRuntime
 
 def test_all_builtin_suites_construct() -> None:
     names = set(BUILTIN_SUITES_NAMES)
-    assert {"coding", "tool_use", "bug_diagnosis", "reasoning",
-            "verification", "vision", "orchestration"} <= names
+    assert {
+        "coding",
+        "tool_use",
+        "bug_diagnosis",
+        "reasoning",
+        "verification",
+        "vision",
+        "orchestration",
+        "multi_file_reasoning",
+        "abstention",
+        "conflicting_evidence",
+    } <= names
 
 
 def test_suite_has_cases() -> None:
@@ -147,3 +157,72 @@ def test_evals_package_full_surface_identity() -> None:
     assert evals_pkg.TruthSample is _SrcTruthSample
     assert evals_pkg.evaluate_truth_promotion is _SrcEvaluateTruthPromotion
     assert evals_pkg.summarize_truth is _SrcSummarizeTruth
+
+
+def test_every_builtin_case_declares_test_procedure_and_evidence() -> None:
+    for suite in builtin_suites():
+        for case in suite.cases:
+            assert case.preconditions
+            assert case.procedure
+            assert case.expected_evidence
+            assert all(item.strip() for item in case.preconditions)
+            assert all(item.strip() for item in case.procedure)
+            assert all(item.strip() for item in case.expected_evidence)
+
+
+def test_missing_required_capability_classes_are_machine_verifiable() -> None:
+    assert builtin_suite("multi_file_reasoning").scorer == "regex_all"
+    assert builtin_suite("abstention").scorer == "regex_all"
+    assert builtin_suite("conflicting_evidence").scorer == "regex_all"
+    assert builtin_suite("multi_file_reasoning").cases[0].expected_patterns
+    assert builtin_suite("abstention").cases[0].forbidden_patterns
+    assert len(builtin_suite("conflicting_evidence").cases[0].expected_patterns) >= 2
+
+
+def test_regex_all_requires_every_expected_pattern() -> None:
+    from types import SimpleNamespace
+
+    from oai2.evals import CapabilityCase, SCORERS
+
+    case = CapabilityCase(
+        case_id="all-patterns",
+        capability="verification",
+        prompt="p",
+        expected_patterns=(r"alpha", r"beta"),
+    )
+    scorer = SCORERS["regex_all"]
+
+    passed = scorer(case, SimpleNamespace(text="alpha beta"))  # type: ignore[arg-type]
+    assert passed.passed is True
+    assert passed.score == 1.0
+
+    missing = scorer(case, SimpleNamespace(text="alpha"))  # type: ignore[arg-type]
+    assert missing.passed is False
+    assert missing.notes == "missing-required-pattern"
+
+
+def test_regex_all_honors_forbidden_patterns() -> None:
+    from types import SimpleNamespace
+
+    from oai2.evals import CapabilityCase, SCORERS
+
+    case = CapabilityCase(
+        case_id="forbidden",
+        capability="abstention",
+        prompt="p",
+        expected_patterns=(r"not verified",),
+        forbidden_patterns=(r"verified working",),
+    )
+    score = SCORERS["regex_all"](
+        case,
+        SimpleNamespace(text="not verified; verified working"),  # type: ignore[arg-type]
+    )
+    assert score.passed is False
+    assert score.notes == "forbidden-match"
+
+
+def test_all_declared_evals_exports_are_importable() -> None:
+    import oai2.evals as evals_pkg
+
+    for name in evals_pkg.__all__:
+        assert hasattr(evals_pkg, name), name
