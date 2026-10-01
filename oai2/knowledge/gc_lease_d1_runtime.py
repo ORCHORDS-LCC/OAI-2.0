@@ -16,7 +16,10 @@ from typing import Protocol, Self
 
 from .gc_lease_d1 import (
     GC_LEASE_ACQUIRE_SQL,
+    GC_LEASE_FINALIZE_SQL,
+    GC_LEASE_RECORD_FAILURE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
+    GC_LEASE_RELEASE_SQL,
     GC_LEASE_UPSERT_SQL,
     GC_LEASE_VALIDATE_SQL,
     GC_LEASE_WRITER_BLOCK_SQL,
@@ -125,6 +128,83 @@ class D1GcLeaseStore:
         )
         return _strict_boolean_int(value, "lease_valid")
 
+    async def record_delete_failure(
+        self,
+        *,
+        object_key: str,
+        token: str,
+        now: float,
+        authority_revision: int,
+    ) -> bool:
+        """Record retryable R2 failure while preserving writer exclusion."""
+        return await self._guarded_transition(
+            GC_LEASE_RECORD_FAILURE_SQL,
+            object_key,
+            token,
+            now,
+            authority_revision,
+        )
+
+    async def finalize_delete(
+        self,
+        *,
+        object_key: str,
+        token: str,
+        now: float,
+        already_absent: bool,
+        authority_revision: int,
+    ) -> bool:
+        """Finalize a confirmed delete/already-absent outcome."""
+        if not isinstance(already_absent, bool):
+            raise ValueError("already_absent must be a boolean")
+        key = _normalized(object_key, "object_key")
+        lease_token = _normalized(token, "token")
+        timestamp = _finite_non_negative(now, "now")
+        revision = _non_negative_int(authority_revision, "authority_revision")
+        decision = "already_absent" if already_absent else "deleted"
+        result = await (
+            self._db.prepare(GC_LEASE_FINALIZE_SQL)
+            .bind(key, lease_token, timestamp, decision, revision)
+            .run()
+        )
+        return _single_row_transition(result, "lease finalize")
+
+    async def release_lease(
+        self,
+        *,
+        object_key: str,
+        token: str,
+        now: float,
+        authority_revision: int,
+    ) -> bool:
+        """Release an active/failed lease without marking the body deleted."""
+        return await self._guarded_transition(
+            GC_LEASE_RELEASE_SQL,
+            object_key,
+            token,
+            now,
+            authority_revision,
+        )
+
+    async def _guarded_transition(
+        self,
+        sql: str,
+        object_key: str,
+        token: str,
+        now: float,
+        authority_revision: int,
+    ) -> bool:
+        key = _normalized(object_key, "object_key")
+        lease_token = _normalized(token, "token")
+        timestamp = _finite_non_negative(now, "now")
+        revision = _non_negative_int(authority_revision, "authority_revision")
+        result = await (
+            self._db.prepare(sql)
+            .bind(key, lease_token, timestamp, revision)
+            .run()
+        )
+        return _single_row_transition(result, "lease transition")
+
     async def upsert_lease(
         self,
         *,
@@ -181,6 +261,15 @@ def _result_success(result: object) -> bool:
     if not isinstance(value, bool):
         raise RuntimeError("D1 result does not expose a boolean success field")
     return value
+
+
+def _single_row_transition(result: object, name: str) -> bool:
+    if not _result_success(result):
+        raise RuntimeError(f"D1 {name} reported an unsuccessful statement")
+    changes = _result_changes(result)
+    if changes not in (0, 1):
+        raise RuntimeError(f"D1 {name} changed an unexpected number of rows")
+    return changes == 1
 
 
 def _result_changes(result: object) -> int:
