@@ -81,3 +81,19 @@ Current source now includes a deterministic held-out truth-case runner. The cand
 Truth promotion is also coupled to verified-task regression. A speedup is recorded as evidence only; it cannot override a truth-budget failure or an excessive verified-task regression. This prevents a faster/shorter candidate from being promoted solely because throughput improved while misleading claims worsened.
 
 The remaining WI-TRUTH-002 boundary is empirical: execute a genuinely held-out corpus against a baseline and candidate, keep verifier evidence inaccessible during generation, and record materially lower fabrication/false-success rates without unacceptable verified-task loss.
+
+
+## Held-out capability regression gate
+
+WI-EVAL-002 now has a source-level held-out promotion gate in `oai2/evals/regression.py`.
+
+The gate requires:
+
+- baseline and candidate reports over identical held-out case IDs;
+- explicit rejection when any held-out case overlaps declared training/tuning case IDs;
+- explicit per-capability pass-rate and mean-score regression tolerances;
+- an abstention-accuracy floor;
+- a false-success-rate ceiling;
+- explicit thresholds for every candidate capability, so aggregate gains cannot hide an unbudgeted category regression.
+
+A candidate that improves coding while materially degrading verification is rejected even if its aggregate result looks better. A non-regressing control candidate passes under the same declared budget.
