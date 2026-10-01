@@ -22,6 +22,10 @@ def _sample(
     verified: bool = True,
     actions: int = 1,
     tps: float = 100.0,
+    tool_ms: float = 0.0,
+    retrieval_ms: float = 0.0,
+    vision_ms: float = 0.0,
+    build_test_ms: float = 0.0,
 ) -> WorkloadSample:
     return WorkloadSample(
         workload=WorkloadClass.NORMAL,
@@ -35,6 +39,10 @@ def _sample(
         verified_actions=actions,
         generated_tokens=32,
         decode_tokens_per_second=tps,
+        tool_ms=tool_ms,
+        retrieval_ms=retrieval_ms,
+        vision_ms=vision_ms,
+        build_test_ms=build_test_ms,
     )
 
 
@@ -63,6 +71,37 @@ def test_summary_separates_ttft_from_first_useful_action_and_tail() -> None:
     assert report.end_to_end_ms.p99 > report.end_to_end_ms.p95
     assert report.decode_tokens_per_second.mean == pytest.approx(315.0)
     assert report.verified_success_rate == 1.0
+
+
+def test_summary_reports_component_latency_decomposition() -> None:
+    report = summarize_samples(
+        [
+            _sample(
+                ttft=10,
+                useful=100,
+                total=400,
+                tool_ms=40,
+                retrieval_ms=80,
+                vision_ms=0,
+                build_test_ms=120,
+            ),
+            _sample(
+                ttft=12,
+                useful=120,
+                total=500,
+                tool_ms=60,
+                retrieval_ms=120,
+                vision_ms=20,
+                build_test_ms=180,
+            ),
+        ]
+    )
+    assert report.tool_ms.mean == pytest.approx(50.0)
+    assert report.retrieval_ms.mean == pytest.approx(100.0)
+    assert report.vision_ms.mean == pytest.approx(10.0)
+    assert report.build_test_ms.mean == pytest.approx(150.0)
+    assert report.tool_ms.count == 2
+    assert report.build_test_ms.p95 > 170
 
 
 def test_false_success_and_verified_useful_work_are_reported() -> None:

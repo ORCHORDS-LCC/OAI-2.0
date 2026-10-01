@@ -137,6 +137,10 @@ class WorkloadReport:
     first_useful_action_ms: Distribution
     end_to_end_ms: Distribution
     decode_tokens_per_second: Distribution
+    tool_ms: Distribution
+    retrieval_ms: Distribution
+    vision_ms: Distribution
+    build_test_ms: Distribution
     verified_success_rate: float
     false_success_rate: float
     verified_actions_per_second: float
@@ -203,6 +207,10 @@ def summarize_samples(samples: list[WorkloadSample]) -> WorkloadReport:
         decode_tokens_per_second=_distribution(
             [sample.decode_tokens_per_second for sample in samples]
         ),
+        tool_ms=_distribution([sample.tool_ms for sample in samples]),
+        retrieval_ms=_distribution([sample.retrieval_ms for sample in samples]),
+        vision_ms=_distribution([sample.vision_ms for sample in samples]),
+        build_test_ms=_distribution([sample.build_test_ms for sample in samples]),
         verified_success_rate=sum(sample.verified_success for sample in samples) / n,
         false_success_rate=sum(sample.false_success for sample in samples) / n,
         verified_actions_per_second=(
