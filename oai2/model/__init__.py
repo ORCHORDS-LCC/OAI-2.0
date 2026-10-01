@@ -9,6 +9,11 @@ from .numerical_compare import (
     compare_numerical_paths,
     select_numerical_path,
 )
+from .numerical_promotion import (
+    NumericalCandidateKind,
+    NumericalPromotionEvidence,
+    evaluate_numerical_candidate,
+)
 from .numerics import (
     NUMERICAL_POLICY_VERSION,
     REFERENCE_PRECISION_RULES,
@@ -29,6 +34,9 @@ __all__ = [
     "NumericalToleranceProfile",
     "compare_numerical_paths",
     "select_numerical_path",
+    "NumericalCandidateKind",
+    "NumericalPromotionEvidence",
+    "evaluate_numerical_candidate",
     "NUMERICAL_POLICY_VERSION",
     "NumericalCheckResult",
     "NumericalFailure",
