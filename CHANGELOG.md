@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Repository/tool/web claim-evidence path adapters consuming the versioned WP-75 evidence policy.
+- Deterministic truthfulness metrics and a versioned promotion gate for false success, unsupported claims, stale claims, ignored contradictions, and unnecessary abstention.
+
 - Authenticated framework-neutral Worker transport handler, bound Cloudflare component factory, public-safe Python Worker entrypoint, and deployment template for WP-02 source integration.
 - Versioned claim-evidence policy primitives for WP-75 claim taxonomy/evidence binding work.
 - Admission-to-safe-batching scheduler bridge for WP-76/WP-25 integration.

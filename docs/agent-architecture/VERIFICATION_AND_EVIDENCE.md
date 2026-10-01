@@ -4,7 +4,7 @@ _Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source sta
 
 _Last reviewed: 2026-10-02._
 
-> **Current status:** typed evidence/claim structures, conflicting-evidence state derivation, and a versioned claim-evidence policy are **EXPERIMENTAL**. WP-75 (#226–#228) still requires repository/tool/web consumption, freshness/version invalidation wiring, and adversarial false-success/hallucination gates before automatic enforcement is proven.
+> **Current status:** typed evidence/claim structures, conflicting-evidence state derivation, a versioned claim-evidence policy, and repository/tool/web policy adapters are **EXPERIMENTAL**. A deterministic truth-evaluation layer now tracks false success, unsupported claims, stale claims, contradictions and abstention with a versioned promotion budget. Held-out runner integration and local current-main verification remain open before automatic enforcement is proven.
 
 ## Principle
 

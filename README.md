@@ -30,7 +30,8 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Six-gate tool dispatcher | **EXPERIMENTAL** |
 | FURIOUS / NORMAL / DEEP / SWARM controllers | **EXPERIMENTAL scaffold** |
 | Evidence graph / claim state | **EXPERIMENTAL** |
-| Claim-evidence policy (WP-75) | **EXPERIMENTAL source policy** — versioned claim/evidence rules exist; full repo/tool/web consumption and adversarial gates remain open |
+| Claim-evidence policy (WP-75) | **EXPERIMENTAL source policy** — taxonomy/freshness/state rules + repository/tool/web adapters exist; local verification still pending |
+| Truthfulness evaluation gate (WP-75) | **EXPERIMENTAL source implementation** — false-success/unsupported/stale/contradiction/abstention metrics + versioned promotion budget exist; held-out runner remains open |
 | Four-view vision data model | **EXPERIMENTAL abstraction** — no trained vision encoder yet |
 | Multi-agent orchestrator interfaces | **EXPERIMENTAL scaffold** — no production swarm runtime yet |
 | Capability-eval harness | **EXPERIMENTAL** |

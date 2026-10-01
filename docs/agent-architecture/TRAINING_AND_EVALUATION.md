@@ -52,7 +52,7 @@ External evaluators/teachers may generate critique or scenarios, but determinist
 
 ## Truth/evidence evaluation status
 
-Current source includes a versioned claim-evidence policy and corrected conflicting-evidence state derivation. WP-75 still requires broader repository/tool/web consumption plus adversarial hallucination/false-success gates before truth enforcement can be considered complete.
+Current source includes a versioned claim-evidence policy, repository/tool/web policy adapters, corrected conflicting-evidence state derivation, and deterministic WP-75 truth-evaluation primitives. `TruthPromotionBudget` can reject candidates exceeding false-success, unsupported-claim, stale-claim, ignored-contradiction, or unnecessary-abstention limits. WP-75 still requires broader repository/tool/web consumption plus adversarial hallucination/false-success gates before truth enforcement can be considered complete.
 
 ## Current promotion infrastructure
 
