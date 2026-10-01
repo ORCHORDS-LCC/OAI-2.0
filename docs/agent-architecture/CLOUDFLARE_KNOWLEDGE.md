@@ -2,7 +2,7 @@
 
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
-> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, async source-level D1/R2/KV/Vectorize binding wrappers, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, KV, and Vectorize binding-facing primitives now exist in source. The source now also contains `AsyncCloudflareKnowledgeRuntime`, which composes D1 metadata/revision, R2 bodies, Vectorize semantic search, and best-effort KV caching into one async runtime with explicit conflict/integrity failures. Live authenticated Worker deployment, network request routing, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision reader/writer contract, async D1 knowledge reader, and lease-aware transactional metadata writer now exist in source.
+> **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, async source-level D1/R2/KV/Vectorize binding wrappers, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, KV, and Vectorize binding-facing primitives now exist in source. The source now also contains `AsyncCloudflareKnowledgeRuntime`, which composes D1 metadata/revision, R2 bodies, Vectorize semantic search, and best-effort KV caching into one async runtime with explicit conflict/integrity failures. A framework-neutral authenticated `KnowledgeWorkerTransport` and `build_cloudflare_knowledge_components(...)` factory now assemble the source runtime from already-bound D1/R2/Vectorize/KV capabilities, including schema-order setup. An actual Cloudflare HTTP Worker entrypoint/private deployment, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision reader/writer contract, async D1 knowledge reader, and lease-aware transactional metadata writer now exist in source.
 
 ## Verified architecture boundary
 
@@ -35,7 +35,7 @@ Current source defines:
 - `VectorizeMetadata` carrying embedding version and provenance fields;
 - `QueryCacheEnvelope` keyed by corpus revision and embedding digest.
 
-These are contract/schema objects only. They do **not** prove a live Worker, live D1/R2/Vectorize/KV bindings, authentication middleware, or a network round trip.
+These transport models are consumed by the source-level `KnowledgeWorkerTransport`, which enforces normalized auth capability/expiry checks and maps conflict/integrity/dependency failures to explicit transport errors. That still does **not** prove a deployed Cloudflare HTTP Worker, private bindings, or a network round trip.
 
 ## Assembled async runtime
 
@@ -204,7 +204,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 
 ## Current implementation limitations
 
-- versioned transport schemas exist, but no live Worker endpoint/network adapter is verified yet;
+- versioned transport schemas, authenticated framework-neutral transport handler, and bound-component factory exist, but no deployed Cloudflare HTTP Worker/private network round trip is verified yet;
 - public-safe D1 lease schema, D1 knowledge-index/corpus-revision schema, async lease adapter, and transactional metadata writer exist, but no production migration/deployment has been demonstrated;
 - async R2, KV, and Vectorize binding wrappers exist, but no production bucket/namespace/index bindings or deployed Worker round trip has been demonstrated;
 - no real q-pipe corpus migration;
