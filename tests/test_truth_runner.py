@@ -4,9 +4,12 @@ import pytest
 
 from oai2.evals.truth import TruthCaseClass, TruthOutcome
 from oai2.evals.truth_runner import (
+    CandidateRunner,
     CandidateTruthInput,
     CandidateTruthResponse,
+    HiddenVerifier,
     TruthCase,
+    TruthRunResult,
     TruthVerifierVerdict,
     classify_truth_outcome,
     run_held_out_truth_cases,
@@ -186,9 +189,12 @@ def test_response_cannot_claim_success_and_abstain() -> None:
 
 
 def test_truth_runner_exports_from_evals_package() -> None:
+    from oai2.evals import CandidateRunner as ExportedRunnerType
     from oai2.evals import CandidateTruthInput as ExportedInput
     from oai2.evals import CandidateTruthResponse as ExportedResponse
+    from oai2.evals import HiddenVerifier as ExportedVerifierType
     from oai2.evals import TruthCase as ExportedCase
+    from oai2.evals import TruthRunResult as ExportedRunResult
     from oai2.evals import TruthVerifierVerdict as ExportedVerdict
     from oai2.evals import classify_truth_outcome as ExportedClassifier
     from oai2.evals import run_held_out_truth_cases as ExportedRunner
@@ -197,5 +203,8 @@ def test_truth_runner_exports_from_evals_package() -> None:
     assert ExportedResponse is CandidateTruthResponse
     assert ExportedCase is TruthCase
     assert ExportedVerdict is TruthVerifierVerdict
+    assert ExportedRunnerType is CandidateRunner
+    assert ExportedVerifierType is HiddenVerifier
+    assert ExportedRunResult is TruthRunResult
     assert ExportedClassifier is classify_truth_outcome
     assert ExportedRunner is run_held_out_truth_cases
