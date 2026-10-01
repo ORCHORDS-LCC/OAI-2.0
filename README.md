@@ -4,6 +4,8 @@
 
 # OAI-2.0
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 [![License: Non-Commercial](https://img.shields.io/badge/license-non--commercial-red.svg)](./LICENSE)
 [![Status: Research](https://img.shields.io/badge/status-research-orange.svg)](./docs/agent-architecture/README.md)
 
@@ -28,6 +30,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Six-gate tool dispatcher | **EXPERIMENTAL** |
 | FURIOUS / NORMAL / DEEP / SWARM controllers | **EXPERIMENTAL scaffold** |
 | Evidence graph / claim state | **EXPERIMENTAL** |
+| Claim-evidence policy (WP-75) | **EXPERIMENTAL source policy** — versioned claim/evidence rules exist; full repo/tool/web consumption and adversarial gates remain open |
 | Four-view vision data model | **EXPERIMENTAL abstraction** — no trained vision encoder yet |
 | Multi-agent orchestrator interfaces | **EXPERIMENTAL scaffold** — no production swarm runtime yet |
 | Capability-eval harness | **EXPERIMENTAL** |
@@ -40,6 +43,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | R2 / KV / Vectorize Worker binding wrappers | **EXPERIMENTAL source implementation** — async R2 body/existence/delete, best-effort KV get/put, and Vectorize upsert/query wrappers; deployment proof remaining |
 | QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — admission policy and p95/p99/deadline promotion gate; live service/MLX integration remaining |
 | Safe session batching scheduler | **EXPERIMENTAL source implementation** — exact-compatibility isolation/batching core exists; final-model/service performance proof remains |
+| Admission → scheduler bridge | **EXPERIMENTAL source integration** — admission decisions feed safe batching; live MLX/service telemetry and sustained hardware proof remain open |
 | q-pipe compatibility/import gate | **IMPLEMENTED compatibility work item / CLOSED #20**; real 10–100 row migration remains **OPEN #21** |
 | Async Cloudflare knowledge runtime | **EXPERIMENTAL source implementation** — D1/R2/Vectorize/KV orchestration with revision/integrity checks, authenticated framework-neutral transport handler, and bound-component factory; deployed Worker/network proof remaining |
 | Live Cloudflare Worker transport | **EXPERIMENTAL source handler / NOT YET DEPLOYED** — authenticated transport handler exists; actual Cloudflare HTTP entrypoint/private binding deployment remains unverified |

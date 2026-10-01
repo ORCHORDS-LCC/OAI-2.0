@@ -1,5 +1,7 @@
 # Architecture Target
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 > **Final architecture status: PROPOSED.**  
@@ -66,7 +68,7 @@ Reject an optimization if it materially harms coding, reasoning, architecture un
 
 ## Current implementation boundary
 
-The final sparse/adaptive model is still **PROPOSED**. Current `main` contains supporting experimental infrastructure—runner-free verification, controller/tool/evidence scaffolds, knowledge/GC/QoS primitives, and a safe session-batching scheduler core—but no trained 10–30B+ specialist-capacity OAI-2.0 model.
+The final sparse/adaptive model is still **PROPOSED**. Supporting truth/evidence infrastructure has advanced with a versioned claim-evidence policy, but that is not a trained reasoning model or proof of hallucination resistance. Current `main` contains supporting experimental infrastructure—runner-free verification, controller/tool/evidence scaffolds, knowledge/GC/QoS primitives, and a safe session-batching scheduler core—but no trained 10–30B+ specialist-capacity OAI-2.0 model.
 
 ## Current evidence
 

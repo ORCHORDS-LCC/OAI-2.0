@@ -1,5 +1,7 @@
 # Security Reporting
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 Do **not** open a public GitHub issue for vulnerabilities, exposed secrets, private-data disclosure, sandbox escapes, privilege escalation, prompt-injection bypasses, or other security-sensitive findings.
@@ -28,7 +30,7 @@ The current tool dispatcher is an **EXPERIMENTAL** policy scaffold. It is not a 
 
 ## Knowledge security
 
-The Cloudflare knowledge layer now includes source-level D1/R2/KV/Vectorize wrappers, knowledge/GC contracts, and deterministic mocks. A complete live Worker deployment is still not verified end-to-end. Resource bindings, account/resource IDs, credentials, and private endpoints must remain outside public source.
+The Cloudflare knowledge layer now includes source-level D1/R2/KV/Vectorize wrappers, an authenticated transport handler, component factory, public-safe Python Worker entrypoint/template, knowledge/GC contracts, and deterministic mocks. A complete live Worker deployment is still not verified end-to-end. Resource bindings, account/resource IDs, credentials, and private endpoints must remain outside public source.
 
 q-pipe knowledge imports must pass the strict verified export gate before entering OAI-2.0's shared knowledge layer.
 

@@ -1,5 +1,7 @@
 # Contributing to OAI-2.0
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 OAI-2.0 is a public, non-commercial research and engineering repository. Read current source before treating any architecture document as implemented behavior.
@@ -52,7 +54,7 @@ It runs dependency sync, Ruff, MyPy, pytest, a public-safety scan, and a Markdow
 
 Read [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
 
-The current repository has tested application-level contracts/mocks plus source-level D1/R2/KV/GC adapter primitives. It still does **not** have a fully verified live Worker/D1/R2/Vectorize/KV end-to-end deployment. Any live adapter must map correctly to current asynchronous D1, R2, Vectorize, and KV APIs.
+The current repository has tested application-level contracts/mocks plus async D1 reader/writer, R2/KV/Vectorize wrappers, an assembled knowledge runtime, authenticated transport handler, component factory, and public-safe Python Worker entrypoint/template. It still does **not** have a fully verified private Cloudflare deployment/end-to-end network proof. Any live adapter must map correctly to current asynchronous D1, R2, Vectorize, and KV APIs.
 
 q-pipe imports default to q-pipe's verified Cloudflare export rules: promoted rows, independent verification, quality gates, approved source allow-list, and explicit Android-curriculum opt-in.
 

@@ -1,3 +1,5 @@
+<!-- Reconciliation baseline: 8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d; 2026-10-02 -->
+
 ## Summary
 
 <!-- What changed and why? -->

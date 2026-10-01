@@ -4,6 +4,8 @@
 
 # OAI-2.0 Branding
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 ## Brand hierarchy

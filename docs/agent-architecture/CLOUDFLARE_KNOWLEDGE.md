@@ -1,5 +1,7 @@
 # Cloudflare Knowledge Architecture
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 _Last reviewed against current Cloudflare documentation and repository source: 2026-10-02._
 
 > **Current status:** application-level storage contract, deterministic mocks, strict import gate, versioned transport/schema models, async source-level D1/R2/KV/Vectorize binding wrappers, non-destructive R2 liveness reconciliation, conservative sweep logic, deterministic GC lease semantics, a versioned STRICT D1 lease schema, and an async D1 binding-facing lease adapter are implemented in source. Conditional lease acquisition, pre-delete revalidation, failure/finalize/release transitions, and focused SQLite/async binding tests now exist. Async D1, R2, KV, and Vectorize binding-facing primitives now exist in source. The source now also contains `AsyncCloudflareKnowledgeRuntime`, which composes D1 metadata/revision, R2 bodies, Vectorize semantic search, and best-effort KV caching into one async runtime with explicit conflict/integrity failures. A framework-neutral authenticated `KnowledgeWorkerTransport` and `build_cloudflare_knowledge_components(...)` factory now assemble the source runtime from already-bound D1/R2/Vectorize/KV capabilities, including schema-order setup. An actual Cloudflare HTTP Worker entrypoint/private deployment, destructive sweep-planner integration against the D1-backed delete boundary, and controlled private demonstrations remain **NOT YET VERIFIED END-TO-END**. A durable D1 knowledge-index/corpus-revision reader/writer contract, async D1 knowledge reader, and lease-aware transactional metadata writer now exist in source.
@@ -41,7 +43,7 @@ These transport models are consumed by the source-level `KnowledgeWorkerTranspor
 
 `oai2/knowledge/cloudflare_runtime.py` now provides an **EXPERIMENTAL source-level** `AsyncCloudflareKnowledgeRuntime` that composes D1 metadata/revision authority, R2 content-addressed bodies, optional Vectorize semantic lookup, and best-effort KV caching. It detects revision conflicts and D1/R2/Vectorize integrity mismatches. Focused tests exist.
 
-This is **not** evidence of an authenticated deployed Worker, production resource bindings, real network latency/quotas, or a private end-to-end Cloudflare demonstration.
+Current source also includes an authenticated framework-neutral transport handler, a bound-component factory, and a public-safe Python Worker entrypoint/template. These close more of the source-integration gap, but still do **not** prove production resource bindings, real network latency/quotas, or a private end-to-end Cloudflare demonstration.
 
 ## Service roles
 

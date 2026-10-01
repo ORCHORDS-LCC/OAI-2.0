@@ -1,5 +1,7 @@
 # OAI-2.0 Cloudflare Knowledge Worker
 
+_Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
+
 This directory is a **public-safe deployment scaffold** for the private OAI-2.0
 knowledge Worker. It contains no live account IDs, database IDs, namespace IDs,
 bucket names, endpoints, or credentials.
