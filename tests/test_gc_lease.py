@@ -208,3 +208,35 @@ def test_gc_lease_symbols_are_exported_from_knowledge_package() -> None:
 
     assert ExportedAuthority is GcDeleteLeaseAuthority
     assert ExportedDecision is GcDeleteLeaseDecision
+
+
+def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> None:
+    from oai2.knowledge import (
+        GC_LEASE_REFERENCE_COUNT_SQL,
+        GC_LEASE_SCHEMA_SQL,
+        GC_LEASE_SCHEMA_VERSION,
+        GC_LEASE_SELECT_SQL,
+        GC_LEASE_TABLE,
+        GC_LEASE_UPSERT_SQL,
+        GC_LEASE_WRITER_BLOCK_SQL,
+        gc_lease_schema_statements,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
+        GC_LEASE_REFERENCE_COUNT_SQL as SourceReferenceCountSql,
+        GC_LEASE_SCHEMA_SQL as SourceSchemaSql,
+        GC_LEASE_SCHEMA_VERSION as SourceSchemaVersion,
+        GC_LEASE_SELECT_SQL as SourceSelectSql,
+        GC_LEASE_TABLE as SourceTable,
+        GC_LEASE_UPSERT_SQL as SourceUpsertSql,
+        GC_LEASE_WRITER_BLOCK_SQL as SourceWriterBlockSql,
+        gc_lease_schema_statements as SourceStatements,
+    )
+
+    assert gc_lease_schema_statements is SourceStatements
+    assert GC_LEASE_REFERENCE_COUNT_SQL is SourceReferenceCountSql
+    assert GC_LEASE_SCHEMA_SQL is SourceSchemaSql
+    assert GC_LEASE_SCHEMA_VERSION == SourceSchemaVersion == 1
+    assert GC_LEASE_SELECT_SQL is SourceSelectSql
+    assert GC_LEASE_TABLE == SourceTable == "knowledge_gc_delete_lease"
+    assert GC_LEASE_UPSERT_SQL is SourceUpsertSql
+    assert GC_LEASE_WRITER_BLOCK_SQL is SourceWriterBlockSql
