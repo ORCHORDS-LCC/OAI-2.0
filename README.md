@@ -63,12 +63,35 @@ flowchart TD
 - `SUPPORT.md` — support and question routing
 - `CODE_OF_CONDUCT.md` — community participation standard
 - `CHANGELOG.md` — notable repository changes
+- `ORGANIZATION.md` — public ORCHORDS-LCC organization profile, stars, donations and sponsorship
 
 ## Public-repository boundary
 
 This repository intentionally avoids private endpoints, credentials, internal deployment topology, sensitive datasets, provider arrangements, private training sources, customer data, and other non-public operational details.
 
 Architecture documents distinguish **IMPLEMENTED**, **EXPERIMENTAL**, **PROPOSED**, and **BLOCKED** work. A diagram or design note is not evidence that a feature exists.
+
+
+## ⭐ Star OAI-2.0
+
+If OAI-2.0's architecture, diagrams, or research direction is useful to you, **star this repository**:
+
+⭐ https://github.com/ORCHORDS-LCC/OAI-2.0
+
+Stars help people discover the project and give us a lightweight signal that the public work is useful.
+
+For the wider organization, see [ORGANIZATION.md](ORGANIZATION.md).
+
+## Donations & sponsorship
+
+If you want to financially support ORCHORDS public engineering, documentation, research, or open technical work, contact:
+
+**crm@orchords.com**
+
+Donations and sponsorship do not grant commercial rights, roadmap control, guaranteed feature implementation, or access to private systems. Commercial licensing is separate and must be agreed in writing.
+
+See [ORGANIZATION.md](ORGANIZATION.md) for the broader organization profile and support information.
+
 
 ## Contributing
 

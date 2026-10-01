@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Organization profile with public studio context, stars, donations and sponsorship guidance.
+- Prominent repository star and donation/sponsorship sections.
+
 - Public next-generation agent architecture documentation.
 - Mermaid architecture, tool, vision, multi-agent, verification and roadmap diagrams.
 - Public contribution, security, support and community files.
