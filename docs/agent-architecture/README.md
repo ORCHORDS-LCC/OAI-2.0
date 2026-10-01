@@ -30,7 +30,7 @@ Experimental source currently includes:
 - reference-safe R2 reconciliation and conservative sweep core;
 - deterministic GC lease state model plus versioned D1 lease schema, async binding-facing adapter, durable D1 knowledge-index/corpus-revision writer, and async D1/R2 delete boundary;
 - async R2, KV, and Vectorize Worker-binding wrappers;
-- QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, and p95/p99/deadline promotion regression gate;
+- QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, exact-compatibility safe batching scheduler, and p95/p99/deadline promotion regression gate;
 - strict q-pipe verified-import policy.
 
 Not yet implemented as production capabilities:
