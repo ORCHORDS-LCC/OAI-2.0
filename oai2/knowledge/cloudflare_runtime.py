@@ -8,6 +8,7 @@ deployment identifiers or credentials.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Sequence
 from dataclasses import replace
@@ -143,6 +144,11 @@ class AsyncCloudflareKnowledgeRuntime:
                 cached,
             )
             if cached_result is not None:
+                end_revision = await self._writer.corpus_revision()
+                if end_revision != start_revision:
+                    raise KnowledgeConflictError(
+                        "corpus revision changed during cached retrieval; retry against fresh state"
+                    )
                 return cached_result
 
         if query_vector is None:
@@ -274,8 +280,13 @@ class AsyncCloudflareKnowledgeRuntime:
 
 
 def _non_negative_number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) < 0:
-        raise ValueError(f"{name} must be a non-negative number")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0
+    ):
+        raise ValueError(f"{name} must be a finite non-negative number")
     return float(value)
 
 
