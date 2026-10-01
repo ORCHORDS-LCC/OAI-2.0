@@ -27,7 +27,7 @@ Experimental source currently includes:
 - hidden-evidence adversarial truth runner, truthfulness outcome metrics, and a promotion gate that couples misleading-claim budgets to verified-task regression;
 - four-view vision abstractions;
 - corrected MLX benchmark harness;
-- offline capability-evaluation scaffolds;
+- offline deterministic capability-evaluation suites covering coding, bug diagnosis, multi-file reasoning, tool use, verification, vision, orchestration, abstention and conflicting evidence;
 - application-level Cloudflare knowledge contract + deterministic mocks;
 - versioned public-safe Cloudflare transport/schema models plus source-level async D1 reader/writer and R2/KV/Vectorize binding wrappers;
 - assembled async Cloudflare knowledge runtime for source-level put/get/retrieve orchestration;
