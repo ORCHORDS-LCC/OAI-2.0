@@ -31,6 +31,8 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
 | Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
 | Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — live network path still proposed |
+| R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
+| Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
 | Vectorize-backed semantic retrieval | **PROPOSED** |
@@ -79,11 +81,13 @@ flowchart TD
     W --> R[R2 content-addressed bodies]
     W --> V[Vectorize semantic index]
     W --> C[KV query cache]
+    D --> GC[Reference-safe R2 lifecycle]
+    R --> GC
     Q[q-pipe verified learning] --> I[Strict import gate]
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, and versioned public-safe Worker transport schemas. It does **not** yet make live Cloudflare network calls.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, and a conservative authorization/recovery-gated orphan-sweep core. It does **not** yet make live Cloudflare network calls or prove a live destructive R2 operation.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 
@@ -91,7 +95,7 @@ See [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
 
 ## q-pipe import safety
 
-Default imports now mirror q-pipe's Cloudflare export rules:
+Default imports mirror q-pipe's Cloudflare export rules:
 
 - default sources: `scenario-forge`, `terminal-bench-2.1`;
 - `android-curriculum-oss` requires explicit opt-in;
