@@ -8,6 +8,15 @@ loop are placeholders pending a checked-in reference model.
 
 from __future__ import annotations
 
+from .admission import (
+    AdmissionAction,
+    AdmissionDecision,
+    AdmissionPolicy,
+    AdmissionQueue,
+    AdmissionReason,
+    AdmissionRequest,
+    CapacitySnapshot,
+)
 from .inference import (
     InferenceRequest,
     InferenceResponse,
@@ -18,6 +27,13 @@ from .inference import (
 from .model import ModelSpec, discover_default_device, smoke_check
 
 __all__ = [
+    "AdmissionAction",
+    "AdmissionDecision",
+    "AdmissionPolicy",
+    "AdmissionQueue",
+    "AdmissionReason",
+    "AdmissionRequest",
+    "CapacitySnapshot",
     "InferenceRequest",
     "InferenceResponse",
     "InferenceRuntime",
