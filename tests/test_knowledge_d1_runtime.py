@@ -140,3 +140,34 @@ def test_d1_knowledge_writer_exports() -> None:
     assert ExportedRevision is KNOWLEDGE_CORPUS_REVISION_SQL
     assert ExportedUpsert is KNOWLEDGE_WRITER_UPSERT_SQL
     assert ExportedVersion == KNOWLEDGE_SCHEMA_VERSION == 1
+
+
+
+def test_knowledge_d1_table_and_schema_exports() -> None:
+    from oai2.knowledge import (
+        KNOWLEDGE_CORPUS_STATE_TABLE,
+        KNOWLEDGE_INDEX_TABLE,
+        KNOWLEDGE_SCHEMA_SQL,
+        knowledge_schema_statements,
+    )
+    from oai2.knowledge.knowledge_d1 import (
+        KNOWLEDGE_CORPUS_STATE_TABLE as SourceCorpusStateTable,
+    )
+    from oai2.knowledge.knowledge_d1 import (
+        KNOWLEDGE_INDEX_TABLE as SourceIndexTable,
+    )
+    from oai2.knowledge.knowledge_d1 import (
+        KNOWLEDGE_SCHEMA_SQL as SourceSchemaSql,
+    )
+    from oai2.knowledge.knowledge_d1 import (
+        knowledge_schema_statements as SourceStatements,
+    )
+
+    assert KNOWLEDGE_INDEX_TABLE == SourceIndexTable == "knowledge_index"
+    assert (
+        KNOWLEDGE_CORPUS_STATE_TABLE
+        == SourceCorpusStateTable
+        == "knowledge_corpus_state"
+    )
+    assert KNOWLEDGE_SCHEMA_SQL is SourceSchemaSql
+    assert knowledge_schema_statements is SourceStatements
