@@ -33,6 +33,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
 
+from .truth import (
+    TruthCaseClass,
+    TruthOutcome,
+    TruthPromotionBudget,
+    TruthPromotionEvaluation,
+    TruthReport,
+    TruthSample,
+    evaluate_truth_promotion,
+    summarize_truth,
+)
+
 
 class Scorer(Protocol):
     """A pure function from (case, response) to :class:`CapabilityScore`."""
@@ -497,6 +508,14 @@ __all__ = [
     "builtin_suite",
     "builtin_suites",
     "run_suite",
+    "TruthCaseClass",
+    "TruthOutcome",
+    "TruthPromotionBudget",
+    "TruthPromotionEvaluation",
+    "TruthReport",
+    "TruthSample",
+    "evaluate_truth_promotion",
+    "summarize_truth",
 ]
 
 
