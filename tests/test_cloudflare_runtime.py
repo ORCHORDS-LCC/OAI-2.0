@@ -75,6 +75,7 @@ class FakeVectorize:
     def __init__(self) -> None:
         self.upserts: list[tuple[str, list[float], dict[str, object]]] = []
         self.matches: list[tuple[str, float]] = []
+        self.queries: list[int] = []
 
     async def upsert(
         self,
@@ -91,6 +92,7 @@ class FakeVectorize:
         return {"mutationId": "m1"}
 
     async def query(self, values: object, *, top_k: int = 5) -> list[tuple[str, float]]:
+        self.queries.append(top_k)
         return list(self.matches[:top_k])
 
 
@@ -124,16 +126,19 @@ def _obj(
     knowledge_id: str = "ko_runtime_1",
     topic: str = "runtime",
     content: str = "verified body",
+    authority: float = 0.9,
+    status: Status = Status.EXPERIMENTAL,
+    source_uri: str | None = "https://example.test/source",
 ) -> KnowledgeObject:
     return KnowledgeObject(
         knowledge_id=KnowledgeId(knowledge_id),
         topic=topic,
         content=content,
         content_hash=sha256_hex(content),
-        source_uri="https://example.test/source",
+        source_uri=source_uri,
         retrieved_at=10.0,
-        authority=0.9,
-        status=Status.EXPERIMENTAL,
+        authority=authority,
+        status=status,
     )
 
 
@@ -296,18 +301,91 @@ async def test_semantic_retrieve_uses_vectorize_and_authoritative_d1_r2() -> Non
     )
 
     assert [item.knowledge_id for item in result.objects] == [obj.knowledge_id]
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.knowledge_id == obj.knowledge_id
+    assert candidate.score == pytest.approx(0.99)
+    assert candidate.source_uri == obj.source_uri
+    assert candidate.content_hash == obj.content_hash
+    # Semantic queries bypass the topic-only KV cache until the query vector
+    # is part of the cache key contract.
+    assert _kv.puts == []
 
 
 @pytest.mark.asyncio
-async def test_semantic_retrieve_surfaces_vectorize_d1_inconsistency() -> None:
+async def test_semantic_retrieve_excludes_stale_vector_without_d1_metadata() -> None:
     runtime, _reader, _writer, _r2, vectorize, _kv = _runtime()
     vectorize.matches = [("missing", 0.99)]
 
-    with pytest.raises(KnowledgeIntegrityError, match="no authoritative D1 row"):
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+
+    assert result.objects == []
+    assert result.candidates == []
+    assert bool(result) is False
+
+
+@pytest.mark.asyncio
+async def test_semantic_retrieve_surfaces_vectorize_id_mismatch() -> None:
+    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
+    obj = _obj()
+    row = _row(obj)
+    from dataclasses import replace
+
+    reader.rows[str(obj.knowledge_id)] = replace(row, vectorize_id="different")
+    vectorize.matches = [(str(obj.knowledge_id), 0.99)]
+
+    with pytest.raises(KnowledgeIntegrityError, match="disagrees with D1 vectorize_id"):
         await runtime.retrieve(
             RetrievalRequest(topic="semantic"),
             query_vector=[1.0],
         )
+
+
+@pytest.mark.asyncio
+async def test_semantic_retrieve_overfetches_then_filters_authoritative_metadata() -> None:
+    runtime, reader, _writer, r2, vectorize, _kv = _runtime()
+    low = _obj(
+        knowledge_id="ko_low",
+        content="low body",
+        authority=0.1,
+    )
+    retired = _obj(
+        knowledge_id="ko_retired",
+        content="retired body",
+        status=Status.PROPOSED,
+    )
+    eligible = _obj(
+        knowledge_id="ko_eligible",
+        content="eligible body",
+        authority=0.8,
+        source_uri="https://example.test/eligible",
+    )
+    for obj in (low, retired, eligible):
+        row = _row(obj)
+        reader.rows[str(obj.knowledge_id)] = row
+        assert row.r2_blob_key is not None
+        r2.values[row.r2_blob_key] = obj.content
+
+    vectorize.matches = [
+        ("ko_missing", 0.99),
+        (str(low.knowledge_id), 0.95),
+        (str(retired.knowledge_id), 0.90),
+        (str(eligible.knowledge_id), 0.80),
+    ]
+
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic", limit=1, min_authority=0.5),
+        query_vector=[0.5, 0.5],
+    )
+
+    assert vectorize.queries == [8]
+    assert [obj.knowledge_id for obj in result.objects] == [eligible.knowledge_id]
+    assert result.candidates[0].score == pytest.approx(0.80)
+    assert result.candidates[0].source_uri == "https://example.test/eligible"
+    assert result.candidates[0].content_hash == eligible.content_hash
 
 
 @pytest.mark.asyncio
