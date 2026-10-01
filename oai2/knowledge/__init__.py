@@ -29,6 +29,14 @@ from .cloudflare import (
     object_to_row,
     r2_blob_key_for,
 )
+from .gc import (
+    GcDryRunReport,
+    GcObjectDisposition,
+    GcObjectRecord,
+    GcReconciliationState,
+    KnowledgeBlobRow,
+    R2InventoryObject,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .qpipe_import import (
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
@@ -76,6 +84,12 @@ __all__ = [
     "hash_topic",
     "object_to_row",
     "r2_blob_key_for",
+    "GcDryRunReport",
+    "GcObjectDisposition",
+    "GcObjectRecord",
+    "GcReconciliationState",
+    "KnowledgeBlobRow",
+    "R2InventoryObject",
     "sha256_hex",
     "now_epoch",
     "QPIPE_COMPATIBILITY_SOURCE_REVISION",
