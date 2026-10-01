@@ -112,12 +112,12 @@ def run_markdown_link_scan() -> bool:
             target_path = (path.parent / target.split("#", 1)[0]).resolve()
             if not target_path.exists():
                 failures.append((path.relative_to(ROOT), target))
-        if failures:
-            for path, target in failures:
-                print(f"FAIL docs-links: {path} -> {target}")
-            return False
-        print("PASS docs-links")
-        return True
+    if failures:
+        for path, target in failures:
+            print(f"FAIL docs-links: {path} -> {target}")
+        return False
+    print("PASS docs-links")
+    return True
 
 
 def report_platform_check_status() -> None:
