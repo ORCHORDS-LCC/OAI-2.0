@@ -46,6 +46,7 @@ class WorkloadBudget:
     end_to_end_p99_ms: float
     max_false_success_rate: float
     min_verified_success_rate: float
+    max_deadline_miss_rate: float = 1.0
 
     def __post_init__(self) -> None:
         for name in ("version", "target_hardware", "config_id"):
@@ -61,7 +62,11 @@ class WorkloadBudget:
                 raise ValueError(f"{name} must be finite and > 0")
         if self.end_to_end_p99_ms < self.end_to_end_p95_ms:
             raise ValueError("end_to_end_p99_ms must be >= end_to_end_p95_ms")
-        for name in ("max_false_success_rate", "min_verified_success_rate"):
+        for name in (
+            "max_false_success_rate",
+            "min_verified_success_rate",
+            "max_deadline_miss_rate",
+        ):
             value = float(getattr(self, name))
             if not math.isfinite(value) or not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be between 0 and 1")
@@ -86,6 +91,7 @@ class WorkloadSample:
     retrieval_ms: float = 0.0
     vision_ms: float = 0.0
     build_test_ms: float = 0.0
+    deadline_missed: bool = False
 
     def __post_init__(self) -> None:
         for name in ("target_hardware", "config_id"):
@@ -111,6 +117,8 @@ class WorkloadSample:
             raise ValueError("ttft_ms cannot exceed end_to_end_ms")
         if self.first_useful_action_ms > self.end_to_end_ms:
             raise ValueError("first_useful_action_ms cannot exceed end_to_end_ms")
+        if not isinstance(self.deadline_missed, bool):
+            raise ValueError("deadline_missed must be a boolean")
 
     @property
     def false_success(self) -> bool:
@@ -143,6 +151,7 @@ class WorkloadReport:
     build_test_ms: Distribution
     verified_success_rate: float
     false_success_rate: float
+    deadline_miss_rate: float
     verified_actions_per_second: float
 
 
@@ -213,6 +222,7 @@ def summarize_samples(samples: list[WorkloadSample]) -> WorkloadReport:
         build_test_ms=_distribution([sample.build_test_ms for sample in samples]),
         verified_success_rate=sum(sample.verified_success for sample in samples) / n,
         false_success_rate=sum(sample.false_success for sample in samples) / n,
+        deadline_miss_rate=sum(sample.deadline_missed for sample in samples) / n,
         verified_actions_per_second=(
             verified_actions / total_seconds if total_seconds > 0.0 else 0.0
         ),
@@ -239,12 +249,55 @@ def evaluate_budget(report: WorkloadReport, budget: WorkloadBudget) -> BudgetEva
         failures.append("false_success_rate")
     if report.verified_success_rate < budget.min_verified_success_rate:
         failures.append("verified_success_rate")
+    if report.deadline_miss_rate > budget.max_deadline_miss_rate:
+        failures.append("deadline_miss_rate")
     return BudgetEvaluation(
         budget_version=budget.version,
         budget_kind=budget.kind,
         passed=not failures,
         failures=tuple(failures),
     )
+
+
+@dataclass(slots=True, frozen=True)
+class PromotionEvaluation:
+    passed: bool
+    failures: tuple[str, ...]
+
+
+def evaluate_promotion(
+    candidate: WorkloadReport,
+    baseline: WorkloadReport,
+    *,
+    max_tail_regression_ratio: float = 1.0,
+    max_deadline_miss_increase: float = 0.0,
+) -> PromotionEvaluation:
+    """Reject candidates whose tails/deadline misses regress versus baseline."""
+    if (
+        candidate.workload != baseline.workload
+        or candidate.target_hardware != baseline.target_hardware
+    ):
+        raise ValueError("candidate and baseline workload/hardware must match")
+    if not math.isfinite(max_tail_regression_ratio) or max_tail_regression_ratio < 1.0:
+        raise ValueError("max_tail_regression_ratio must be finite and >= 1")
+    if (
+        not math.isfinite(max_deadline_miss_increase)
+        or max_deadline_miss_increase < 0.0
+        or max_deadline_miss_increase > 1.0
+    ):
+        raise ValueError("max_deadline_miss_increase must be between 0 and 1")
+
+    failures: list[str] = []
+    if candidate.end_to_end_ms.p95 > baseline.end_to_end_ms.p95 * max_tail_regression_ratio:
+        failures.append("p95_regression")
+    if candidate.end_to_end_ms.p99 > baseline.end_to_end_ms.p99 * max_tail_regression_ratio:
+        failures.append("p99_regression")
+    if (
+        candidate.deadline_miss_rate
+        > baseline.deadline_miss_rate + max_deadline_miss_increase
+    ):
+        failures.append("deadline_miss_regression")
+    return PromotionEvaluation(passed=not failures, failures=tuple(failures))
 
 
 def useful_work_rank_key(report: WorkloadReport) -> tuple[float, float, float, float]:
@@ -261,11 +314,13 @@ __all__ = [
     "BudgetEvaluation",
     "BudgetKind",
     "Distribution",
+    "PromotionEvaluation",
     "WorkloadBudget",
     "WorkloadClass",
     "WorkloadReport",
     "WorkloadSample",
     "evaluate_budget",
+    "evaluate_promotion",
     "summarize_samples",
     "useful_work_rank_key",
 ]
