@@ -25,7 +25,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | Work package | Issue | Domain | Current state |
 | --- | --- | --- | --- |
 | WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | EXPERIMENTAL implementation in progress |
-| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | EXPERIMENTAL contracts + durable D1 metadata/revision writer + async D1/R2 GC delete boundary; Worker/R2/Vectorize/KV live transport remaining |
+| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | EXPERIMENTAL contracts + durable D1 metadata/revision writer + async R2/KV/Vectorize wrappers + D1/R2 GC delete boundary; authenticated Worker orchestration/live proof remaining |
 | WP-03 | [#4](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/4) | Real q-pipe migration | PROPOSED |
 | WP-04 | [#5](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/5) | Semantic retrieval/evidence | PROPOSED |
 | WP-05 | [#6](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/6) | Performance baselines | EXPERIMENTAL harness / matrix remaining |
@@ -172,7 +172,7 @@ Knowledge-store reads verify stored content hashes/provenance and fail closed on
 
 1. Re-run the latest runner-free preflight and close #16 when the PASS/SKIP/q-pipe drift evidence is recorded.
 2. Execute the pinned q-pipe checkout compatibility gate and close #20 if it passes.
-3. Continue #19 / WP-02 from the existing D1 metadata/revision writer and async D1/R2 delete boundary into the Worker endpoint, live R2/Vectorize/KV adapters, and private end-to-end proof.
+3. Continue #19 / WP-02 from the existing D1 metadata/revision writer, R2/KV/Vectorize wrappers, and async D1/R2 delete boundary into the authenticated Worker endpoint/orchestration and private end-to-end proof.
 4. Perform WP-03 small real q-pipe migration.
 5. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
 6. Expand WP-08 held-out capability/regression gates.
