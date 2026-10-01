@@ -99,7 +99,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-73 | [#212](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/212) | Client SDKs / typed APIs | PROPOSED |
 | WP-74 | [#213](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/213) | Artifact registry / distribution integrity | PROPOSED |
 | WP-75 | [#226](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/226) | Claim/evidence truth enforcement | IN PROGRESS source primitives |
-| WP-76 | [#230](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/230) | End-to-end QoS / tail latency / admission | EXPERIMENTAL metrics + admission policy core; service integration remaining |
+| WP-76 | [#230](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/230) | End-to-end QoS / tail latency / admission | EXPERIMENTAL metrics + admission policy + tail/deadline promotion gate; service integration remaining |
 
 ```mermaid
 flowchart TD
