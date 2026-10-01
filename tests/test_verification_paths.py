@@ -123,7 +123,6 @@ def test_path_adapters_export_from_verification_package() -> None:
     assert assess_web_evidence is SourceWeb
 
 
-
 @pytest.mark.parametrize(
     ("path_kind", "evidence_class"),
     [
@@ -177,3 +176,79 @@ def test_repository_path_preserves_refutation_state() -> None:
         current_state_version="sha-a",
     )
     assert assessment.decision is PolicyDecision.REFUTED
+
+
+def test_verification_module_exports_from_verification_package() -> None:
+    from oai2.verification import EVIDENCE_POLICY_VERSION as ExportedPolicyVersion
+    from oai2.verification import ClaimClass as ExportedClaimClass
+    from oai2.verification import ClaimEvidencePolicy as ExportedClaimEvidencePolicy
+    from oai2.verification import ClaimState as ExportedClaimState
+    from oai2.verification import ClaimStatus as ExportedClaimStatus
+    from oai2.verification import Evidence as ExportedEvidence
+    from oai2.verification import EvidenceAssessment as ExportedEvidenceAssessment
+    from oai2.verification import EvidenceBinding as ExportedEvidenceBinding
+    from oai2.verification import EvidenceClass as ExportedEvidenceClass
+    from oai2.verification import EvidenceGraph as ExportedEvidenceGraph
+    from oai2.verification import EvidenceNode as ExportedEvidenceNode
+    from oai2.verification import EvidenceRejection as ExportedEvidenceRejection
+    from oai2.verification import EvidenceRequirement as ExportedEvidenceRequirement
+    from oai2.verification import EvidenceStatus as ExportedEvidenceStatus
+    from oai2.verification import PolicyDecision as ExportedPolicyDecision
+    from oai2.verification import SupportNeed as ExportedSupportNeed
+    from oai2.verification import VerificationContext as ExportedVerificationContext
+    from oai2.verification import (
+        assess_repository_evidence as ExportedRepositoryAdapter,
+    )
+    from oai2.verification import (
+        assess_tool_runtime_evidence as ExportedToolRuntimeAdapter,
+    )
+    from oai2.verification import assess_web_evidence as ExportedWebAdapter
+    from oai2.verification.evidence import Evidence as SourceEvidence
+    from oai2.verification.evidence import EvidenceClass as SourceEvidenceClass
+    from oai2.verification.evidence import EvidenceGraph as SourceEvidenceGraph
+    from oai2.verification.evidence import EvidenceNode as SourceEvidenceNode
+    from oai2.verification.evidence import EvidenceStatus as SourceEvidenceStatus
+    from oai2.verification.paths import (
+        assess_repository_evidence as SourceRepositoryAdapter,
+    )
+    from oai2.verification.paths import (
+        assess_tool_runtime_evidence as SourceToolRuntimeAdapter,
+    )
+    from oai2.verification.paths import assess_web_evidence as SourceWebAdapter
+    from oai2.verification.policy import EVIDENCE_POLICY_VERSION as SourcePolicyVersion
+    from oai2.verification.policy import ClaimClass as SourceClaimClass
+    from oai2.verification.policy import ClaimEvidencePolicy as SourceClaimEvidencePolicy
+    from oai2.verification.policy import (
+        EvidenceAssessment as SourceEvidenceAssessment,
+    )
+    from oai2.verification.policy import EvidenceBinding as SourceEvidenceBinding
+    from oai2.verification.policy import EvidenceRejection as SourceEvidenceRejection
+    from oai2.verification.policy import (
+        EvidenceRequirement as SourceEvidenceRequirement,
+    )
+    from oai2.verification.policy import PolicyDecision as SourcePolicyDecision
+    from oai2.verification.state import ClaimState as SourceClaimState
+    from oai2.verification.state import ClaimStatus as SourceClaimStatus
+    from oai2.verification.state import SupportNeed as SourceSupportNeed
+    from oai2.verification.state import VerificationContext as SourceVerificationContext
+
+    assert ExportedClaimClass is SourceClaimClass
+    assert ExportedClaimEvidencePolicy is SourceClaimEvidencePolicy
+    assert ExportedClaimState is SourceClaimState
+    assert ExportedClaimStatus is SourceClaimStatus
+    assert ExportedPolicyVersion is SourcePolicyVersion
+    assert ExportedEvidence is SourceEvidence
+    assert ExportedEvidenceAssessment is SourceEvidenceAssessment
+    assert ExportedEvidenceBinding is SourceEvidenceBinding
+    assert ExportedEvidenceClass is SourceEvidenceClass
+    assert ExportedEvidenceGraph is SourceEvidenceGraph
+    assert ExportedEvidenceNode is SourceEvidenceNode
+    assert ExportedEvidenceRejection is SourceEvidenceRejection
+    assert ExportedEvidenceRequirement is SourceEvidenceRequirement
+    assert ExportedEvidenceStatus is SourceEvidenceStatus
+    assert ExportedPolicyDecision is SourcePolicyDecision
+    assert ExportedSupportNeed is SourceSupportNeed
+    assert ExportedVerificationContext is SourceVerificationContext
+    assert ExportedRepositoryAdapter is SourceRepositoryAdapter
+    assert ExportedToolRuntimeAdapter is SourceToolRuntimeAdapter
+    assert ExportedWebAdapter is SourceWebAdapter
