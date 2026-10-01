@@ -7,6 +7,7 @@ import pytest
 from oai2.knowledge.gc_lease_d1 import (
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_UPSERT_SQL,
+    GC_LEASE_VALIDATE_SQL,
     GC_LEASE_WRITER_BLOCK_SQL,
     gc_lease_schema_statements,
 )
@@ -170,3 +171,30 @@ async def test_upsert_lease_propagates_d1_unsuccessful_result() -> None:
             authority_revision=7,
             updated_at=10.0,
         )
+
+
+
+@pytest.mark.asyncio
+async def test_lease_valid_rechecks_token_expiry_and_authoritative_references() -> None:
+    db = FakeDatabase()
+    db.first_values[GC_LEASE_VALIDATE_SQL] = 1
+    store = D1GcLeaseStore(db)
+
+    assert await store.lease_valid(
+        "oai2-blobs/a",
+        "lease-1",
+        now=19.0,
+    ) is True
+    stmt = db.prepared[-1]
+    assert stmt.query == GC_LEASE_VALIDATE_SQL
+    assert stmt.bound == ("oai2-blobs/a", "lease-1", 19.0)
+
+
+@pytest.mark.asyncio
+async def test_lease_valid_fails_closed_on_non_boolean_scalar() -> None:
+    db = FakeDatabase()
+    db.first_values[GC_LEASE_VALIDATE_SQL] = 3
+    store = D1GcLeaseStore(db)
+
+    with pytest.raises(RuntimeError, match="lease_valid"):
+        await store.lease_valid("oai2-blobs/a", "lease-1", now=19.0)
