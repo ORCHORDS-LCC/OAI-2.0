@@ -50,6 +50,13 @@ from .qpipe_import import (
     import_qpipe_rows,
     row_to_knowledge_object,
 )
+from .sweep import (
+    GcSweepBatchResult,
+    GcSweepCandidate,
+    GcSweepDisposition,
+    GcSweepRecord,
+    GcSweepState,
+)
 from .transport import (
     TRANSPORT_VERSION,
     D1KnowledgeIndexRecord,
@@ -90,6 +97,11 @@ __all__ = [
     "GcReconciliationState",
     "KnowledgeBlobRow",
     "R2InventoryObject",
+    "GcSweepBatchResult",
+    "GcSweepCandidate",
+    "GcSweepDisposition",
+    "GcSweepRecord",
+    "GcSweepState",
     "sha256_hex",
     "now_epoch",
     "QPIPE_COMPATIBILITY_SOURCE_REVISION",
