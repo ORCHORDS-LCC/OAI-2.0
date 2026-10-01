@@ -2,7 +2,9 @@
 
 _Last reviewed: 2026-10-01._
 
-Stages are evidence gates, not delivery promises.
+Stages are evidence gates, not delivery promises. The detailed dependency-ordered implementation map lives in [GitHub Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1).
+
+OAI-2.0 uses **runner-free local verification**. Do not make GitHub Actions runners part of an acceptance gate.
 
 | Stage | Scope | Current status |
 | --- | --- | --- |

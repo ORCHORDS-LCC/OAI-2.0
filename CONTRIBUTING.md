@@ -19,7 +19,8 @@ OAI-2.0 is a public, non-commercial research and engineering repository. Read cu
 4. Prefer current primary/vendor documentation for external technical claims.
 5. Never publish credentials, private endpoints, account IDs, private topology, sensitive datasets, private provider arrangements, customer data, or non-public training sources.
 6. Use only `crm@orchords.com` where a public email is required.
-7. Do not claim tests, CI, benchmarks, Cloudflare connectivity, model capability, or host compatibility that was not actually demonstrated.
+7. Do not claim tests, benchmarks, Cloudflare connectivity, model capability, or host compatibility that was not actually demonstrated.
+8. OAI-2.0 is runner-free: do not add GitHub-hosted or self-hosted Actions runners as an acceptance dependency.
 
 ## Engineering workflow
 
@@ -30,6 +31,8 @@ INSPECT -> CURRENT SOURCE -> OFFICIAL RESEARCH -> VERIFY GAP
 ```
 
 Authorized maintainers may work directly on `main` where repository rules permit it.
+
+The dependency-ordered master work map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). Commit messages should describe code/docs changes only; do not embed runner names, workflow IDs, runner logs, or operational run records.
 
 ## Current verification commands
 
@@ -42,7 +45,7 @@ uv run mypy --ignore-missing-imports oai2
 uv run pytest -W error
 ```
 
-MLX tests require compatible Apple Silicon/macOS and are skipped on unsupported CI hosts.
+MLX tests require compatible Apple Silicon/macOS. Run them locally on supported hardware; do not substitute a runner-backed CI result.
 
 ## Knowledge/Cloudflare changes
 

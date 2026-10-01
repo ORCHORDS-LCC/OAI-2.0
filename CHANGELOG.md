@@ -11,13 +11,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Experimental OAI-2.0 Python package scaffold for protocols, reasoning, tools, agents, verification, vision abstractions, knowledge, runtime, and evaluation.
 - Corrected MLX benchmark harness with separate load, compile/warm-up, prefill/TTFT, decode, end-to-end, and memory metrics.
 - Offline capability-evaluation scaffolds for coding, tool use, bug diagnosis, reasoning, verification, vision, and orchestration.
-- GitHub CI for linting, tests, typing checks, and public-safety scanning.
+- Runner-free local verification is the canonical lint/test/type/public-safety workflow.
 - Application-level Cloudflare knowledge contract using logical D1/R2/Vectorize/KV roles plus deterministic mock bindings.
 - Strict q-pipe import policy aligned to q-pipe's Cloudflare export gate.
 - Synthetic 50-row q-pipe import round-trip test.
 - Public architecture, branding, support, security, contribution, stars, and donation/sponsorship documentation.
 
 ### Changed
+
+- Removed GitHub Actions runner-backed workflows; OAI-2.0 acceptance is local/manual-first and runner-free.
+- Added master implementation map in GitHub Issue #1.
 
 - Architecture target supersedes the original small-model-only concept: OAI-2.0 targets **10–30B+ total specialist capacity** with difficulty-dependent active compute.
 - q-pipe knowledge imports now default to **promoted, independently verified, quality-gated rows only**.

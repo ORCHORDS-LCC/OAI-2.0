@@ -4,7 +4,6 @@
 
 # OAI-2.0
 
-[![Documentation quality](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml/badge.svg)](https://github.com/ORCHORDS-LCC/OAI-2.0/actions/workflows/docs-quality.yml)
 [![License: Non-Commercial](https://img.shields.io/badge/license-non--commercial-red.svg)](./LICENSE)
 [![Status: Research](https://img.shields.io/badge/status-research-orange.svg)](./docs/agent-architecture/README.md)
 
@@ -17,6 +16,8 @@ OAI-2.0 is a public next-generation coding-agent research project focused on **l
 ## Current state — 2026-10-01
 
 OAI-2.0 is no longer documentation-only. The repository contains an **EXPERIMENTAL implementation scaffold**, but the final custom model remains **PROPOSED**.
+
+The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). This project intentionally uses **runner-free local verification**; GitHub Actions runners are not part of the acceptance workflow.
 
 | Area | Current status |
 | --- | --- |
