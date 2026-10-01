@@ -1,0 +1,31 @@
+name = "oai2-knowledge-worker"
+main = "entry.py"
+compatibility_date = "2026-10-02"
+compatibility_flags = ["python_workers"]
+
+# Public-safe example only. Copy this file to a private deployment config and
+# replace placeholders there; do not commit live resource IDs.
+
+[vars]
+EMBEDDING_VERSION = "embed-v1"
+EMBEDDING_DIGEST = "<embedding-digest>"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "<d1-database-name>"
+database_id = "<d1-database-id>"
+
+[[r2_buckets]]
+binding = "KNOWLEDGE_R2"
+bucket_name = "<r2-bucket-name>"
+
+[[kv_namespaces]]
+binding = "KNOWLEDGE_KV"
+id = "<kv-namespace-id>"
+
+[[vectorize]]
+binding = "KNOWLEDGE_VECTORIZE"
+index_name = "<vectorize-index-name>"
+
+# Authentication is a Wrangler secret, never a [vars] value:
+#   npx wrangler secret put KNOWLEDGE_AUTH_TOKEN
