@@ -259,3 +259,12 @@ def test_r2_kv_binding_protocol_exports_from_knowledge_package() -> None:
     assert ExportedR2BucketBinding is R2BucketBinding
     assert ExportedR2ObjectBodyBinding is R2ObjectBodyBinding
     assert ExportedKvBinding is KvNamespaceBinding
+
+
+def test_vectorize_binding_protocol_exports_from_knowledge_package() -> None:
+    from oai2.knowledge import VectorizeIndexBinding as ExportedVectorizeBinding
+    from oai2.knowledge.cloudflare_bindings_runtime import (
+        VectorizeIndexBinding,
+    )
+
+    assert ExportedVectorizeBinding is VectorizeIndexBinding
