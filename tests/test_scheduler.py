@@ -6,6 +6,7 @@ from oai2.runtime.scheduler import (
     BatchPlan,
     SafeBatchScheduler,
     ScheduledRequest,
+    SchedulerMetrics,
     SessionCompatibilityKey,
 )
 
@@ -156,7 +157,6 @@ def test_batch_plan_rejects_duplicate_session_or_mismatch() -> None:
         )
 
 
-
 def test_non_finite_enqueue_timestamp_is_rejected() -> None:
     scheduler = SafeBatchScheduler()
     for bad in (float("nan"), float("inf"), -float("inf")):
@@ -166,9 +166,42 @@ def test_non_finite_enqueue_timestamp_is_rejected() -> None:
 
 
 def test_scheduler_symbols_are_exported_from_runtime_package() -> None:
-    from oai2.runtime import SafeBatchScheduler as ExportedScheduler
-    from oai2.runtime import SessionCompatibilityKey as ExportedKey
-    from oai2.runtime.scheduler import SafeBatchScheduler, SessionCompatibilityKey
+    """Every name in ``oai2/runtime/scheduler.py`` ``__all__`` is importable
+    from ``oai2.runtime`` and aliases its source-of-truth.
 
+    Closes a coverage gap where ``oai2.runtime`` re-exported 5
+    ``oai2/runtime/scheduler.py`` ``__all__`` entries via its own
+    ``__all__`` but ``tests/test_scheduler.py`` only pinned 2 of them
+    (``SafeBatchScheduler`` and ``SessionCompatibilityKey``) at the
+    package surface. The remaining 3 — ``BatchPlan``, ``ScheduledRequest``,
+    ``SchedulerMetrics`` — were not pinned at the package surface,
+    leaving a 60 percent coverage gap on the session-isolation and
+    safe-batching scheduler's public contract.
+
+    The 8 pre-existing tests in ``tests/test_scheduler.py`` are
+    preserved byte-for-byte. The test now imports all 5 names from
+    ``oai2.runtime`` (the package-level re-export) and asserts each is
+    identical to the canonical binding in ``oai2.runtime.scheduler``
+    (the source-of-truth module), pinning the re-export contract
+    end-to-end.
+    """
+    from oai2.runtime import (
+        BatchPlan as ExportedBatchPlan,
+        SafeBatchScheduler as ExportedScheduler,
+        ScheduledRequest as ExportedRequest,
+        SchedulerMetrics as ExportedMetrics,
+        SessionCompatibilityKey as ExportedKey,
+    )
+    from oai2.runtime.scheduler import (
+        BatchPlan,
+        SafeBatchScheduler,
+        ScheduledRequest,
+        SchedulerMetrics,
+        SessionCompatibilityKey,
+    )
+
+    assert ExportedBatchPlan is BatchPlan
     assert ExportedScheduler is SafeBatchScheduler
+    assert ExportedRequest is ScheduledRequest
+    assert ExportedMetrics is SchedulerMetrics
     assert ExportedKey is SessionCompatibilityKey
