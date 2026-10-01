@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/1080x360.jpg" width="1080" alt="ORCHORDS — BUILD DIFFERENT.">
+  <img src="./assets/branding/orchords-banner.jpg" width="1080" alt="ORCHORDS — BUILD DIFFERENT.">
 </p>
 
 # OAI-2.0
@@ -83,5 +83,12 @@ See [SUPPORT.md](SUPPORT.md).
 MIT — see [LICENSE](LICENSE).
 
 ## Brand
+
+**ORCHORDS — BUILD DIFFERENT.**
+
+
+## Branding
+
+The public OAI-2.0 brand package is documented in [BRANDING.md](BRANDING.md), with reusable assets under [assets/branding/](assets/branding/README.md).
 
 **ORCHORDS — BUILD DIFFERENT.**
