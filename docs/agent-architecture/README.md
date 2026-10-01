@@ -28,6 +28,7 @@ Experimental source currently includes:
 - four-view vision abstractions;
 - corrected MLX benchmark harness;
 - offline deterministic capability-evaluation suites covering coding, bug diagnosis, multi-file reasoning, tool use, verification, vision, orchestration, abstention and conflicting evidence;
+- held-out capability regression gate with train-set isolation, per-capability tolerances, abstention accuracy and false-success limits;
 - application-level Cloudflare knowledge contract + deterministic mocks;
 - versioned public-safe Cloudflare transport/schema models plus source-level async D1 reader/writer and R2/KV/Vectorize binding wrappers;
 - assembled async Cloudflare knowledge runtime for source-level put/get/retrieve orchestration;
