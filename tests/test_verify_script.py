@@ -58,3 +58,22 @@ def test_main_reaches_success_when_all_gates_pass(monkeypatch) -> None:
     monkeypatch.setattr(verify, "run_public_safety_scan", lambda: True)
     monkeypatch.setattr(verify, "run_markdown_link_scan", lambda: True)
     assert verify.main() == 0
+
+
+def test_platform_status_reports_explicit_skip(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(verify.sys, "platform", "linux")
+    monkeypatch.setattr(verify.platform, "machine", lambda: "x86_64")
+    verify.report_platform_check_status()
+    output = capsys.readouterr().out
+    assert "SKIP platform-mlx" in output
+    assert "linux" in output
+    assert "x86_64" in output
+
+
+def test_platform_status_reports_apple_silicon_eligibility(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(verify.sys, "platform", "darwin")
+    monkeypatch.setattr(verify.platform, "machine", lambda: "arm64")
+    verify.report_platform_check_status()
+    output = capsys.readouterr().out
+    assert "PASS platform-mlx" in output
+    assert "macOS arm64" in output

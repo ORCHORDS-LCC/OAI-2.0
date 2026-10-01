@@ -7,8 +7,10 @@ Actions or require a hosted/self-hosted runner.
 
 from __future__ import annotations
 
+import platform
 import re
 import subprocess
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -117,10 +119,28 @@ def run_markdown_link_scan() -> bool:
     return True
 
 
+def report_platform_check_status() -> None:
+    """Report whether Apple-Silicon-specific checks are eligible locally."""
+
+    machine = platform.machine().lower()
+    if sys.platform == "darwin" and machine == "arm64":
+        print(
+            "PASS platform-mlx: macOS arm64; MLX-specific pytest cases are eligible",
+            flush=True,
+        )
+        return
+    print(
+        "SKIP platform-mlx: MLX-specific checks require macOS arm64 "
+        f"(detected platform={sys.platform}, machine={machine or 'unknown'})",
+        flush=True,
+    )
+
+
 def main() -> int:
     for name, command in CHECKS:
         if not run_check(name, command):
             return 1
+    report_platform_check_status()
     if not run_public_safety_scan():
         return 1
     if not run_markdown_link_scan():
