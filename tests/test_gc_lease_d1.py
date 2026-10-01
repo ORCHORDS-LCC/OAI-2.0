@@ -30,6 +30,17 @@ def _db() -> Iterator[sqlite3.Connection]:
             ) STRICT
             """
         )
+        db.execute(
+            """
+            CREATE TABLE knowledge_corpus_state (
+                singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton = 1),
+                revision INTEGER NOT NULL CHECK(revision >= 0)
+            ) STRICT
+            """
+        )
+        db.execute(
+            "INSERT INTO knowledge_corpus_state(singleton, revision) VALUES (1, 7)"
+        )
         for statement in gc_lease_schema_statements():
             db.execute(statement)
         yield db
@@ -160,7 +171,7 @@ def test_conditional_acquire_blocks_referenced_object_and_live_lease() -> None:
         before = db.total_changes
         db.execute(
             GC_LEASE_ACQUIRE_SQL,
-            (key, "lease-2", "gc-sweep", 15.0, 25.0, 8),
+            (key, "lease-2", "gc-sweep", 15.0, 25.0, 7),
         )
         assert db.total_changes == before
         row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
@@ -177,12 +188,12 @@ def test_conditional_acquire_allows_expired_takeover_but_rechecks_references() -
         )
         db.execute(
             GC_LEASE_ACQUIRE_SQL,
-            (key, "lease-new", "gc-sweep", 20.0, 30.0, 8),
+            (key, "lease-new", "gc-sweep", 20.0, 30.0, 7),
         )
         row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
         assert row is not None
         assert row[1] == "lease-new"
-        assert row[8] == 8
+        assert row[8] == 7
 
         db.execute(
             "INSERT INTO knowledge_index(knowledge_id, r2_blob_key) VALUES (?, ?)",
@@ -191,7 +202,7 @@ def test_conditional_acquire_allows_expired_takeover_but_rechecks_references() -
         before = db.total_changes
         db.execute(
             GC_LEASE_ACQUIRE_SQL,
-            (key, "lease-third", "gc-sweep", 40.0, 50.0, 9),
+            (key, "lease-third", "gc-sweep", 40.0, 50.0, 7),
         )
         assert db.total_changes == before
         row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
@@ -236,7 +247,7 @@ def test_failure_finalize_and_release_transitions_are_token_guarded() -> None:
 
         db.execute(
             GC_LEASE_ACQUIRE_SQL,
-            (key, "lease-2", "gc-sweep", 14.0, 30.0, 10),
+            (key, "lease-2", "gc-sweep", 14.0, 30.0, 7),
         )
         db.execute(
             GC_LEASE_FINALIZE_SQL,
@@ -268,3 +279,25 @@ def test_finalize_fails_when_reference_reappears() -> None:
         row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
         assert row is not None
         assert row[5] == "active"
+
+
+
+def test_conditional_acquire_rejects_stale_corpus_revision() -> None:
+    with _db() as db:
+        key = "oai2-blobs/revision"
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-stale", "gc-sweep", 10.0, 20.0, 6),
+        )
+        assert db.total_changes == before
+        assert db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone() is None
+
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-current", "gc-sweep", 10.0, 20.0, 7),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[1] == "lease-current"
+        assert row[8] == 7
