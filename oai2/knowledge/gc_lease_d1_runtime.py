@@ -17,6 +17,7 @@ from typing import Protocol, Self
 from .gc_lease_d1 import (
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_UPSERT_SQL,
+    GC_LEASE_VALIDATE_SQL,
     GC_LEASE_WRITER_BLOCK_SQL,
     gc_lease_schema_statements,
 )
@@ -73,10 +74,19 @@ class D1GcLeaseStore:
             .bind(key, timestamp)
             .first("writer_blocked")
         )
-        flag = _non_negative_int(value, "writer_blocked")
-        if flag not in (0, 1):
-            raise RuntimeError("D1 writer_blocked query returned a non-boolean integer")
-        return bool(flag)
+        return _strict_boolean_int(value, "writer_blocked")
+
+    async def lease_valid(self, object_key: str, token: str, *, now: float) -> bool:
+        """Revalidate token, expiry and no-reference state immediately pre-delete."""
+        key = _normalized(object_key, "object_key")
+        lease_token = _normalized(token, "token")
+        timestamp = _finite_non_negative(now, "now")
+        value = await (
+            self._db.prepare(GC_LEASE_VALIDATE_SQL)
+            .bind(key, lease_token, timestamp)
+            .first("lease_valid")
+        )
+        return _strict_boolean_int(value, "lease_valid")
 
     async def upsert_lease(
         self,
@@ -157,6 +167,13 @@ def _non_negative_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
     return value
+
+
+def _strict_boolean_int(value: object, name: str) -> bool:
+    flag = _non_negative_int(value, name)
+    if flag not in (0, 1):
+        raise RuntimeError(f"D1 {name} query returned a non-boolean integer")
+    return bool(flag)
 
 
 __all__ = [
