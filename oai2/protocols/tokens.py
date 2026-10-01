@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class TokenKind(str, Enum):
+class TokenKind(StrEnum):
     READ = "READ"
     WRITE = "WRITE"
     EDIT = "EDIT"
@@ -37,6 +37,10 @@ class ReadToken:
 
 @dataclass(slots=True, frozen=True)
 class TestToken:
+    # Not a pytest test class — pytest auto-discovers classes prefixed with
+    # ``Test``; this attribute opts out of collection.
+    __test__ = False
+
     kind: TokenKind
     selector: str
 

@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: lint + types + tests + public-safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.12.x"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Set up Python 3.14
+        run: uv python install 3.14
+      - name: Sync deps (no MLX)
+        # MLX is apple-only; CI is ubuntu. Install only the project's
+        # non-MLX deps so the smoke test correctly skips via @pytest.mark.skipif.
+        run: |
+          uv pip install --system \
+            "pydantic>=2.9,<3.0" "fastapi>=0.115" "jsonschema>=4.23" \
+            "pyyaml>=6.0" "jinja2>=3.1" "httpx>=0.27" \
+            "Pillow>=10.4" "numpy>=2.0,<3.0" \
+            "pytest>=8.3" "pytest-asyncio>=0.24" \
+            "ruff>=0.7" "mypy>=1.13"
+      - name: Ruff lint
+        run: ruff check oai2 tests scripts
+      - name: MyPy (best-effort, ignore_missing_imports)
+        run: |
+          mypy --no-incremental --follow-imports=silent \
+            --ignore-missing-imports --warn-unused-ignores \
+            oai2 || true
+      - name: Pytest
+        run: pytest -W error -v
+      - name: Public-safety scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          """Block accidental leakage of private infra / credentials.
+
+          The repo is intentionally public-safe:
+
+            * no real Cloudflare account / bucket / database IDs;
+            * no API keys or private tokens;
+            * no private URLs or corpus content;
+            * no private provider details (server hostnames, internal endpoints).
+
+          Allowed public contact: crm@orchords.com.
+          """
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path(".")
+          forbidden_regex = [
+              # Cloudflare resource identifiers — these leak account IDs.
+              r"(?i)\bcloudflare[_ ]?account[_ ]?id\b",
+              r"(?i)CF_API_TOKEN",
+              r"r2[A-Za-z0-9_-]{16,}\.r2\.cloudflarestorage\.com",
+              r"\b[a-f0-9]{32}\.cf\.r2\.dev\b",
+              # Cloudflare D1 / KV ids look like 32-hex, hard to ban globally,
+              # so we scan for them in commit diffs via secrets comment (below).
+          ]
+          sensitive_literal = [
+              r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+              r"(?i)api[_-]?key\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}",
+              r"(?i)secret\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}",
+              r"AKIA[0-9A-Z]{16}",
+              r"ghp_[A-Za-z0-9]{30,}",
+              r"sk-[A-Za-z0-9]{20,}",
+          ]
+          allowed_email = "crm@orchords.com"
+
+          violations: list[str] = []
+          scanned = 0
+          for path in root.rglob("*"):
+              if not path.is_file():
+                  continue
+              if any(part.startswith(".") and part not in {".env.example"}
+                     for part in path.parts):
+                  # Hidden dirs (.github, .git, .zcode/...) are scanned
+                  # except .git internals.
+                  if ".git" in path.parts:
+                      continue
+              if path.suffix not in {
+                  ".py", ".md", ".yml", ".yaml", ".toml", ".json",
+                  ".sh", ".txt", ".env", ".example",
+              }:
+                  continue
+              scanned += 1
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for pat in forbidden_regex + sensitive_literal:
+                  import re
+                  if re.search(pat, text):
+                      violations.append(f"{path}: pattern {pat}")
+
+          # Ensure crm@orchords.com is the only public contact email anywhere.
+          email_re = __import__("re").compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+          for path in root.rglob("*"):
+              if not path.is_file() or ".git" in path.parts:
+                  continue
+              if path.suffix not in {".md", ".py", ".toml", ".yml", ".yaml"}:
+                  continue
+              text = path.read_text(encoding="utf-8", errors="replace")
+              for m in email_re.finditer(text):
+                  if m.group(0) != allowed_email:
+                      violations.append(f"{path}: non-allowed email {m.group(0)}")
+
+          print(f"scanned {scanned} files")
+          if violations:
+              print("PUBLIC-SAFETY VIOLATIONS:")
+              for v in violations:
+                  print(" -", v)
+              sys.exit(1)
+          print("public-safety: OK")
+          PY

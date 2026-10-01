@@ -1,6 +1,15 @@
-"""Runtime tests — exercises the placeholder runtime and the MLX smoke check."""
+"""Runtime tests — exercises the placeholder runtime and the MLX smoke check.
+
+The :func:`smoke_check` test is gated to macOS / Apple Silicon where MLX
+actually ships; on other platforms the placeholder runtime still works
+but MLX is not installed.
+"""
 
 from __future__ import annotations
+
+import sys
+
+import pytest
 
 from oai2.core import Status
 from oai2.runtime import (
@@ -27,6 +36,10 @@ def test_placeholder_runtime_reports_device() -> None:
     assert "hello" not in resp.text  # placeholder never echoes
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="MLX runtime only ships on Apple Silicon (macOS).",
+)
 def test_mlx_smoke_check() -> None:
     ok, info = smoke_check()
     assert ok is True

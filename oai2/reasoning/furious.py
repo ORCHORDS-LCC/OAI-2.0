@@ -11,14 +11,14 @@ IMPLEMENTED :class:`~oai2.runtime.InferenceRuntime`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import Status
 
 
-class FuriousState(str, Enum):
+class FuriousState(StrEnum):
     IDLE = "idle"
     PLANNING = "planning"
     ACTING = "acting"

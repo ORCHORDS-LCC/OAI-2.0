@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 

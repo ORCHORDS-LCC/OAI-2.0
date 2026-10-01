@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from oai2.core import Status
 from oai2.reasoning import (
-    DeepController,
     DeepContext,
+    DeepController,
     FuriousContext,
     FuriousController,
     FuriousDecision,

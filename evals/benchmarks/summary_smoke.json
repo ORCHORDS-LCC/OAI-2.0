@@ -1,0 +1,154 @@
+{
+  "tag": "smoke",
+  "model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "max_tokens": 32,
+  "repetitions": 1,
+  "warmup": true,
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "configs": [
+    {
+      "prompt_label": "~128tokens (98words)",
+      "prompt_tokens": 133,
+      "runs": [
+        {
+          "run_id": "bench_b3a2faef45",
+          "timestamp": 1790843692.842656,
+          "model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 133,
+          "max_tokens": 32,
+          "load_seconds": 0.663044291024562,
+          "compile_seconds": 0.20010849996469915,
+          "warm_run_seconds": 0.06766170798800886,
+          "prefill_seconds": 0.0254404169972986,
+          "prefill_tokens_per_second": 5227.901728738278,
+          "decode_seconds": 0.16566162498202175,
+          "decode_tokens_per_second": 198.4659204306399,
+          "end_to_end_seconds": 0.19110204197932035,
+          "generation_tokens": 32,
+          "peak_memory_gb": 0.401994228,
+          "active_memory_gb": 0.281784072,
+          "cache_memory_gb": 0.00869308,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on",
+          "notes": []
+        }
+      ],
+      "aggregate": {
+        "load_seconds": {
+          "count": 1,
+          "mean": 0.663044291024562,
+          "median": 0.663044291024562,
+          "min": 0.663044291024562,
+          "max": 0.663044291024562,
+          "stddev": 0.0
+        },
+        "compile_seconds": {
+          "count": 1,
+          "mean": 0.20010849996469915,
+          "median": 0.20010849996469915,
+          "min": 0.20010849996469915,
+          "max": 0.20010849996469915,
+          "stddev": 0.0
+        },
+        "warm_run_seconds": {
+          "count": 1,
+          "mean": 0.06766170798800886,
+          "median": 0.06766170798800886,
+          "min": 0.06766170798800886,
+          "max": 0.06766170798800886,
+          "stddev": 0.0
+        },
+        "prefill_seconds": {
+          "count": 1,
+          "mean": 0.0254404169972986,
+          "median": 0.0254404169972986,
+          "min": 0.0254404169972986,
+          "max": 0.0254404169972986,
+          "stddev": 0.0
+        },
+        "prefill_tokens_per_second": {
+          "count": 1,
+          "mean": 5227.901728738278,
+          "median": 5227.901728738278,
+          "min": 5227.901728738278,
+          "max": 5227.901728738278,
+          "stddev": 0.0
+        },
+        "decode_seconds": {
+          "count": 1,
+          "mean": 0.16566162498202175,
+          "median": 0.16566162498202175,
+          "min": 0.16566162498202175,
+          "max": 0.16566162498202175,
+          "stddev": 0.0
+        },
+        "decode_tokens_per_second": {
+          "count": 1,
+          "mean": 198.4659204306399,
+          "median": 198.4659204306399,
+          "min": 198.4659204306399,
+          "max": 198.4659204306399,
+          "stddev": 0.0
+        },
+        "end_to_end_seconds": {
+          "count": 1,
+          "mean": 0.19110204197932035,
+          "median": 0.19110204197932035,
+          "min": 0.19110204197932035,
+          "max": 0.19110204197932035,
+          "stddev": 0.0
+        },
+        "peak_memory_gb": {
+          "count": 1,
+          "mean": 0.401994228,
+          "median": 0.401994228,
+          "min": 0.401994228,
+          "max": 0.401994228,
+          "stddev": 0.0
+        },
+        "active_memory_gb": {
+          "count": 1,
+          "mean": 0.281784072,
+          "median": 0.281784072,
+          "min": 0.281784072,
+          "max": 0.281784072,
+          "stddev": 0.0
+        },
+        "cache_memory_gb": {
+          "count": 1,
+          "mean": 0.00869308,
+          "median": 0.00869308,
+          "min": 0.00869308,
+          "max": 0.00869308,
+          "stddev": 0.0
+        },
+        "generation_tokens": {
+          "count": 1,
+          "mean": 32.0,
+          "median": 32,
+          "min": 32,
+          "max": 32,
+          "stddev": 0.0
+        }
+      }
+    }
+  ]
+}

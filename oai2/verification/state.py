@@ -8,7 +8,7 @@ state-machine result.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,14 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..core import ClaimId
 
 
-class ClaimStatus(str, Enum):
+class ClaimStatus(StrEnum):
     SUPPORTED = "supported"
     UNVERIFIED = "unverified"
     CONFLICTING = "conflicting"
     BLOCKED = "blocked"
 
 
-class SupportNeed(str, Enum):
+class SupportNeed(StrEnum):
     SOURCE_FACT = "source_fact"
     EXTERNAL_FACT = "external_fact"
     RUNTIME = "runtime_behavior"

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import struct
-
 from oai2.core import Status
 from oai2.vision import (
     PixelView,

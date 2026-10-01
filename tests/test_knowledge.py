@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from oai2.core import Status
 from oai2.knowledge import (
-    InMemoryKnowledgeStore,
     IngestionJob,
     IngestionPipeline,
     IngestionStatus,
+    InMemoryKnowledgeStore,
     KnowledgeObject,
     RetrievalRequest,
     sha256_hex,

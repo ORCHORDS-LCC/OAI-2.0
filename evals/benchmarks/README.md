@@ -1,10 +1,16 @@
-# OAI-2.0 MLX sanity-probe benchmarks (v0.1.0)
+# OAI-2.0 MLX sanity-probe benchmarks (v0.1.0 → v0.2.0)
 
-> **Status: EXPERIMENTAL.** These numbers are real measured decode
-> rates from `scripts/bench.py` on the M5 Max Mac Studio used to
-> bootstrap OAI-2.0. They are sanity probes, not full evaluations.
-> Architecture decisions will use a richer benchmark harness in later
-> releases.
+> **Status: SUPERSEDED for prefill/TTFT.** v0.2.0 replaced the old
+> `mlx_lm.generate`-based `bench_*.json` numbers. The new harness
+> (`scripts/bench.py`) uses `mlx_lm.stream_generate` for a true
+> prefill / decode / TTFT split. See **v0.2.0 results** below.
+>
+> The v0.1.0 JSON records (`bench_5ecb176f8b`, `bench_485d709342`,
+> `bench_299bb3ee67`, `bench_43f7ed8a27`) are kept for historical
+> traceability — they document that the bootstrap path works, but
+> `prefill_seconds=0.0` and `ttft_seconds=0.0` are NOT real numbers.
+>
+> **Architecture decisions use v0.2.0+ numbers, never v0.1.0.**
 
 ## Hardware
 
@@ -70,15 +76,27 @@ Raw JSON for each run is committed under `evals/benchmarks/`.
 
 ## Running the benchmark yourself
 
+The CLI shape changed in v0.2.0. The new harness reports
+`load_seconds`, `compile_seconds`, `warm_run_seconds`,
+`prefill_seconds` (TTFT), `prefill_tokens_per_second`, `decode_seconds`,
+`decode_tokens_per_second`, `end_to_end_seconds`, `generation_tokens`,
+`peak_memory_gb`, `active_memory_gb`, `cache_memory_gb`, and
+aggregates `mean / median / min / max / stddev` over N repetitions.
+
 ```bash
 cd /Users/orchords/src/OAI-2.0
-uv run python scripts/bench.py --model mlx-community/SmolLM-135M-Instruct-4bit
-uv run python scripts/bench.py --model mlx-community/Qwen2.5-0.5B-Instruct-4bit
-uv run python scripts/bench.py --model mlx-community/Llama-3.2-1B-Instruct-4bit
-uv run python scripts/bench.py --model mlx-community/Qwen2.5-Coder-0.5B-Instruct-4bit --prompt "def factorial(n):"
+uv run python scripts/bench.py \
+    --model mlx-community/Qwen2.5-0.5B-Instruct-4bit \
+    --prompt-tokens 128 1024 4096 \
+    --max-tokens 256 \
+    --repetitions 5
 ```
 
-Each run writes a JSON record under `evals/benchmarks/`.
+Each run writes a per-run JSON record under `evals/benchmarks/`,
+plus a `summary_<tag>.json` aggregating the per-config aggregates.
+
+`bench.py` never reports 0.0 for any measurable quantity; unmeasurable
+metrics are reported as JSON `null`.
 
 ## How these will be replaced
 

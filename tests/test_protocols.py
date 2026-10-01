@@ -14,7 +14,6 @@ from oai2.protocols import (
     ToolArgument,
     ToolCall,
     ToolDefinition,
-    ToolPolicy,
     parse_action_token,
 )
 

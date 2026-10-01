@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ReasoningMode(str, Enum):
+class ReasoningMode(StrEnum):
     """The four public reasoning modes from ``ARCHITECTURE_TARGET.md``.
 
     Each mode names an *active-compute* profile, not a fixed model size:

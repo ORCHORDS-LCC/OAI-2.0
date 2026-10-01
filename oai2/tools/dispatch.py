@@ -9,15 +9,15 @@ downstream when ``decision.action is DispatchStage.EXECUTE``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import Status
-from ..protocols import ToolCall, ToolDefinition, ToolPolicy, ToolResult
+from ..protocols import ToolCall, ToolDefinition, ToolResult
 
 
-class DispatchStage(str, Enum):
+class DispatchStage(StrEnum):
     EXECUTE = "execute"
     REPAIR = "repair_arguments"
     CHOOSE_ALT = "choose_alternative"

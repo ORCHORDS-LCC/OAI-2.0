@@ -1,0 +1,33 @@
+{
+  "run_id": "bench_b3a2faef45",
+  "timestamp": 1790843692.842656,
+  "model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "quantization": "4bit",
+  "prompt_label": "~128tokens (98words)",
+  "prompt_tokens": 133,
+  "max_tokens": 32,
+  "load_seconds": 0.663044291024562,
+  "compile_seconds": 0.20010849996469915,
+  "warm_run_seconds": 0.06766170798800886,
+  "prefill_seconds": 0.0254404169972986,
+  "prefill_tokens_per_second": 5227.901728738278,
+  "decode_seconds": 0.16566162498202175,
+  "decode_tokens_per_second": 198.4659204306399,
+  "end_to_end_seconds": 0.19110204197932035,
+  "generation_tokens": 32,
+  "peak_memory_gb": 0.401994228,
+  "active_memory_gb": 0.281784072,
+  "cache_memory_gb": 0.00869308,
+  "device": "Device(gpu, 0)",
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on",
+  "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on",
+  "notes": []
+}

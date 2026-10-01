@@ -8,14 +8,14 @@ Status: PROPOSED.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import AgentId, Status
 
 
-class SwarmRole(str, Enum):
+class SwarmRole(StrEnum):
     PLANNER = "planner"
     IMPLEMENTER = "implementer"
     CRITIC = "critic"

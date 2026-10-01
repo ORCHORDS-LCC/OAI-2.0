@@ -10,15 +10,16 @@ Status: PROPOSED. No external fetches happen in v0.1.0.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Iterable, Protocol
+from enum import StrEnum
+from typing import Protocol
 
 from ..core import KnowledgeId, Status
 from .abstraction import KnowledgeObject, KnowledgeStore, now_epoch, sha256_hex
 
 
-class IngestionStatus(str, Enum):
+class IngestionStatus(StrEnum):
     PENDING = "pending"
     OK = "ok"
     FAILED = "failed"

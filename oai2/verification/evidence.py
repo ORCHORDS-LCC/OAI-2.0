@@ -6,7 +6,7 @@ support or refute a claim. References ``VERIFICATION_AND_EVIDENCE.md``.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..core import EvidenceId
 
 
-class EvidenceClass(str, Enum):
+class EvidenceClass(StrEnum):
     USER_INTENT = "user_intent"
     REPO_SOURCE = "repo_source"
     CHANGE_HISTORY = "change_history"
@@ -25,7 +25,7 @@ class EvidenceClass(str, Enum):
     HYPOTHESIS = "model_hypothesis"
 
 
-class EvidenceStatus(str, Enum):
+class EvidenceStatus(StrEnum):
     VERIFIED = "verified"
     UNVERIFIED = "unverified"
     CONFLICTING = "conflicting"
@@ -59,7 +59,7 @@ class EvidenceNode(BaseModel):
     def net_count(self) -> int:
         return len(self.supporting) - len(self.refuting)
 
-    def merge(self, other: "EvidenceNode") -> "EvidenceNode":
+    def merge(self, other: EvidenceNode) -> EvidenceNode:
         """Combine two nodes that reference the same claim."""
         if other.claim_id != self.claim_id:
             raise ValueError("cannot merge nodes with different claim_id")

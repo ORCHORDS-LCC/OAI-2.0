@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import NewType
 
 # Stable identifier aliases — opaque strings to the rest of the codebase.
@@ -15,7 +15,7 @@ AgentId = NewType("AgentId", str)
 ToolId = NewType("ToolId", str)
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     """Public lifecycle status for OAI-2.0 components.
 
     Mirrors the status language used in ``docs/agent-architecture/``:
