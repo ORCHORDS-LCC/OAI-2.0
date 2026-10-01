@@ -352,8 +352,13 @@ def run_gateway_reach_check() -> bool:
             flush=True,
         )
         return False
-    model_ids = [item.get("id") for item in data if isinstance(item, dict)]
-    if expected_model not in model_ids:
+    model_ids = [
+        item.get("id")
+        for item in data
+        if isinstance(item, dict) and item.get("id") is not None
+    ]
+    exposed = set(model_ids)
+    if expected_model not in exposed:
         print(
             "FAIL gateway-reach: expected model "
             f"{expected_model!r} not exposed by {base_url} "
@@ -361,9 +366,19 @@ def run_gateway_reach_check() -> bool:
             flush=True,
         )
         return False
+    stale = sorted(exposed - {expected_model})
+    if stale:
+        print(
+            "FAIL gateway-reach: stale model ids exposed by "
+            f"{base_url}: {stale!r} (only {expected_model!r} should be listed; "
+            "see issue #237).",
+            flush=True,
+        )
+        return False
     print(
         "PASS gateway-reach: "
-        f"{base_url} exposes {expected_model} (of {len(model_ids)} models)",
+        f"{base_url} exposes exactly {expected_model!r} "
+        f"(of {len(model_ids)} models)",
         flush=True,
     )
     return True

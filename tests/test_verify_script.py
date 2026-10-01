@@ -287,7 +287,7 @@ def test_gateway_reach_check_skips_without_api_key(
     assert "OAI2_GATEWAY_API_KEY" in output
 
 
-def test_gateway_reach_check_passes_when_model_exposed(
+def test_gateway_reach_check_passes_when_only_expected_model_exposed(
     monkeypatch, capsys
 ) -> None:
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
@@ -298,7 +298,7 @@ def test_gateway_reach_check_passes_when_model_exposed(
         status_code = 200
 
         def json(self) -> dict:
-            return {"data": [{"id": "oai-1.2"}, {"id": "other"}]}
+            return {"data": [{"id": "oai-1.2"}]}
 
     captured: dict = {}
 
@@ -313,8 +313,44 @@ def test_gateway_reach_check_passes_when_model_exposed(
     assert verify.run_gateway_reach_check() is True
     output = capsys.readouterr().out
     assert "PASS gateway-reach" in output
+    assert "exactly 'oai-1.2'" in output
     assert captured["url"] == "https://api.orchords.com/v1/models"
     assert captured["auth"] == "Bearer k"
+
+
+def test_gateway_reach_check_fails_when_stale_models_exposed(
+    monkeypatch, capsys
+) -> None:
+    # Issue #237: the cloud currently exposes four model ids
+    # (oai-1.0, oai-1.2, orchordsai-gpt, orchordsai-m3). The check must
+    # FAIL with a stale-model-presence message, not silently PASS.
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.delenv("OAI2_GATEWAY_BASE_URL", raising=False)
+    monkeypatch.delenv("OAI2_GATEWAY_MODEL", raising=False)
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {
+                "data": [
+                    {"id": "oai-1.0"},
+                    {"id": "oai-1.2"},
+                    {"id": "orchordsai-gpt"},
+                    {"id": "orchordsai-m3"},
+                ]
+            }
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResponse())
+    assert verify.run_gateway_reach_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL gateway-reach" in output
+    assert "stale model ids" in output
+    assert "oai-1.0" in output
+    assert "orchordsai-gpt" in output
+    assert "orchordsai-m3" in output
 
 
 def test_gateway_reach_check_fails_on_http_error(
