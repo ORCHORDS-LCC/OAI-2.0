@@ -1,5 +1,7 @@
 # Implementation Roadmap
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 Stages are evidence gates, not delivery promises. The detailed dependency-ordered implementation map lives in [GitHub Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1).
@@ -25,7 +27,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | Work package | Issue | Domain | Current state |
 | --- | --- | --- | --- |
 | WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | **COMPLETED / CLOSED** |
-| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | **EXPERIMENTAL source runtime assembled** from D1 reader/writer + R2/KV/Vectorize wrappers + D1/R2 GC delete boundary; authenticated Worker/private deployment proof remaining |
+| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | **EXPERIMENTAL source runtime + authenticated Worker handler/entrypoint assembled**; private Cloudflare deployment and end-to-end network proof remaining |
 | WP-03 | [#4](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/4) | Real q-pipe migration | PROPOSED |
 | WP-04 | [#5](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/5) | Semantic retrieval/evidence | PROPOSED |
 | WP-05 | [#6](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/6) | Performance baselines | EXPERIMENTAL harness / matrix remaining |
@@ -48,7 +50,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-22 | [#63](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/63) | Difficulty/mode/compute routing | PROPOSED |
 | WP-23 | [#64](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/64) | Continuous knowledge ingestion/freshness | PROPOSED |
 | WP-24 | [#65](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/65) | Multi-objective model training | PROPOSED |
-| WP-25 | [#66](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/66) | Inference scheduling/batching/session runtime | EXPERIMENTAL exact-compatibility safe batching scheduler core; live MLX/service integration remaining |
+| WP-25 | [#66](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/66) | Inference scheduling/batching/session runtime | EXPERIMENTAL exact-compatibility safe batching scheduler + admission bridge; live MLX/service/KV reuse proof remaining |
 | WP-26 | [#67](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/67) | Documentation/traceability drift governance | PROPOSED |
 | WP-27 | [#80](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/80) | Core neural topology/fusion | PROPOSED |
 | WP-28 | [#81](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/81) | Verified continual learning | PROPOSED |
@@ -172,7 +174,7 @@ Knowledge-store reads verify stored content hashes/provenance and fail closed on
 ## Immediate dependency-ordered gates
 
 1. Keep the closed WP-01 verification baseline green on every source change.
-2. Continue #19 / WP-02 from the assembled async source runtime into authenticated Worker deployment, private end-to-end Cloudflare proof, and production resource/integrity/latency validation.
+2. Continue #19 / WP-02 from the assembled async runtime + authenticated Worker source entrypoint into private Cloudflare deployment, real binding/network proof, and dependency-failure demonstration.
 3. Perform WP-03 small real q-pipe migration.
 4. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
 5. Expand WP-08 held-out capability/regression gates.

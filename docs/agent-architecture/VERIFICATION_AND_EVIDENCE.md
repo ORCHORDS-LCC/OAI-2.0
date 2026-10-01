@@ -1,8 +1,10 @@
 # Verification and Evidence
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
-> **Current status:** typed evidence/claim structures and evidence-graph behavior are **EXPERIMENTAL**. WP-75 (#226–#228) now explicitly tracks claim-level evidence binding, contradiction/freshness handling, and adversarial false-success/hallucination gates; full automatic enforcement in final generation remains **NOT YET PROVEN**.
+> **Current status:** typed evidence/claim structures, conflicting-evidence state derivation, and a versioned claim-evidence policy are **EXPERIMENTAL**. WP-75 (#226–#228) still requires repository/tool/web consumption, freshness/version invalidation wiring, and adversarial false-success/hallucination gates before automatic enforcement is proven.
 
 ## Principle
 

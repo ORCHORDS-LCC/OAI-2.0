@@ -1,5 +1,7 @@
 # OAI-2.0 Agent Architecture
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 This folder is the public architecture source for OAI-2.0. It now documents both the **PROPOSED final architecture** and the **EXPERIMENTAL scaffold that exists on current main**.
@@ -28,9 +30,10 @@ Experimental source currently includes:
 - application-level Cloudflare knowledge contract + deterministic mocks;
 - versioned public-safe Cloudflare transport/schema models plus source-level async D1 reader/writer and R2/KV/Vectorize binding wrappers;
 - assembled async Cloudflare knowledge runtime for source-level put/get/retrieve orchestration;
+- authenticated transport handler, bound-component factory, and public-safe Python Worker entrypoint/template for WP-02 source integration;
 - reference-safe R2 reconciliation and conservative sweep core;
 - deterministic GC lease state model plus versioned D1 lease schema, async binding-facing adapter, durable D1 knowledge-index/corpus-revision writer, and async D1/R2 delete boundary;
-- QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, exact-compatibility safe batching scheduler, and p95/p99/deadline promotion regression gate;
+- QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, exact-compatibility safe batching scheduler, admission-to-scheduler bridge, and p95/p99/deadline promotion regression gate;
 - strict q-pipe verified-import policy.
 
 Not yet implemented as production capabilities:

@@ -1,5 +1,7 @@
 # Reasoning Strength and Speed
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 ## Modes
@@ -67,6 +69,8 @@ For an agent, time-to-first-useful-action and verified task completion per unit 
 ## End-to-end QoS and admission control
 
 Raw decode throughput is not the service objective. Current source now includes `oai2/evals/qos.py` for versioned workload/service budgets and `oai2/runtime/admission.py` for a deterministic admission/backpressure policy core.
+
+An admission→scheduler bridge now exists in source so admission decisions can feed the exact-compatibility safe batching scheduler. This is still not live MLX/service proof.
 
 The current policy surface:
 

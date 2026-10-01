@@ -1,5 +1,7 @@
 # Security and Sandboxing
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 > **Current status:** security policy scaffolding exists; production autonomous execution security remains **PROPOSED** until hardened and adversarially tested.

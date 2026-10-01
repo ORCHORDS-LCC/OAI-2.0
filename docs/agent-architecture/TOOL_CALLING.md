@@ -1,5 +1,7 @@
 # Portable Native Tool Calling
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 > **Current status:** dynamic tool schemas and a six-gate `ToolDispatcher` are **EXPERIMENTAL**. Production host adapters remain **PROPOSED**.

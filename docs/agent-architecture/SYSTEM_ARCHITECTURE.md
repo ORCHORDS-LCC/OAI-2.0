@@ -1,5 +1,7 @@
 # System Architecture
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 ## Goal
@@ -19,12 +21,12 @@ flowchart TB
     C --> E[Evidence graph - EXPERIMENTAL]
     C --> K[AsyncCloudflareKnowledgeRuntime + source adapters - EXPERIMENTAL]
     K --> CF[Authenticated/deployed Cloudflare Worker path - NOT YET VERIFIED]
-    C --> QOS[QoS/admission + safe session batching - EXPERIMENTAL]
+    C --> QOS[QoS/admission + safe batching + admission/scheduler bridge - EXPERIMENTAL]
 ```
 
 ## Assembled source-level knowledge runtime
 
-The knowledge path now has source-level async orchestration across D1 authority, R2 bodies, Vectorize semantic matches, and best-effort KV cache. This materially advances WP-02, but it remains a source/test implementation until authenticated Worker deployment and private end-to-end Cloudflare evidence exist.
+The knowledge path now has source-level async orchestration across D1 authority, R2 bodies, Vectorize semantic matches, and best-effort KV cache, plus an authenticated Worker transport handler/component factory/public-safe Python Worker entrypoint. This materially advances WP-02, but it remains a source/test implementation until authenticated Worker deployment and private end-to-end Cloudflare evidence exist.
 
 ## Implemented scaffold
 

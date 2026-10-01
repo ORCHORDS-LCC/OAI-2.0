@@ -1,5 +1,7 @@
 # Public Source References
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 Primary sources used by OAI-2.0 architecture documentation. Re-check them before implementation because APIs evolve.

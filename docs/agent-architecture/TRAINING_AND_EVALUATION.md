@@ -1,5 +1,7 @@
 # Training and Evaluation Strategy
 
+_Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
+
 _Last reviewed: 2026-10-02._
 
 > **Training status:** no final OAI-2.0 specialist model has been trained.  
@@ -48,9 +50,13 @@ Production traces must not automatically become training data.
 
 External evaluators/teachers may generate critique or scenarios, but deterministic builds/tests/runtime/visual evidence should dominate where available. Public docs remain provider-neutral.
 
+## Truth/evidence evaluation status
+
+Current source includes a versioned claim-evidence policy and corrected conflicting-evidence state derivation. WP-75 still requires broader repository/tool/web consumption plus adversarial hallucination/false-success gates before truth enforcement can be considered complete.
+
 ## Current promotion infrastructure
 
-Current source includes QoS/tail/deadline promotion checks and admission/backpressure primitives. They are supporting gates, not a substitute for held-out capability, truth/evidence, safety, retrieval, vision, tool, and long-horizon acceptance.
+Current source includes QoS/tail/deadline promotion checks, admission/backpressure primitives, and an admission→scheduler bridge into safe batching. They are supporting gates, not a substitute for held-out capability, truth/evidence, safety, retrieval, vision, tool, and long-horizon acceptance.
 
 ## Promotion gate
 
