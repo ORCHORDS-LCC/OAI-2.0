@@ -17,11 +17,11 @@ Built-in offline suites cover:
 - vision;
 - orchestration.
 
-The scaffold can run against a runtime interface, including placeholders in CI. These are foundation tests, not a claim of frontier capability.
+The scaffold can run locally against a runtime interface, including placeholder runtimes. OAI-2.0 acceptance is runner-free; these are foundation tests, not a claim of frontier capability.
 
 ## Benchmarking
 
-Use the corrected `scripts/bench.py` harness for load/compile/warm-up, TTFT/prefill, decode, end-to-end, and MLX memory metrics.
+Use `scripts/bench.py` for load/compile/warm-up, TTFT/prefill, MLX-reported generation throughput, end-to-end, and MLX memory metrics. Do not label the generation-throughput field as kernel-only/pure decode without a lower-level measurement proving that distinction.
 
 Architecture decisions require repeated runs and real task success, not one prompt.
 
@@ -47,6 +47,10 @@ Production traces must not automatically become training data.
 ## Reference evaluators
 
 External evaluators/teachers may generate critique or scenarios, but deterministic builds/tests/runtime/visual evidence should dominate where available. Public docs remain provider-neutral.
+
+## Current promotion infrastructure
+
+Current source includes QoS/tail/deadline promotion checks and admission/backpressure primitives. They are supporting gates, not a substitute for held-out capability, truth/evidence, safety, retrieval, vision, tool, and long-horizon acceptance.
 
 ## Promotion gate
 

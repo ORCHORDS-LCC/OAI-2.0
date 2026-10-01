@@ -1,8 +1,12 @@
 # Portable Native Tool Calling
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Current status:** dynamic tool schemas and a six-gate `ToolDispatcher` are **EXPERIMENTAL**. Production host adapters remain **PROPOSED**.
+
+## Current boundary
+
+The six-gate dispatcher is source-level experimental policy logic. It does not yet prove host discovery, live MCP/ACP capability negotiation, sandboxed execution, cancellation propagation, or production high-impact approval flows.
 
 ## Runtime contract
 

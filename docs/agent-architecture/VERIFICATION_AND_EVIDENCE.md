@@ -1,8 +1,8 @@
 # Verification and Evidence
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
-> **Current status:** typed evidence/claim structures and evidence-graph behavior are **EXPERIMENTAL**. Full automatic claim-to-source enforcement in final generation is still **PROPOSED**.
+> **Current status:** typed evidence/claim structures and evidence-graph behavior are **EXPERIMENTAL**. WP-75 (#226–#228) now explicitly tracks claim-level evidence binding, contradiction/freshness handling, and adversarial false-success/hallucination gates; full automatic enforcement in final generation remains **NOT YET PROVEN**.
 
 ## Principle
 
@@ -42,6 +42,10 @@ plausible explanation
  < requested runtime state reproduced
  < regression/acceptance checks
 ```
+
+## False-success boundary
+
+A generated claim is not verified merely because the model is confident, a tool returned text, or an earlier issue comment said “fixed.” Current-source evidence, freshness, contradiction state, and the owning acceptance criteria must determine support. Unsupported current-state claims should remain UNVERIFIED / NEED_MORE_EVIDENCE / BLOCKED.
 
 ## Knowledge evidence
 

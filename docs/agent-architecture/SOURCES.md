@@ -1,8 +1,16 @@
 # Public Source References
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 Primary sources used by OAI-2.0 architecture documentation. Re-check them before implementation because APIs evolve.
+
+## MLX / MLX-LM
+
+- MLX: https://github.com/ml-explore/mlx
+- MLX-LM: https://github.com/ml-explore/mlx-lm
+- MLX-LM benchmark notes: https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/BENCHMARKS.md
+
+Use current upstream source/docs for generation, cache, quantization, batching, speculation, and benchmark behavior; repository-local measurements remain the evidence for OAI-2.0 performance claims.
 
 ## Cloudflare Workers / storage
 
@@ -12,6 +20,7 @@ Primary sources used by OAI-2.0 architecture documentation. Re-check them before
 - D1 Workers Binding API: https://developers.cloudflare.com/d1/worker-api/
 - D1 prepared statements: https://developers.cloudflare.com/d1/worker-api/prepared-statements/
 - R2 Workers API reference: https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+- R2 object methods / metadata (`head`, `get`, `put`, `delete`): same Workers API reference; re-check semantics before destructive lifecycle changes.
 - Vectorize API: https://developers.cloudflare.com/vectorize/reference/client-api/
 - Workers KV bindings: https://developers.cloudflare.com/kv/concepts/kv-bindings/
 - Workers KV reads/cache TTL: https://developers.cloudflare.com/kv/api/read-key-value-pairs/
@@ -62,4 +71,4 @@ The repository uses these standards as public terminology/process references onl
 - ISO/IEC 23894:2023 — AI risk management guidance: https://www.iso.org/standard/77304.html
 - ISO/IEC 42001:2023 — AI management systems: https://www.iso.org/standard/42001.html
 
-As of 2026-10-01, ISO lists ISO/IEC/IEEE 29148:2018 as current but under revision, and ISO/IEC/IEEE 12207:2026 as the published replacement for the withdrawn 2017 edition.
+As of 2026-10-02, ISO lists ISO/IEC/IEEE 29148:2018 as current but under revision, and ISO/IEC/IEEE 12207:2026 as the published replacement for the withdrawn 2017 edition.

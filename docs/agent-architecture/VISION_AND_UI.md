@@ -1,6 +1,6 @@
 # Vision, UI Testing, Aesthetics and UX
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Current status:** four-view data abstractions are **EXPERIMENTAL**. A trained vision encoder, real device pipeline, temporal visual reasoning, and automated aesthetics/UX model are still **PROPOSED**.
 
@@ -29,6 +29,10 @@ flowchart TD
     V -->|yes| E[Record proof]
     V -->|no| O
 ```
+
+## Accessibility and semantics roadmap
+
+WP-66 (#197–#202) tracks canonical accessibility semantics, objective checks, source mapping, and post-fix verification. These are mapped requirements, not current production vision capability. WI-VIS-003 / #229 separately tracks aesthetics/design-system/human-preference calibration.
 
 ## Objective checks
 
