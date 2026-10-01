@@ -308,11 +308,11 @@ class GcReconciliationState:
         unknown_size_objects = 0
         oldest_orphan_age: float | None = None
 
-        for obj in self.inventory.values():
-            if obj.size_bytes is None:
+        for page_obj in self.inventory.values():
+            if page_obj.size_bytes is None:
                 unknown_size_objects += 1
             else:
-                inventory_bytes_known += obj.size_bytes
+                inventory_bytes_known += page_obj.size_bytes
 
         all_keys = sorted(set(self.references) | set(self.inventory))
         for key in all_keys:
@@ -406,7 +406,12 @@ def _required_non_negative_int(value: object, name: str) -> int:
 
 
 def _required_non_negative_float(value: object, name: str) -> float:
-    if not _is_non_negative_number(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0
+    ):
         raise ValueError(f"{name} must be a finite non-negative number")
     return float(value)
 
