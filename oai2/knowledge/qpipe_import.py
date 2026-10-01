@@ -83,7 +83,7 @@ _SECRET_MARKERS = (
     "password:",
     "password=",
 )
-_ABS_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/|~[\\/])\\S+")
+_ABS_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/|~[\\/])\S+")
 
 
 def _strings(value: object, *, count: int, length: int) -> list[str] | None:
@@ -150,6 +150,7 @@ def derive_authority(capture_count: int, success_count: int) -> float:
 class QPipeRow:
     """In-memory shape of one q-pipe ``learning_recipes`` row."""
 
+    recipe_id: int
     source: str
     external_id: str
     scope: str
@@ -184,12 +185,20 @@ class QPipeRow:
             val = d.get(key)
             return str(val) if val is not None else None
 
+        raw_body_json = d.get("body_json")
+        if raw_body_json is None:
+            raw_body = d.get("body")
+            if raw_body is None:
+                raise KeyError("body_json/body")
+            raw_body_json = json.dumps(raw_body, ensure_ascii=False)
+
         return cls(
-            source=str(d["source"]),
-            external_id=str(d["external_id"]),
-            scope=str(d.get("scope", "global")),
-            fingerprint=str(d["fingerprint"]),
-            body_json=str(d["body_json"]),
+            recipe_id=_i_or("id", 0),
+            source=str(d["source"]).strip().lower(),
+            external_id=str(d["external_id"]).strip(),
+            scope=str(d.get("scope", "generic")).strip().lower() or "generic",
+            fingerprint=" ".join(str(d["fingerprint"]).strip().lower().split()),
+            body_json=str(raw_body_json),
             capture_count=_i_or("capture_count", 0),
             success_count=_i_or("success_count", 0),
             failure_count=_i_or("failure_count", 0),
@@ -252,6 +261,8 @@ def _validate_row(row: QPipeRow, policy: ImportPolicy) -> str | None:
     elif row.source not in default_sources:
         return f"disallowed source: {row.source}"
 
+    if row.recipe_id < 1:
+        return "invalid recipe id"
     if row.status not in {s.value for s in QPipeStatus}:
         return f"invalid status: {row.status}"
     if row.capture_count < 0 or row.success_count < 0 or row.failure_count < 0:
@@ -356,6 +367,7 @@ def import_qpipe_rows(
             elif err == "not promoted":
                 report.skipped_not_promoted.append(row.external_id)
             elif err in {
+                "invalid recipe id",
                 "unverified",
                 "verified_count exceeds success_count",
                 "success_count must exceed failure_count",

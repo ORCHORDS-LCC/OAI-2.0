@@ -40,7 +40,9 @@ def _row(
     verified: int = 1,
     matcher: str = "v1",
 ) -> dict[str, object]:
+    numeric_id = abs(hash((sid, ext))) % 1_000_000 + 1
     return {
+        "id": numeric_id,
         "source": source,
         "external_id": ext,
         "scope": scope,
@@ -234,3 +236,28 @@ def test_qpipe_symbols_are_public() -> None:
     assert QPipeStatus.PROMOTED.value == "promoted"
     assert QPipeRow.__name__ == "QPipeRow"
     assert ImportReport.__name__ == "ImportReport"
+
+
+def test_learning_recipes_public_shape_with_parsed_body_is_accepted() -> None:
+    row = _row(sid="parsed", ext="parsed-1")
+    row["body"] = json.loads(str(row.pop("body_json")))
+    rep = import_qpipe_rows([row])
+    assert len(rep.imported) == 1
+
+
+def test_missing_or_zero_recipe_id_is_rejected() -> None:
+    row = _row(sid="id", ext="id-1")
+    row["id"] = 0
+    rep = import_qpipe_rows([row])
+    assert rep.imported == []
+    assert rep.rejected_malformed and rep.rejected_malformed[0][0] == "id-1"
+
+
+def test_absolute_path_detection_rejects_unix_and_windows_paths() -> None:
+    unix = _safe_guidance()
+    unix["guidance"]["files"] = ["/private/tmp/file.txt"]  # type: ignore[index]
+    windows = _safe_guidance()
+    windows["guidance"]["files"] = ["C:\\Users\\Example\\secret.txt"]  # type: ignore[index]
+
+    assert import_qpipe_rows([_row(sid="u", ext="unix", body=unix)]).imported == []
+    assert import_qpipe_rows([_row(sid="w", ext="win", body=windows)]).imported == []
