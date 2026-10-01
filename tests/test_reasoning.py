@@ -129,3 +129,67 @@ def test_normal_controller_picks_vanilla_when_nothing_on() -> None:
 def test_reasoning_mode_has_four_modes() -> None:
     expected = {"FURIOUS", "NORMAL", "DEEP", "SWARM"}
     assert {m.name for m in ReasoningMode} == expected
+
+
+def test_reasoning_module_exports_from_reasoning_package() -> None:
+    from oai2.reasoning import Candidate as ExportedCandidate
+    from oai2.reasoning import DeepContext as ExportedDeepContext
+    from oai2.reasoning import DeepController as ExportedDeepController
+    from oai2.reasoning import (
+        FuriousContext as ExportedFuriousContext,
+    )
+    from oai2.reasoning import (
+        FuriousController as ExportedFuriousController,
+    )
+    from oai2.reasoning import (
+        FuriousDecision as ExportedFuriousDecision,
+    )
+    from oai2.reasoning import FuriousState as ExportedFuriousState
+    from oai2.reasoning import (
+        NormalContext as ExportedNormalContext,
+    )
+    from oai2.reasoning import (
+        NormalController as ExportedNormalController,
+    )
+    from oai2.reasoning import (
+        ReasoningMode as ExportedReasoningMode,
+    )
+    from oai2.reasoning import SwarmContext as ExportedSwarmContext
+    from oai2.reasoning import (
+        SwarmController as ExportedSwarmController,
+    )
+    from oai2.reasoning import SwarmRole as ExportedSwarmRole
+    from oai2.reasoning import choose_mode as ExportedChooseMode
+    from oai2.reasoning.deep import (
+        Candidate,
+        DeepContext,
+        DeepController,
+    )
+    from oai2.reasoning.furious import (
+        FuriousContext,
+        FuriousController,
+        FuriousDecision,
+        FuriousState,
+    )
+    from oai2.reasoning.modes import ReasoningMode, choose_mode
+    from oai2.reasoning.normal import NormalContext, NormalController
+    from oai2.reasoning.swarm import (
+        SwarmContext,
+        SwarmController,
+        SwarmRole,
+    )
+
+    assert ExportedCandidate is Candidate
+    assert ExportedDeepContext is DeepContext
+    assert ExportedDeepController is DeepController
+    assert ExportedFuriousContext is FuriousContext
+    assert ExportedFuriousController is FuriousController
+    assert ExportedFuriousDecision is FuriousDecision
+    assert ExportedFuriousState is FuriousState
+    assert ExportedNormalContext is NormalContext
+    assert ExportedNormalController is NormalController
+    assert ExportedReasoningMode is ReasoningMode
+    assert ExportedChooseMode is choose_mode
+    assert ExportedSwarmContext is SwarmContext
+    assert ExportedSwarmController is SwarmController
+    assert ExportedSwarmRole is SwarmRole

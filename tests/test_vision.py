@@ -58,3 +58,35 @@ def test_vision_snapshot_optional_views() -> None:
     snap = VisionSnapshot(pixels=PixelView(width=0, height=0))
     assert snap.pixels is not None
     assert snap.structure is None
+
+
+def test_vision_module_exports_from_vision_package() -> None:
+    from oai2.vision import CaptureFrame as ExportedCaptureFrame
+    from oai2.vision import PixelView as ExportedPixelView
+    from oai2.vision import SourceRenderMap as ExportedSourceRenderMap
+    from oai2.vision import StructuredView as ExportedStructuredView
+    from oai2.vision import TemporalFrame as ExportedTemporalFrame
+    from oai2.vision import TemporalView as ExportedTemporalView
+    from oai2.vision import VisionSnapshot as ExportedVisionSnapshot
+    from oai2.vision import (
+        make_pixel_view_from_bytes as ExportedMakePixelViewFromBytes,
+    )
+    from oai2.vision.interface import (
+        CaptureFrame,
+        PixelView,
+        SourceRenderMap,
+        StructuredView,
+        TemporalFrame,
+        TemporalView,
+        VisionSnapshot,
+        make_pixel_view_from_bytes,
+    )
+
+    assert ExportedCaptureFrame is CaptureFrame
+    assert ExportedPixelView is PixelView
+    assert ExportedSourceRenderMap is SourceRenderMap
+    assert ExportedStructuredView is StructuredView
+    assert ExportedTemporalFrame is TemporalFrame
+    assert ExportedTemporalView is TemporalView
+    assert ExportedVisionSnapshot is VisionSnapshot
+    assert ExportedMakePixelViewFromBytes is make_pixel_view_from_bytes

@@ -126,3 +126,24 @@ def test_all_gates_pass_executes() -> None:
         calls_used=0,
     )
     assert out.stage is DispatchStage.EXECUTE
+
+
+def test_tools_module_exports_from_tools_package() -> None:
+    from oai2.tools import DispatchDecision as ExportedDecision
+    from oai2.tools import DispatchPolicy as ExportedPolicy
+    from oai2.tools import DispatchStage as ExportedStage
+    from oai2.tools import ToolDispatcher as ExportedDispatcher
+    from oai2.tools import default_dispatcher as ExportedDefaultDispatcher
+    from oai2.tools.dispatch import (
+        DispatchDecision,
+        DispatchPolicy,
+        DispatchStage,
+        ToolDispatcher,
+        default_dispatcher,
+    )
+
+    assert ExportedDecision is DispatchDecision
+    assert ExportedPolicy is DispatchPolicy
+    assert ExportedStage is DispatchStage
+    assert ExportedDispatcher is ToolDispatcher
+    assert ExportedDefaultDispatcher is default_dispatcher
