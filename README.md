@@ -34,6 +34,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | R2 liveness dry-run reconciliation | **EXPERIMENTAL source implementation** — focused tests; full preflight pending |
 | Conservative R2 orphan sweep core | **EXPERIMENTAL source implementation** — no live destructive demonstration |
 | D1 knowledge + GC transaction layer | **EXPERIMENTAL source implementation** — durable corpus revision, lease-aware metadata writer, async lease acquire/revalidate/finalize/release, and async D1/R2 delete boundary; live planner/deployment proof remaining |
+| R2 / KV Worker binding wrappers | **EXPERIMENTAL source implementation** — async R2 body/existence/delete and best-effort KV get/put wrappers; deployment proof remaining |
 | QoS workload + admission/backpressure core | **EXPERIMENTAL source implementation** — deterministic policy/tests plus p95/p99/deadline promotion gate; service/scheduler integration remaining |
 | q-pipe import gate | **EXPERIMENTAL** and aligned to verified export rules |
 | Live Cloudflare Worker transport | **PROPOSED** |
@@ -89,7 +90,7 @@ flowchart TD
     I --> K
 ```
 
-Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, an async D1 lease adapter with conditional acquire/revalidate/failure/finalize/release operations, and a durable D1 knowledge-index/corpus-revision writer that transactionally gates metadata writes on expected revision plus deletion-lease state; GC lease acquisition is now bound to the same authoritative corpus revision. It does **not** yet prove the complete live Worker/D1/R2/Vectorize/KV transport, end-to-end sweep-planner integration against the D1-backed delete boundary, or a controlled live destructive R2 workflow.
+Current source implements the application-level contract, deterministic mock bindings, cache revisioning, strict q-pipe importer, versioned public-safe Worker transport schemas, non-destructive R2 liveness reconciliation, a conservative authorization/recovery-gated orphan-sweep core, a deterministic deletion-lease state model, a versioned D1 lease schema, an async D1 lease adapter with conditional acquire/revalidate/failure/finalize/release operations, and a durable D1 knowledge-index/corpus-revision writer that transactionally gates metadata writes on expected revision plus deletion-lease state; GC lease acquisition is now bound to the same authoritative corpus revision. Async D1, R2, and KV binding-facing primitives now exist, but source does **not** yet prove the complete authenticated Worker transport, Vectorize integration, end-to-end put/get/update/retrieve orchestration, sweep-planner integration against the D1-backed delete boundary, or a controlled live destructive R2 workflow.
 
 The committed 50-row pilot is **synthetic test data**, not a real q-pipe corpus migration.
 
