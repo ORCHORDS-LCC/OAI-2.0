@@ -17,6 +17,13 @@ from .abstraction import (
     now_epoch,
     sha256_hex,
 )
+from .cloudflare_bindings_runtime import (
+    CloudflareKvCache,
+    CloudflareR2Store,
+    KvNamespaceBinding,
+    R2BucketBinding,
+    R2ObjectBodyBinding,
+)
 from .cloudflare import (
     CFPlan,
     CFPrimitive,
@@ -126,6 +133,11 @@ __all__ = [
     "IngestionJob",
     "IngestionPipeline",
     "IngestionStatus",
+    "CloudflareKvCache",
+    "CloudflareR2Store",
+    "KvNamespaceBinding",
+    "R2BucketBinding",
+    "R2ObjectBodyBinding",
     "CFPlan",
     "CFPrimitive",
     "CFRow",
