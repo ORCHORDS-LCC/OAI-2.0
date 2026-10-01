@@ -1,6 +1,6 @@
 # Security Reporting
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 Do **not** open a public GitHub issue for vulnerabilities, exposed secrets, private-data disclosure, sandbox escapes, privilege escalation, prompt-injection bypasses, or other security-sensitive findings.
 
@@ -28,9 +28,11 @@ The current tool dispatcher is an **EXPERIMENTAL** policy scaffold. It is not a 
 
 ## Knowledge security
 
-The current Cloudflare code is a logical/mock contract only. Live Cloudflare deployment must keep resource bindings and secrets out of public source.
+The Cloudflare knowledge layer now includes source-level D1/R2/KV/Vectorize wrappers, knowledge/GC contracts, and deterministic mocks. A complete live Worker deployment is still not verified end-to-end. Resource bindings, account/resource IDs, credentials, and private endpoints must remain outside public source.
 
 q-pipe knowledge imports must pass the strict verified export gate before entering OAI-2.0's shared knowledge layer.
+
+Destructive knowledge lifecycle operations must remain fail-closed: dry-run first, explicit authorization/recovery readiness, authoritative D1 reference/lease checks, and no deletion based on KV/cache state.
 
 ## License/security contact
 

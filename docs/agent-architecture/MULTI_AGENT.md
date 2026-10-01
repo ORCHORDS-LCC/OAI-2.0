@@ -1,8 +1,12 @@
 # Native Multi-Agent Orchestration
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Current status:** orchestrator/spec/context types and FURIOUS/NORMAL/DEEP/SWARM controller scaffolds are **EXPERIMENTAL**. Real parallel inference, isolated write workspaces, messaging transport, and production merging are **PROPOSED**.
+
+## Current source boundary
+
+Current source has orchestrator/spec/context types and controller scaffolds, but not a production parallel inference scheduler, isolated mutation workspaces, or evidence-proven SWARM speedup. QoS/admission and safe session-batching work can constrain future SWARM resource use but are not themselves a swarm implementation.
 
 ## Principle
 

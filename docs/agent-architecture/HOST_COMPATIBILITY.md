@@ -1,6 +1,6 @@
 # Host Compatibility
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Current status:** host integrations are **PROPOSED**. OAI-2.0 currently has internal protocol/tool abstractions, not a compatibility certification for any IDE/agent host.
 
@@ -16,6 +16,9 @@ flowchart LR
 ```
 
 ## Publicly documented host capabilities
+
+No row in this table is a compatibility certification. Current source does not yet provide a versioned, battle-tested Android Studio, Hermes, or OpenCode adapter.
+
 
 | Host | Public capability relevant to OAI-2.0 | OAI-2.0 status |
 | --- | --- | --- |

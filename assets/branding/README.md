@@ -1,6 +1,6 @@
 # OAI-2.0 Branding Assets
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 This folder contains public-safe visual assets used by OAI-2.0.
 

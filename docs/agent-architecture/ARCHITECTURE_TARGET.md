@@ -1,6 +1,6 @@
 # Architecture Target
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 > **Final architecture status: PROPOSED.**  
 > **Implementation scaffolding status: EXPERIMENTAL.**
@@ -64,9 +64,13 @@ Throughput targets are not guarantees. Capability regressions invalidate a speed
 
 Reject an optimization if it materially harms coding, reasoning, architecture understanding, dynamic tool use, unseen-schema generalization, visual grounding, UI debugging, long-horizon completion, verification, or correct stopping.
 
+## Current implementation boundary
+
+The final sparse/adaptive model is still **PROPOSED**. Current `main` contains supporting experimental infrastructure—runner-free verification, controller/tool/evidence scaffolds, knowledge/GC/QoS primitives, and a safe session-batching scheduler core—but no trained 10–30B+ specialist-capacity OAI-2.0 model.
+
 ## Current evidence
 
-The corrected MLX harness has one committed v0.2 smoke result on the M5 Max for a 0.5B 4-bit Qwen model: ~198.47 tok/s pure decode with a 133-token prompt and 32 output tokens. This is infrastructure evidence, not architecture proof.
+The corrected MLX harness has one committed v0.2 smoke result on the M5 Max for a 0.5B 4-bit Qwen model: ~198.47 tok/s **MLX-reported generation throughput** with a 133-token prompt and 32 output tokens. This is not a claim of kernel-only decode throughput. This is infrastructure evidence, not architecture proof.
 
 See [benchmark notes](../../evals/benchmarks/README.md).
 
