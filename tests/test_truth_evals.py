@@ -130,8 +130,28 @@ def test_truth_budget_must_be_predeclared_finite_rates() -> None:
 def test_truth_module_exports_from_evals_package() -> None:
     from oai2.evals import TruthCaseClass as ExportedCaseClass
     from oai2.evals import TruthOutcome as ExportedOutcome
+    from oai2.evals import TruthPromotionBudget as ExportedBudget
+    from oai2.evals import TruthPromotionEvaluation as ExportedEvaluation
+    from oai2.evals import TruthReport as ExportedReport
+    from oai2.evals import TruthSample as ExportedSample
     from oai2.evals import evaluate_truth_promotion as ExportedEvaluator
+    from oai2.evals import summarize_truth as ExportedSummarizer
+    from oai2.evals.truth import (
+        TruthCaseClass,
+        TruthOutcome,
+        TruthPromotionBudget,
+        TruthPromotionEvaluation,
+        TruthReport,
+        TruthSample,
+        evaluate_truth_promotion,
+        summarize_truth,
+    )
 
     assert ExportedCaseClass is TruthCaseClass
     assert ExportedOutcome is TruthOutcome
+    assert ExportedBudget is TruthPromotionBudget
+    assert ExportedEvaluation is TruthPromotionEvaluation
+    assert ExportedReport is TruthReport
+    assert ExportedSample is TruthSample
     assert ExportedEvaluator is evaluate_truth_promotion
+    assert ExportedSummarizer is summarize_truth
