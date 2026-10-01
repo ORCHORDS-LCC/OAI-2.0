@@ -33,11 +33,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
 from .truth import (
+    TruthCandidatePromotionEvaluation,
     TruthCaseClass,
     TruthOutcome,
     TruthPromotionBudget,
     TruthPromotionEvaluation,
-    TruthCandidatePromotionEvaluation,
     TruthReport,
     TruthSample,
     evaluate_truth_candidate_promotion,

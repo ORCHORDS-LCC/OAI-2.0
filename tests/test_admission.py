@@ -218,11 +218,23 @@ def test_admission_symbols_are_exported_from_runtime_package() -> None:
     """
     from oai2.runtime import (
         AdmissionAction as ExportedAction,
+    )
+    from oai2.runtime import (
         AdmissionDecision as ExportedDecision,
+    )
+    from oai2.runtime import (
         AdmissionPolicy as ExportedPolicy,
+    )
+    from oai2.runtime import (
         AdmissionQueue as ExportedQueue,
+    )
+    from oai2.runtime import (
         AdmissionReason as ExportedReason,
+    )
+    from oai2.runtime import (
         AdmissionRequest as ExportedRequest,
+    )
+    from oai2.runtime import (
         CapacitySnapshot as ExportedCapacitySnapshot,
     )
     from oai2.runtime.admission import (

@@ -101,36 +101,56 @@ def test_evals_package_full_surface_identity() -> None:
     inline symbols, or ``oai2.evals.truth`` for truth re-exports).
     """
     import oai2.evals as evals_pkg
-
     from oai2.evals import (
         # Capability-eval (9): defined inline in oai2/evals/__init__.py.
         BUILTIN_SUITES_NAMES as _PkgBuiltInSuitesNames,
-        CapabilityCase as _PkgCapabilityCase,
-        CapabilityScore as _PkgCapabilityScore,
-        CapabilitySuite as _PkgCapabilitySuite,
+    )
+    from oai2.evals import (
         SCORERS as _PkgScorers,
+    )
+    from oai2.evals import (
+        CapabilityCase as _PkgCapabilityCase,
+    )
+    from oai2.evals import (
+        CapabilityScore as _PkgCapabilityScore,
+    )
+    from oai2.evals import (
+        CapabilitySuite as _PkgCapabilitySuite,
+    )
+    from oai2.evals import (
         SuiteReport as _PkgSuiteReport,
+    )
+    from oai2.evals import (
         builtin_suite as _PkgBuiltinSuite,
+    )
+    from oai2.evals import (
         builtin_suites as _PkgBuiltinSuites,
+    )
+    from oai2.evals import (
         run_suite as _PkgRunSuite,
-        # Truth re-exports (8): sourced from oai2.evals.truth.
-        TruthCaseClass as _PkgTruthCaseClass,
-        TruthOutcome as _PkgTruthOutcome,
-        TruthPromotionBudget as _PkgTruthPromotionBudget,
-        TruthPromotionEvaluation as _PkgTruthPromotionEvaluation,
-        TruthReport as _PkgTruthReport,
-        TruthSample as _PkgTruthSample,
-        evaluate_truth_promotion as _PkgEvaluateTruthPromotion,
-        summarize_truth as _PkgSummarizeTruth,
     )
     from oai2.evals.truth import (
         TruthCaseClass as _SrcTruthCaseClass,
+    )
+    from oai2.evals.truth import (
         TruthOutcome as _SrcTruthOutcome,
+    )
+    from oai2.evals.truth import (
         TruthPromotionBudget as _SrcTruthPromotionBudget,
+    )
+    from oai2.evals.truth import (
         TruthPromotionEvaluation as _SrcTruthPromotionEvaluation,
+    )
+    from oai2.evals.truth import (
         TruthReport as _SrcTruthReport,
+    )
+    from oai2.evals.truth import (
         TruthSample as _SrcTruthSample,
+    )
+    from oai2.evals.truth import (
         evaluate_truth_promotion as _SrcEvaluateTruthPromotion,
+    )
+    from oai2.evals.truth import (
         summarize_truth as _SrcSummarizeTruth,
     )
 
@@ -182,7 +202,7 @@ def test_missing_required_capability_classes_are_machine_verifiable() -> None:
 def test_regex_all_requires_every_expected_pattern() -> None:
     from types import SimpleNamespace
 
-    from oai2.evals import CapabilityCase, SCORERS
+    from oai2.evals import SCORERS, CapabilityCase
 
     case = CapabilityCase(
         case_id="all-patterns",
@@ -204,7 +224,7 @@ def test_regex_all_requires_every_expected_pattern() -> None:
 def test_regex_all_honors_forbidden_patterns() -> None:
     from types import SimpleNamespace
 
-    from oai2.evals import CapabilityCase, SCORERS
+    from oai2.evals import SCORERS, CapabilityCase
 
     case = CapabilityCase(
         case_id="forbidden",

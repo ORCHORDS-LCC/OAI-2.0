@@ -187,16 +187,23 @@ def test_scheduler_symbols_are_exported_from_runtime_package() -> None:
     """
     from oai2.runtime import (
         BatchPlan as ExportedBatchPlan,
+    )
+    from oai2.runtime import (
         SafeBatchScheduler as ExportedScheduler,
+    )
+    from oai2.runtime import (
         ScheduledRequest as ExportedRequest,
+    )
+    from oai2.runtime import (
         SchedulerMetrics as ExportedMetrics,
+    )
+    from oai2.runtime import (
         SessionCompatibilityKey as ExportedKey,
     )
     from oai2.runtime.scheduler import (
         BatchPlan,
         SafeBatchScheduler,
         ScheduledRequest,
-        SchedulerMetrics,
         SessionCompatibilityKey,
     )
 
