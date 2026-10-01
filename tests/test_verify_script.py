@@ -77,3 +77,81 @@ def test_platform_status_reports_apple_silicon_eligibility(monkeypatch, capsys) 
     output = capsys.readouterr().out
     assert "PASS platform-mlx" in output
     assert "macOS arm64" in output
+
+
+def test_qpipe_compatibility_check_skips_when_default_checkout_missing(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    old_root = verify.ROOT
+    try:
+        verify.ROOT = tmp_path / "oai"
+        verify.ROOT.mkdir()
+        monkeypatch.delenv("OAI2_QPIPE_REPO", raising=False)
+        assert verify.run_qpipe_compatibility_check() is True
+        assert "SKIP qpipe-compat" in capsys.readouterr().out
+    finally:
+        verify.ROOT = old_root
+
+
+def test_qpipe_compatibility_check_fails_for_missing_configured_checkout(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    missing = tmp_path / "missing-qpipe"
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(missing))
+    assert verify.run_qpipe_compatibility_check() is False
+    assert "FAIL qpipe-compat" in capsys.readouterr().out
+
+
+def test_qpipe_compatibility_check_detects_revision_drift(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    from oai2.knowledge import QPIPE_COMPATIBILITY_SOURCE_REVISION
+
+    qpipe = tmp_path / "q-pipe"
+    qpipe.mkdir()
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+
+    class Result:
+        returncode = 0
+        stderr = ""
+        stdout = "different-revision\n"
+
+    monkeypatch.setattr(verify.subprocess, "run", lambda *args, **kwargs: Result())
+    assert verify.run_qpipe_compatibility_check() is False
+    output = capsys.readouterr().out
+    assert "source revision changed" in output
+    assert QPIPE_COMPATIBILITY_SOURCE_REVISION in output
+
+
+def test_qpipe_compatibility_check_accepts_pinned_revision_and_blobs(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    from oai2.knowledge import (
+        QPIPE_COMPATIBILITY_SOURCE_BLOBS,
+        QPIPE_COMPATIBILITY_SOURCE_REVISION,
+    )
+
+    qpipe = tmp_path / "q-pipe"
+    qpipe.mkdir()
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    outputs = iter(
+        [
+            QPIPE_COMPATIBILITY_SOURCE_REVISION,
+            *QPIPE_COMPATIBILITY_SOURCE_BLOBS.values(),
+        ]
+    )
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout + "\n"
+
+    monkeypatch.setattr(
+        verify.subprocess,
+        "run",
+        lambda *args, **kwargs: Result(next(outputs)),
+    )
+    assert verify.run_qpipe_compatibility_check() is True
+    assert "PASS qpipe-compat" in capsys.readouterr().out

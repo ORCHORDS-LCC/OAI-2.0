@@ -7,6 +7,7 @@ Actions or require a hosted/self-hosted runner.
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 import subprocess
@@ -136,11 +137,88 @@ def report_platform_check_status() -> None:
     )
 
 
+def run_qpipe_compatibility_check() -> bool:
+    """Verify an available q-pipe checkout matches the pinned import contract."""
+
+    from oai2.knowledge import (
+        QPIPE_COMPATIBILITY_SOURCE_BLOBS,
+        QPIPE_COMPATIBILITY_SOURCE_REVISION,
+    )
+
+    configured = os.getenv("OAI2_QPIPE_REPO")
+    qpipe_root = (
+        Path(configured).expanduser().resolve()
+        if configured
+        else (ROOT.parent / "q-pipe").resolve()
+    )
+    if not qpipe_root.exists():
+        if configured:
+            print(
+                f"FAIL qpipe-compat: configured checkout does not exist: {qpipe_root}",
+                flush=True,
+            )
+            return False
+        print(
+            f"SKIP qpipe-compat: no sibling checkout at {qpipe_root}",
+            flush=True,
+        )
+        return True
+
+    def git_output(*args: str) -> str | None:
+        completed = subprocess.run(
+            ("git", "-C", str(qpipe_root), *args),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            print(
+                "FAIL qpipe-compat: git "
+                + " ".join(args)
+                + f" exited {completed.returncode}: {detail}",
+                flush=True,
+            )
+            return None
+        return completed.stdout.strip()
+
+    head = git_output("rev-parse", "HEAD")
+    if head is None:
+        return False
+    if head != QPIPE_COMPATIBILITY_SOURCE_REVISION:
+        print(
+            "FAIL qpipe-compat: source revision changed "
+            f"(pinned={QPIPE_COMPATIBILITY_SOURCE_REVISION}, current={head})",
+            flush=True,
+        )
+        return False
+
+    for relative_path, expected_blob in QPIPE_COMPATIBILITY_SOURCE_BLOBS.items():
+        actual_blob = git_output("hash-object", relative_path)
+        if actual_blob is None:
+            return False
+        if actual_blob != expected_blob:
+            print(
+                "FAIL qpipe-compat: source blob changed "
+                f"({relative_path}: pinned={expected_blob}, current={actual_blob})",
+                flush=True,
+            )
+            return False
+
+    print(
+        f"PASS qpipe-compat: {QPIPE_COMPATIBILITY_SOURCE_REVISION}",
+        flush=True,
+    )
+    return True
+
+
 def main() -> int:
     for name, command in CHECKS:
         if not run_check(name, command):
             return 1
     report_platform_check_status()
+    if not run_qpipe_compatibility_check():
+        return 1
     if not run_public_safety_scan():
         return 1
     if not run_markdown_link_scan():
