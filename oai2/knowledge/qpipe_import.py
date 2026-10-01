@@ -201,11 +201,16 @@ class QPipeRow:
                 raise KeyError("body_json/body")
             raw_body_json = json.dumps(raw_body, ensure_ascii=False)
 
+        raw_scope = d.get("scope")
+        if not isinstance(raw_scope, str) or not raw_scope.strip():
+            raise KeyError("scope")
+        scope = raw_scope.strip().lower()
+
         return cls(
             recipe_id=_i_or("id", 0),
             source=str(d["source"]).strip().lower(),
             external_id=str(d["external_id"]).strip(),
-            scope=str(d.get("scope", "generic")).strip().lower() or "generic",
+            scope=scope,
             fingerprint=" ".join(str(d["fingerprint"]).strip().lower().split()),
             body_json=str(raw_body_json),
             capture_count=_i_or("capture_count", 0),

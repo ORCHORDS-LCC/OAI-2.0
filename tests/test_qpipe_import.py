@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from oai2.knowledge import (
     CloudflareKnowledgeStore,
     ImportPolicy,
@@ -165,6 +167,46 @@ def test_import_rejects_malformed_status() -> None:
     rep = import_qpipe_rows([_row(sid="a", ext="x", status="frobnicated")])
     assert rep.imported == []
     assert rep.rejected_malformed and rep.rejected_malformed[0][0] == "x"
+
+
+def test_import_rejects_missing_scope() -> None:
+    """`scope` is integral to the topic dimension (qpipe:<source>:<scope>)
+    and must be present on every row. A silent fallback to a default scope
+    would let a malformed or evolving upstream schema import rows under
+    the wrong topic namespace without any visible signal."""
+    from oai2.knowledge.qpipe_import import QPipeRow
+
+    row = _row(sid="a", ext="x")
+    payload = dict(row)
+    payload.pop("scope")
+    with pytest.raises(KeyError, match="scope"):
+        QPipeRow.from_dict(payload)
+
+
+def test_import_rejects_empty_scope() -> None:
+    """An empty-string scope would silently collapse every topic into the
+    same dimension. Strict rejection forces the upstream schema to carry
+    the real scope value."""
+    from oai2.knowledge.qpipe_import import QPipeRow
+
+    row = _row(sid="a", ext="x")
+    payload = dict(row)
+    payload["scope"] = ""
+    with pytest.raises(KeyError, match="scope"):
+        QPipeRow.from_dict(payload)
+
+
+def test_import_rejects_whitespace_only_scope() -> None:
+    """A whitespace-only scope must not be silently trimmed to a default.
+    The string-trim normalization is for cosmetic consistency, not for
+    masking upstream value gaps."""
+    from oai2.knowledge.qpipe_import import QPipeRow
+
+    row = _row(sid="a", ext="x")
+    payload = dict(row)
+    payload["scope"] = "   \t\n  "
+    with pytest.raises(KeyError, match="scope"):
+        QPipeRow.from_dict(payload)
 
 
 def test_content_hash_matches_qpipe_cloudflare_guidance_hash_shape() -> None:
