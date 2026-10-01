@@ -23,26 +23,29 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - name: Set up Python 3.14
-        run: uv python install 3.14
+        run: uv python install 3.14 && uv venv --python 3.14 .venv-ci
       - name: Sync deps (no MLX)
         # MLX is apple-only; CI is ubuntu. Install only the project's
-        # non-MLX deps so the smoke test correctly skips via @pytest.mark.skipif.
+        # non-MLX deps so the smoke test correctly skips via
+        # @pytest.mark.skipif. uv.lock pins exact versions.
         run: |
-          uv pip install --system \
+          source .venv-ci/bin/activate
+          uv pip install \
             "pydantic>=2.9,<3.0" "fastapi>=0.115" "jsonschema>=4.23" \
             "pyyaml>=6.0" "jinja2>=3.1" "httpx>=0.27" \
             "Pillow>=10.4" "numpy>=2.0,<3.0" \
             "pytest>=8.3" "pytest-asyncio>=0.24" \
             "ruff>=0.7" "mypy>=1.13"
       - name: Ruff lint
-        run: ruff check oai2 tests scripts
+        run: source .venv-ci/bin/activate && ruff check oai2 tests scripts
       - name: MyPy (best-effort, ignore_missing_imports)
         run: |
+          source .venv-ci/bin/activate
           mypy --no-incremental --follow-imports=silent \
             --ignore-missing-imports --warn-unused-ignores \
             oai2 || true
       - name: Pytest
-        run: pytest -W error -v
+        run: source .venv-ci/bin/activate && pytest -W error -v
       - name: Public-safety scan
         shell: bash
         run: |
