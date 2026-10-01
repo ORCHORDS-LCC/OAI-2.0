@@ -79,4 +79,4 @@ Policy outcomes are explicit: `NOT_REQUIRED`, `NEEDS_EVIDENCE`, `SUPPORTED`, `RE
 
 Focused fixtures cover taxonomy, state-version invalidation, current-fact expiry, conflict/refutation, wrong-evidence-class rejection, and assumption/plan/target/preference/hypothetical paths that do not require external evidence.
 
-The remaining WI-TRUTH-001 boundary is runtime consumption: repository, tool/runtime, and web-research paths must call this policy consistently, and the current-main runner-free local verification gate must be recorded before closure.
+Repository, tool/runtime, and web/external evidence paths now consume this policy through the canonical `oai2/verification/paths.py` adapters. Those adapters enforce the matching evidence classes at the path boundary and preserve state-version/freshness/refutation/conflict semantics. The remaining WI-TRUTH-001 closure boundary is current-main runner-free local verification.
