@@ -57,6 +57,20 @@ uv run python scripts/gateway_smoke.py --prompt "ping" --json
 A multi-prompt sweep with token/latency breakdown (planned,
 see issue tracker): not in scope for this revision.
 
+## Public runtime selector
+
+`oai2.runtime.select_runtime_from_env()` is the env-aware public entry
+point for callers that want the highest-fidelity runtime without
+coupling to a specific backend. It returns
+`oai2.runtime.GatewayRuntime` when `OAI2_GATEWAY_API_KEY` is set;
+otherwise it returns `oai2.runtime.PlaceholderRuntime`. The selector
+never raises on a missing or partial key — CI / offline / no-token
+environments keep working with a deterministic offline runtime.
+
+The static `oai2.runtime.default_runtime()` is **unchanged** and
+always returns `PlaceholderRuntime`; the selector is additive and
+does not flip the default. Tests pin both contracts.
+
 ## Local gate
 
 `scripts/verify.py` runs four mandatory checks (sync / ruff / mypy /
@@ -100,6 +114,7 @@ HTTP status code is preserved on `exc.status_code`.
 | `scripts/bench.py --backend=gateway`                 | IMPLEMENTED | Drives `GatewayModelClient` end-to-end; 7 dedicated tests; clean SKIP without API key. |
 | Cross-repo Protocol conformance (OAI-2.0 ↔ q-pipe)   | IMPLEMENTED | 10 tests in `tests/test_gateway_model_client_protocol.py`; `isinstance(client, qpipe.ModelClient)` is True. |
 | `scripts/verify.py gateway-reach`                    | IMPLEMENTED | SKIP by default, live when key is set.                                             |
+| `oai2.runtime.select_runtime_from_env()`             | IMPLEMENTED | Env-aware public entry point: returns `GatewayRuntime` when `OAI2_GATEWAY_API_KEY` is set, else `PlaceholderRuntime`. Never raises. 5 dedicated tests in `tests/test_runtime.py`. |
 | End-to-end from P50                                  | OPEN        | Not yet exercised — pending operator-supplied token.                                |
 | api.orchords.com model list                          | OPEN        | Cloud currently exposes 4 models; local qpipe exposes 1.                           |
 | Knowledge transport worker                           | PROPOSED    | Cloudflare Worker entrypoint in design phase.                                      |
@@ -119,7 +134,8 @@ runs the full set; live acceptance still requires
 | `tests/test_gateway_smoke.py`                     |  9    | `6a4fb5f`  | CLI `main()` exit codes (0/1/2), JSON + human paths, `--model` override. |
 | `tests/test_bench_gateway.py`                     |  7    | `53b546a`  | `bench.py --backend=gateway` end-to-end + key redaction in metrics.       |
 | `tests/test_gateway_model_client_protocol.py`     | 10    | `33b76fb`  | Cross-repo `isinstance(client, qpipe.ModelClient)` + signature parity.    |
-| **Total cloud-touching tests**                    | **94**|            |                                                                          |
+| `tests/test_runtime.py` (selector slice)           |  5    | (slice 12) | `select_runtime_from_env()` no-key / key-set / partial-config / re-export / default-unchanged. |
+| **Total cloud-touching tests**                    | **99**|            |                                                                          |
 
 Cross-repo Protocol tests discover q-pipe via the same convention
 `scripts/verify.py` uses (`$OAI2_QPIPE_REPO` overrides;
@@ -174,7 +190,8 @@ uv run pytest -W error \
     tests/test_gateway_model_client.py \
     tests/test_gateway_smoke.py \
     tests/test_bench_gateway.py \
-    tests/test_gateway_model_client_protocol.py
+    tests/test_gateway_model_client_protocol.py \
+    tests/test_runtime.py
 ```
 
 These tests use HTTPX mock transport. They are not live gateway, ZCode, model

@@ -98,6 +98,30 @@ def default_runtime() -> InferenceRuntime:
     return PlaceholderRuntime()
 
 
+def select_runtime_from_env() -> InferenceRuntime:
+    """Pick the best available :class:`InferenceRuntime` from the environment.
+
+    Returns a :class:`GatewayRuntime` when ``OAI2_GATEWAY_API_KEY`` is set,
+    otherwise returns a :class:`PlaceholderRuntime`. Never raises on a
+    missing or partial key — callers in CI / offline / no-token
+    environments keep working with a deterministic offline runtime.
+
+    This is the public entry point for callers that want the highest
+    available fidelity without coupling to a specific backend.
+    Use :func:`default_runtime` for the static default (always
+    :class:`PlaceholderRuntime`, regardless of environment).
+    """
+
+    # Local import: ``gateway_runtime`` imports ``InferenceRuntime``
+    # from this module at module load time, so we resolve it lazily.
+    from .gateway_runtime import GatewayConfigError, GatewayRuntime
+
+    try:
+        return GatewayRuntime.from_env()
+    except GatewayConfigError:
+        return PlaceholderRuntime()
+
+
 def estimate_tokens(text: str) -> int:
     """Cheap, deterministic token count for callers that need a placeholder."""
     return max(1, len(text.split()))

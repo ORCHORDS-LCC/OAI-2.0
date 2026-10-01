@@ -44,6 +44,7 @@ from .inference import (
     InferenceRuntime,
     PlaceholderRuntime,
     default_runtime,
+    select_runtime_from_env,
 )
 from .model import ModelSpec, discover_default_device, smoke_check
 from .scheduler import (
@@ -82,6 +83,7 @@ __all__ = [
     "PlaceholderRuntime",
     "default_runtime",
     "load_gateway_config_from_env",
+    "select_runtime_from_env",
     "ModelSpec",
     "discover_default_device",
     "smoke_check",
