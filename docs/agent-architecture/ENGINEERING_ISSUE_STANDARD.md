@@ -37,6 +37,7 @@ Every detailed implementation issue should use stable identifiers.
 | Identifier | Meaning | Example |
 | --- | --- | --- |
 | `WP-NN` | Work Package | `WP-03` |
+| `WI-DOM-NNN` | Work Item under a Work Package | `WI-KNOW-001` |
 | `REQ-DOM-NNN` | Requirement | `REQ-KNOW-001` |
 | `AC-DOM-NNN` | Acceptance Criterion | `AC-KNOW-001` |
 | `VER-DOM-NNN` | Verification Item | `VER-KNOW-001` |
@@ -87,7 +88,7 @@ A requirement should be:
 
 Every implementation issue should contain:
 
-1. Work Package ID and title
+1. Work Package or Work Item ID and title
 2. Parent / traceability
 3. Problem statement
 4. Objective
@@ -148,7 +149,8 @@ This is aligned with the intent of ISO/IEC/IEEE 29119-2 and 29119-3 without repr
 ```mermaid
 flowchart LR
     OBJ[Project objective] --> WP[WP-NN]
-    WP --> REQ[REQ-DOM-NNN]
+    WP --> WI[WI-DOM-NNN]
+    WI --> REQ[REQ-DOM-NNN]
     REQ --> AC[AC-DOM-NNN]
     REQ --> RISK[RISK-DOM-NNN]
     REQ --> VER[VER-DOM-NNN]
