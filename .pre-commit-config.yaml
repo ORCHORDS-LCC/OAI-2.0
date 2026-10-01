@@ -1,0 +1,52 @@
+# Pre-commit hooks for OAI-2.0.
+#
+# OAI-2.0 is runner-free and direct-push-on-main. To compensate for the
+# absence of a hosted CI gate, every commit is linted and collection-checked
+# locally by pre-commit. This catches the cumulative-state failure mode
+# documented in #236 (where each commit's gate sees the prior state, not
+# the cumulative state).
+#
+# Install:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run on demand (mirrors the gate):
+#   pre-commit run --all-files
+#
+# Bypass for emergency (NOT recommended; documents the gate skip):
+#   git commit --no-verify
+#
+# See CONTRIBUTING.md "Local pre-commit gate" section for details.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      # Lint (fix-on-save for autofixable rules). This catches F401 (unused
+      # imports), F811 (redefinition), I001 (unsorted imports) and W292
+      # (missing newline) — the four rules documented as regressed in #236.
+      - id: ruff
+        args: ["--fix"]
+        files: '^(oai2|tests|scripts)/.*\.py$'
+      # Format (consistent with pyproject.toml [tool.ruff] formatting line
+      # length target; ruff format is the project's chosen formatter
+      # alongside the existing lint config).
+      - id: ruff-format
+        files: '^(oai2|tests|scripts)/.*\.py$'
+
+  - repo: local
+    hooks:
+      # Collection-only smoke check. `pytest --co -q` imports every test
+      # module without executing them, surfacing F401 import cycles, syntax
+      # errors, and missing dependencies at commit time. This is the
+      # earliest-stage feedback available without actually running tests.
+      - id: pytest-collect
+        name: pytest collection smoke check
+        entry: .venv/bin/pytest --co -q
+        language: system
+        pass_filenames: false
+        types: [python]
+        # Only run when a test or source file under oai2/ has changed,
+        # since editing CONTRIBUTING.md or docs doesn't affect test
+        # collection.
+        files: '^(oai2|tests)/.*\.py$'

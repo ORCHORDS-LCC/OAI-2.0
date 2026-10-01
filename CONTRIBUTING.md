@@ -50,6 +50,36 @@ uv run python scripts/verify.py
 
 It runs dependency sync, Ruff, MyPy, pytest, a public-safety scan, and a Markdown relative-link scan. It fails fast on any mandatory failure and does not invoke GitHub Actions. MLX tests require compatible Apple Silicon/macOS; platform-specific skips must be reported separately from passes.
 
+## Local pre-commit gate (Refs #236)
+
+The repo is runner-free and direct-push-on-main. To catch the
+cumulative-state failure mode (where each commit's gate sees the prior
+state, not the cumulative state — see #236), every commit runs a local
+pre-commit hook:
+
+```bash
+pip install pre-commit      # one-time
+pre-commit install          # one-time, installs the .git/hooks/pre-commit
+```
+
+The `.pre-commit-config.yaml` runs:
+
+1. `ruff check --fix` — catches F401 (unused import), F811 (redefinition), I001 (unsorted imports), W292 (missing newline).
+2. `ruff format` — applies the project's chosen formatter.
+3. `pytest --co -q` — collection-only smoke check; surfaces F401 import cycles, syntax errors, and missing dependencies without running tests.
+
+Run the same checks on demand against the whole tree:
+
+```bash
+pre-commit run --all-files
+```
+
+Emergency bypass (NOT recommended; documents the gate skip):
+
+```bash
+git commit --no-verify
+```
+
 ## Knowledge/Cloudflare changes
 
 Read [CLOUDFLARE_KNOWLEDGE.md](docs/agent-architecture/CLOUDFLARE_KNOWLEDGE.md).
