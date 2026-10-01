@@ -194,3 +194,13 @@ def test_cancellation_removes_queued_work_immediately() -> None:
     assert len(queue) == 1
     assert queue.cancel("missing") is False
     assert queue.pop_next(now_ms=100.0).request_id == "r2"
+
+
+
+def test_admission_symbols_are_exported_from_runtime_package() -> None:
+    from oai2.runtime import AdmissionPolicy as ExportedPolicy
+    from oai2.runtime import AdmissionQueue as ExportedQueue
+    from oai2.runtime.admission import AdmissionPolicy, AdmissionQueue
+
+    assert ExportedPolicy is AdmissionPolicy
+    assert ExportedQueue is AdmissionQueue
