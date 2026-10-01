@@ -22,6 +22,7 @@ htmlcov/
 
 # uv
 .venv/
+.venv-ci/
 
 # Hugging Face cache (model weights live outside the repo)
 .huggingface/
