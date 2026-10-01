@@ -213,7 +213,10 @@ def test_gc_lease_symbols_are_exported_from_knowledge_package() -> None:
 def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> None:
     from oai2.knowledge import (
         GC_LEASE_ACQUIRE_SQL,
+        GC_LEASE_FINALIZE_SQL,
+        GC_LEASE_RECORD_FAILURE_SQL,
         GC_LEASE_REFERENCE_COUNT_SQL,
+        GC_LEASE_RELEASE_SQL,
         GC_LEASE_SCHEMA_SQL,
         GC_LEASE_SCHEMA_VERSION,
         GC_LEASE_SELECT_SQL,
@@ -225,7 +228,10 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
     )
     from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_ACQUIRE_SQL as SourceAcquireSql,
+        GC_LEASE_FINALIZE_SQL as SourceFinalizeSql,
+        GC_LEASE_RECORD_FAILURE_SQL as SourceRecordFailureSql,
         GC_LEASE_REFERENCE_COUNT_SQL as SourceReferenceCountSql,
+        GC_LEASE_RELEASE_SQL as SourceReleaseSql,
         GC_LEASE_SCHEMA_SQL as SourceSchemaSql,
         GC_LEASE_SCHEMA_VERSION as SourceSchemaVersion,
         GC_LEASE_SELECT_SQL as SourceSelectSql,
@@ -238,6 +244,9 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
 
     assert gc_lease_schema_statements is SourceStatements
     assert GC_LEASE_ACQUIRE_SQL is SourceAcquireSql
+    assert GC_LEASE_FINALIZE_SQL is SourceFinalizeSql
+    assert GC_LEASE_RECORD_FAILURE_SQL is SourceRecordFailureSql
+    assert GC_LEASE_RELEASE_SQL is SourceReleaseSql
     assert GC_LEASE_REFERENCE_COUNT_SQL is SourceReferenceCountSql
     assert GC_LEASE_SCHEMA_SQL is SourceSchemaSql
     assert GC_LEASE_SCHEMA_VERSION == SourceSchemaVersion == 1
