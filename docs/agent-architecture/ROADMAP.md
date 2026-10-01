@@ -69,6 +69,30 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-43 | [#124](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/124) | Privacy/retention lifecycle | PROPOSED |
 | WP-44 | [#125](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/125) | Model export/quantization validation | PROPOSED |
 | WP-45 | [#126](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/126) | ADR/experiment registry | PROPOSED |
+| WP-46 | [#137](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/137) | Execution sandbox / mutation rollback | PROPOSED |
+| WP-47 | [#138](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/138) | Direct-main source-control semantics | PROPOSED |
+| WP-48 | [#139](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/139) | Build/test orchestration | PROPOSED |
+| WP-49 | [#140](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/140) | Structured patching / atomic edits | PROPOSED |
+| WP-50 | [#141](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/141) | Post-training behavior optimization | PROPOSED |
+| WP-51 | [#142](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/142) | Property/fuzz testing | PROPOSED |
+| WP-52 | [#155](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/155) | Human approval / intervention | PROPOSED |
+| WP-53 | [#156](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/156) | Session memory / context compression | PROPOSED |
+| WP-54 | [#157](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/157) | Dynamic capability registry | PROPOSED |
+| WP-55 | [#158](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/158) | Protocol evolution / version negotiation | PROPOSED |
+| WP-56 | [#159](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/159) | Benchmark contamination governance | PROPOSED |
+| WP-57 | [#160](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/160) | Code-language/domain specialists | PROPOSED |
+| WP-58 | [#161](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/161) | Deterministic inference/debug mode | PROPOSED |
+| WP-59 | [#162](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/162) | Startup / lazy expert loading | PROPOSED |
+| WP-60 | [#179](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/179) | Instruction hierarchy / prompt-state minimization | PROPOSED |
+| WP-61 | [#180](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/180) | User intent / ambiguity / acceptance spec | PROPOSED |
+| WP-62 | [#181](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/181) | Semantic code intelligence / LSP | PROPOSED |
+| WP-63 | [#182](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/182) | Web research / evidence citations | PROPOSED |
+| WP-64 | [#183](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/183) | Plugin / extension SDK | PROPOSED |
+| WP-65 | [#184](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/184) | Device/emulator/simulator automation | PROPOSED |
+| WP-66 | [#197](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/197) | Accessibility semantics / verification | PROPOSED |
+| WP-67 | [#198](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/198) | Xcode / iOS/macOS simulator integration | PROPOSED |
+| WP-68 | [#199](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/199) | Cloudflare quota/backpressure/migrations | PROPOSED |
+| WP-69 | [#200](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/200) | Temporal/conflicting knowledge | PROPOSED |
 
 ```mermaid
 flowchart TD
@@ -128,13 +152,20 @@ flowchart TD
 
 ## Current verification status
 
-A runner-free local preflight now exists at `scripts/verify.py` and includes dependency sync, Ruff, MyPy, Pytest, public-safety scanning, and Markdown link checks. Its implementation was repaired to avoid generated-environment recursion and to fix the hard-coded-secret regex. **WP-01 is not complete until the local preflight is actually executed and the required evidence is recorded.** Knowledge-store reads now also verify stored content hashes, with regression coverage on current `main`.
+A runner-free local preflight exists at `scripts/verify.py` and includes dependency sync, Ruff, MyPy, Pytest, explicit Apple-Silicon PASS/SKIP reporting, q-pipe compatibility drift checking, public-safety scanning, and Markdown link checks.
+
+- **#17 / WI-VV-002 is closed** with recorded local regression evidence.
+- **#18 / WI-KNOW-001 is closed** for the versioned transport/schema contract; live network execution remains #19.
+- **#16 / WI-VV-001 remains open** only until the latest PASS/SKIP + q-pipe compatibility additions are rerun locally and recorded.
+- **#20 / WI-MIG-001 remains open** until the new real-checkout q-pipe drift gate is executed and recorded against current q-pipe.
+
+Knowledge-store reads verify stored content hashes/provenance and fail closed on missing/tampered bodies/corrupted cache records.
 
 ## Immediate dependency-ordered gates
 
-1. Complete WP-01 local verification evidence.
-2. Prove corrected knowledge/importer regressions locally.
-3. Implement WP-02 live Cloudflare transport.
+1. Re-run the latest runner-free preflight and close #16 when the PASS/SKIP/q-pipe drift evidence is recorded.
+2. Execute the pinned q-pipe checkout compatibility gate and close #20 if it passes.
+3. Implement #19 / WP-02 live Cloudflare network transport.
 4. Perform WP-03 small real q-pipe migration.
 5. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
 6. Expand WP-08 held-out capability/regression gates.

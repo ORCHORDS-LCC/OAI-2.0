@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Expanded standards-aligned work-package map through WP-69, including sandbox/source-control/build/patch/post-training/fuzz, human approvals, memory, capability registry, protocol evolution, benchmark governance, domain specialists, deterministic inference, lazy loading, prompt/intent/semantic/web/extension/device work, accessibility, Apple simulators, Cloudflare operations and temporal knowledge.
+
 - Versioned public-safe Cloudflare knowledge transport schemas for request/response, normalized auth context, explicit errors, D1 metadata, R2 body descriptors, Vectorize metadata and KV cache envelopes.
 - Regression tests for transport contract versioning, operation requirements, response invariants, content-addressed R2 integrity, Vectorize provenance and revisioned KV envelopes.
 - q-pipe compatibility source revision/blob markers tied to the exact public q-pipe source used for importer-policy verification.
@@ -25,6 +27,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Public architecture, branding, support, security, contribution, stars, and donation/sponsorship documentation.
 
 ### Changed
+
+- Runner-free preflight now reports explicit Apple-Silicon PASS/SKIP state and verifies a real sibling/configured q-pipe checkout against the pinned compatibility revision/blob hashes when available.
 
 - Removed GitHub Actions runner-backed workflows; OAI-2.0 acceptance is local/manual-first and runner-free.
 - Added master implementation map in GitHub Issue #1.
