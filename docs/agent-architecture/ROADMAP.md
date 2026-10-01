@@ -1,6 +1,6 @@
 # Implementation Roadmap
 
-_Last reviewed: 2026-10-01._
+_Last reviewed: 2026-10-02._
 
 Stages are evidence gates, not delivery promises. The detailed dependency-ordered implementation map lives in [GitHub Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1).
 
@@ -25,7 +25,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | Work package | Issue | Domain | Current state |
 | --- | --- | --- | --- |
 | WP-01 | [#2](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/2) | Verification/validation | EXPERIMENTAL implementation in progress |
-| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | PROPOSED live / mock contract exists |
+| WP-02 | [#3](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/3) | Live Cloudflare knowledge | EXPERIMENTAL contracts + async D1 lease binding primitives; full live transport remaining |
 | WP-03 | [#4](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/4) | Real q-pipe migration | PROPOSED |
 | WP-04 | [#5](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/5) | Semantic retrieval/evidence | PROPOSED |
 | WP-05 | [#6](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/6) | Performance baselines | EXPERIMENTAL harness / matrix remaining |
@@ -42,13 +42,13 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-16 | [#45](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/45) | Tokenizer/control vocabulary | PROPOSED |
 | WP-17 | [#46](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/46) | Training/checkpoint/recovery stack | PROPOSED |
 | WP-18 | [#47](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/47) | Observability/trace telemetry | PROPOSED |
-| WP-19 | [#48](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/48) | Resource/memory/concurrency control | PROPOSED |
+| WP-19 | [#48](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/48) | Resource/memory/concurrency control | PROPOSED core resource controller; #232 admission policy now EXPERIMENTAL |
 | WP-20 | [#49](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/49) | Versioning/packaging/release reproducibility | PROPOSED |
 | WP-21 | [#62](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/62) | Repository world-state/context | PROPOSED |
 | WP-22 | [#63](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/63) | Difficulty/mode/compute routing | PROPOSED |
 | WP-23 | [#64](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/64) | Continuous knowledge ingestion/freshness | PROPOSED |
 | WP-24 | [#65](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/65) | Multi-objective model training | PROPOSED |
-| WP-25 | [#66](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/66) | Inference scheduling/batching/session runtime | PROPOSED |
+| WP-25 | [#66](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/66) | Inference scheduling/batching/session runtime | PROPOSED scheduler; admission/backpressure policy core exists awaiting integration |
 | WP-26 | [#67](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/67) | Documentation/traceability drift governance | PROPOSED |
 | WP-27 | [#80](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/80) | Core neural topology/fusion | PROPOSED |
 | WP-28 | [#81](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/81) | Verified continual learning | PROPOSED |
@@ -93,6 +93,13 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-67 | [#198](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/198) | Xcode / iOS/macOS simulator integration | PROPOSED |
 | WP-68 | [#199](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/199) | Cloudflare quota/backpressure/migrations | PROPOSED |
 | WP-69 | [#200](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/200) | Temporal/conflicting knowledge | PROPOSED |
+| WP-70 | [#209](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/209) | Knowledge blob lifecycle / GC | EXPERIMENTAL reconciliation/sweep/lease source; live proof remaining |
+| WP-71 | [#210](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/210) | Numerical stability / precision | PROPOSED |
+| WP-72 | [#211](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/211) | Architecture/hyperparameter search | PROPOSED |
+| WP-73 | [#212](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/212) | Client SDKs / typed APIs | PROPOSED |
+| WP-74 | [#213](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/213) | Artifact registry / distribution integrity | PROPOSED |
+| WP-75 | [#226](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/226) | Claim/evidence truth enforcement | IN PROGRESS source primitives |
+| WP-76 | [#230](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/230) | End-to-end QoS / tail latency / admission | EXPERIMENTAL metrics + admission policy core; service integration remaining |
 
 ```mermaid
 flowchart TD
@@ -165,7 +172,7 @@ Knowledge-store reads verify stored content hashes/provenance and fail closed on
 
 1. Re-run the latest runner-free preflight and close #16 when the PASS/SKIP/q-pipe drift evidence is recorded.
 2. Execute the pinned q-pipe checkout compatibility gate and close #20 if it passes.
-3. Implement #19 / WP-02 live Cloudflare network transport.
+3. Continue #19 / WP-02 from the existing async D1 binding layer into full Worker/R2/Vectorize/KV transport and live writer/sweep transactions.
 4. Perform WP-03 small real q-pipe migration.
 5. Establish WP-04 retrieval quality and WP-05 benchmark matrix.
 6. Expand WP-08 held-out capability/regression gates.
