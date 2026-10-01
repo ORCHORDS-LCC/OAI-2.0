@@ -52,4 +52,4 @@ External evaluators/teachers may generate critique or scenarios, but determinist
 
 A speed improvement is rejected if verified capability materially regresses.
 
-Current QoS source also separates research targets from service budgets and records first-useful-action, end-to-end p95/p99, verified-success and false-success metrics. A candidate with better mean throughput must still fail promotion when tail latency, deadline misses, false-success, memory stability, or verified useful work violate the declared service budget. Admission/backpressure policy evidence must eventually be included for concurrent-service promotion.
+Current QoS source separates research targets from service budgets and records first-useful-action, end-to-end p95/p99, verified-success, false-success, and deadline-miss metrics. The source-level promotion gate now rejects candidates whose p95/p99 or deadline-miss rate regress versus the baseline even when mean decode throughput improves. Admission/backpressure policy evidence and sustained target-hardware measurements must still be included for concurrent-service promotion.
