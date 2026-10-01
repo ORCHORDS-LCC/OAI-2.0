@@ -221,11 +221,19 @@ class GatewayRuntime(InferenceRuntime):
                 status_code=response.status_code,
                 message=_safe_response_message(response),
             )
-        payload = response.json()
-        text, tokens = _extract_completion(payload)
+        try:
+            payload = response.json()
+        except ValueError:
+            raise GatewayRuntimeError(
+                status_code=response.status_code,
+                message="invalid JSON completion response",
+            ) from None
+        text, tokens, finish_reason, tool_calls = _extract_completion(payload)
         return InferenceResponse(
             text=text,
             tokens=tokens,
+            finish_reason=finish_reason,
+            tool_calls=tool_calls,
             elapsed_ms=elapsed_ms,
             device=f"gateway:{self._config.base_url}",
             status=Status.EXPERIMENTAL,
@@ -272,9 +280,13 @@ def _safe_response_message(response: httpx.Response) -> str:
     return _redact(text)
 
 
-def _extract_completion(payload: dict[str, Any]) -> tuple[str, int]:
-    """Pull ``text`` and ``tokens`` out of an OpenAI-style payload."""
+def _extract_completion(
+    payload: Any,
+) -> tuple[str, int, str | None, tuple[dict[str, Any], ...]]:
+    """Preserve upstream completion state; never turn missing metadata into success."""
 
+    if not isinstance(payload, dict):
+        raise GatewayRuntimeError(200, "completion response must be a JSON object")
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
         raise GatewayRuntimeError(
@@ -287,9 +299,20 @@ def _extract_completion(payload: dict[str, Any]) -> tuple[str, int]:
             status_code=200,
             message=f"unexpected choice shape: {type(first).__name__}",
         )
+    finish_reason = first.get("finish_reason")
+    if finish_reason is not None and not isinstance(finish_reason, str):
+        raise GatewayRuntimeError(200, "finish_reason must be a string or null")
     message = first.get("message")
+    tool_calls: tuple[dict[str, Any], ...] = ()
     content = ""
     if isinstance(message, dict):
+        raw_calls = message.get("tool_calls")
+        if raw_calls is not None:
+            if not isinstance(raw_calls, list) or any(
+                not isinstance(call, dict) for call in raw_calls
+            ):
+                raise GatewayRuntimeError(200, "tool_calls must be an array of objects or null")
+            tool_calls = tuple(raw_calls)
         raw_content = message.get("content")
         if isinstance(raw_content, str):
             content = raw_content
@@ -299,6 +322,10 @@ def _extract_completion(payload: dict[str, Any]) -> tuple[str, int]:
             )
     elif isinstance(first.get("text"), str):
         content = first["text"]
+    else:
+        raise GatewayRuntimeError(200, "choice must contain a message object or text")
+    if finish_reason == "tool_calls" and not tool_calls:
+        raise GatewayRuntimeError(200, "tool_calls finish_reason requires tool calls")
     usage = payload.get("usage") or {}
     completion_tokens = 0
     if isinstance(usage, dict):
@@ -307,7 +334,7 @@ def _extract_completion(payload: dict[str, Any]) -> tuple[str, int]:
             completion_tokens = raw
     if completion_tokens == 0:
         completion_tokens = max(1, len(content.split())) if content else 0
-    return content, completion_tokens
+    return content, completion_tokens, finish_reason, tool_calls
 
 
 __all__ = [

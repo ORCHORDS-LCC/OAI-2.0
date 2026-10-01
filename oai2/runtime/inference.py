@@ -16,6 +16,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,6 +48,9 @@ class InferenceResponse:
     device: str
     status: Status = Status.EXPERIMENTAL
     notes: list[str] = field(default_factory=list)
+    # None means the upstream runtime did not supply a completion reason.
+    finish_reason: str | None = None
+    tool_calls: tuple[dict[str, Any], ...] = ()
 
 
 class InferenceRuntime(ABC):

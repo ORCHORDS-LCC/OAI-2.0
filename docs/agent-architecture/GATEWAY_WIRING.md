@@ -1,6 +1,6 @@
 # OAI-2.0 → public gateway wiring
 
-This document describes the live wire between the OAI-2.0 runtime and
+This document describes the client-side contract between the OAI-2.0 runtime and
 the public ORCHORDS inference gateway (`api.orchords.com`). It is the
 source of truth for the env-var contract and the operational shape of
 the path. No credentials or live tokens appear in this file.
@@ -108,3 +108,35 @@ to the single public model id `oai-1.2`. The deployed
 `api.orchords.com` instance still exposes four models — that change
 must be re-applied on the cloud deployment. Tracking is in the
 issue tracker.
+
+## Completion outcome contract (#238)
+
+`GatewayRuntime` preserves the upstream `finish_reason` in `InferenceResponse`,
+and `GatewayModelClient` forwards that value unchanged. `length` and
+`content_filter` are not rewritten to `stop`; a missing or null reason remains
+`None`. Callers must inspect the reason before treating a reply as complete.
+Existing non-gateway runtimes default to an unknown reason rather than claiming
+that upstream generation stopped normally.
+
+Tool-only replies retain the ordered `tool_calls` objects, including their IDs,
+names and argument strings. The adapter does not execute tools or validate their
+arguments for execution; the authorized caller remains responsible for those
+checks. Preserving response metadata does not implement outbound tool schemas,
+structured conversation forwarding, streaming or a complete tool loop.
+
+Invalid JSON, non-object envelopes, missing choices, invalid metadata types,
+and a `tool_calls` finish reason without calls raise `GatewayRuntimeError`. Partial
+text at a token limit remains available alongside its original termination
+reason; it is not silently discarded or represented as a completed answer.
+
+Focused verification in the supported project environment:
+
+```bash
+uv run pytest -W error tests/test_gateway_completion_contract.py tests/test_gateway_runtime.py tests/test_gateway_model_client.py
+```
+
+These tests use HTTPX mock transport. They are not live gateway, ZCode, model
+quality, or cross-repository acceptance evidence. #238 remains open for live
+integration evidence.
+
+Protocol reference: [Chat Completions response contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/).

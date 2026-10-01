@@ -118,9 +118,9 @@ class GatewayModelClient:
         response = self._runtime.generate(request)
         return ChatReply(
             content=response.text,
-            finish_reason="stop",
+            finish_reason=response.finish_reason,
             reasoning="",
-            tool_calls=(),
+            tool_calls=response.tool_calls,
             raw={
                 "elapsed_ms": response.elapsed_ms,
                 "device": response.device,
