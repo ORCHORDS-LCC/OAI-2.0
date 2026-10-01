@@ -242,7 +242,9 @@ def run_one(
         pass
 
     t0 = time.perf_counter()
-    model, tokenizer = load(model_id)
+    # mlx_lm.load() returns Union[(model, tokenizer), (model, tokenizer, config)];
+    # default-arg path is always the 2-tuple but mypy can't statically narrow it.
+    model, tokenizer = load(model_id)  # type: ignore[misc]
     load_seconds = time.perf_counter() - t0
 
     device = sys_info.get("mlx_default_device", "unknown")
@@ -688,7 +690,7 @@ def main(argv: list[str] | None = None) -> int:
         "repetitions": args.repetitions,
         "warmup": not args.no_warmup,
         "sys_info": _system_info(),
-        "configs": [],
+        "configs": [],  # list[dict[str, object]], narrowed explicitly where appended
     }
 
     for budget in args.prompt_tokens:
@@ -723,7 +725,7 @@ def main(argv: list[str] | None = None) -> int:
             run_file = out_dir / f"{r.run_id}.json"
             run_file.write_text(json.dumps(asdict(r), indent=2, default=str))
         _print_run_table(args.model, prompt_label, runs)
-        summary["configs"].append(
+        summary["configs"].append(  # type: ignore[attr-defined]
             {
                 "prompt_label": prompt_label,
                 "prompt_tokens": runs[0].prompt_tokens if runs else None,
