@@ -34,18 +34,15 @@ Authorized maintainers may work directly on `main` where repository rules permit
 
 The dependency-ordered master work map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1). Detailed work packages shall follow [ENGINEERING_ISSUE_STANDARD.md](docs/agent-architecture/ENGINEERING_ISSUE_STANDARD.md). Commit messages should describe code/docs changes only; do not embed runner names, workflow IDs, runner logs, or operational run records.
 
-## Current verification commands
+## Current verification command
 
-Typical local checks:
+Run the single local preflight from the repository root:
 
 ```bash
-uv sync --extra dev
-uv run ruff check oai2 tests scripts
-uv run mypy --ignore-missing-imports oai2
-uv run pytest -W error
+uv run python scripts/verify.py
 ```
 
-MLX tests require compatible Apple Silicon/macOS. Run them locally on supported hardware; do not substitute a runner-backed CI result.
+It runs dependency sync, Ruff, MyPy, pytest, a public-safety scan, and a Markdown relative-link scan. It fails fast on any mandatory failure and does not invoke GitHub Actions. MLX tests require compatible Apple Silicon/macOS; platform-specific skips must be reported separately from passes.
 
 ## Knowledge/Cloudflare changes
 
