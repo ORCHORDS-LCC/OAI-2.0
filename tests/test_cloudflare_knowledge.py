@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from oai2.core import KnowledgeId, Status
 from oai2.knowledge import (
     CFPlan,
@@ -195,3 +197,32 @@ def test_cache_key_changes_with_corpus_revision() -> None:
 
     req = RetrievalRequest(topic="x")
     assert cache_key_for(req, "v1", 1) != cache_key_for(req, "v1", 2)
+
+
+def test_store_put_rejects_mismatched_content_hash() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("integrity", "trusted body")
+    obj.content_hash = sha256_hex("different body")
+    with pytest.raises(ValueError, match="content_hash"):
+        store.put(obj)
+
+
+def test_store_get_rejects_missing_blob() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("integrity", "trusted body", kid_suffix="missing")
+    store.put(obj)
+    del b.blobs[r2_blob_key_for(obj.content_hash)]
+    with pytest.raises(ValueError, match="missing"):
+        store.get(obj.knowledge_id)
+
+
+def test_store_get_rejects_mismatched_blob() -> None:
+    b = MockCloudflareBindings()
+    store = CloudflareKnowledgeStore(b)
+    obj = _make_obj("integrity", "trusted body", kid_suffix="tampered")
+    store.put(obj)
+    b.blobs[r2_blob_key_for(obj.content_hash)] = b"tampered body"
+    with pytest.raises(ValueError, match="hash"):
+        store.get(obj.knowledge_id)
