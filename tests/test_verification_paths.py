@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from oai2.core import EvidenceId
 from oai2.verification import (
     ClaimEvidencePolicy,
@@ -119,3 +121,59 @@ def test_path_adapters_export_from_verification_package() -> None:
     assert assess_repository_evidence is SourceRepository
     assert assess_tool_runtime_evidence is SourceTool
     assert assess_web_evidence is SourceWeb
+
+
+
+@pytest.mark.parametrize(
+    ("path_kind", "evidence_class"),
+    [
+        ("repository", EvidenceClass.EXTERNAL),
+        ("tool", EvidenceClass.REPO_SOURCE),
+        ("web", EvidenceClass.RUNTIME_OBS),
+    ],
+)
+def test_path_boundary_rejects_wrong_evidence_class(
+    path_kind: str,
+    evidence_class: EvidenceClass,
+) -> None:
+    binding = EvidenceBinding(
+        evidence=_evidence("wrong", evidence_class, observed_at=100.0),
+        state_version="state",
+    )
+    policy = _policy()
+
+    with pytest.raises(ValueError, match="requires one of"):
+        if path_kind == "repository":
+            assess_repository_evidence(
+                policy,
+                [binding],
+                current_state_version="state",
+            )
+        elif path_kind == "tool":
+            assess_tool_runtime_evidence(
+                policy,
+                [binding],
+                current_state_version="state",
+            )
+        else:
+            assess_web_evidence(
+                policy,
+                [binding],
+                current=True,
+                now=120.0,
+            )
+
+
+def test_repository_path_preserves_refutation_state() -> None:
+    assessment = assess_repository_evidence(
+        _policy(),
+        [
+            EvidenceBinding(
+                evidence=_evidence("refute", EvidenceClass.DETERMINISTIC),
+                supports=False,
+                state_version="sha-a",
+            )
+        ],
+        current_state_version="sha-a",
+    )
+    assert assessment.decision is PolicyDecision.REFUTED
