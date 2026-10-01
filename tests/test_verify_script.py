@@ -110,6 +110,8 @@ def test_qpipe_compatibility_check_detects_revision_drift(
     qpipe = tmp_path / "q-pipe"
     qpipe.mkdir()
     monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    monkeypatch.delenv("OAI2_QPIPE_REVISION_SKIP", raising=False)
+    monkeypatch.delenv("OAI2_QPIPE_REVISION", raising=False)
 
     class Result:
         returncode = 0
@@ -121,6 +123,7 @@ def test_qpipe_compatibility_check_detects_revision_drift(
     output = capsys.readouterr().out
     assert "source revision changed" in output
     assert QPIPE_COMPATIBILITY_SOURCE_REVISION in output
+    assert "OAI2_QPIPE_REVISION_SKIP" in output
 
 
 def test_qpipe_compatibility_check_accepts_pinned_revision_and_blobs(
@@ -134,6 +137,8 @@ def test_qpipe_compatibility_check_accepts_pinned_revision_and_blobs(
     qpipe = tmp_path / "q-pipe"
     qpipe.mkdir()
     monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    monkeypatch.delenv("OAI2_QPIPE_REVISION_SKIP", raising=False)
+    monkeypatch.delenv("OAI2_QPIPE_REVISION", raising=False)
     outputs = iter(
         [
             QPIPE_COMPATIBILITY_SOURCE_REVISION,
@@ -155,3 +160,117 @@ def test_qpipe_compatibility_check_accepts_pinned_revision_and_blobs(
     )
     assert verify.run_qpipe_compatibility_check() is True
     assert "PASS qpipe-compat" in capsys.readouterr().out
+
+
+def test_qpipe_compatibility_check_revision_override_passes_when_blobs_match(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    from oai2.knowledge import QPIPE_COMPATIBILITY_SOURCE_BLOBS
+
+    operator_head = "operator-current-head-sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    qpipe = tmp_path / "q-pipe"
+    qpipe.mkdir()
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    monkeypatch.delenv("OAI2_QPIPE_REVISION_SKIP", raising=False)
+    monkeypatch.setenv("OAI2_QPIPE_REVISION", operator_head)
+    outputs = iter(
+        [
+            operator_head,
+            *QPIPE_COMPATIBILITY_SOURCE_BLOBS.values(),
+        ]
+    )
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout + "\n"
+
+    monkeypatch.setattr(
+        verify.subprocess,
+        "run",
+        lambda *args, **kwargs: Result(next(outputs)),
+    )
+    assert verify.run_qpipe_compatibility_check() is True
+    output = capsys.readouterr().out
+    assert "PASS qpipe-compat" in output
+    assert "revision override" in output
+    assert operator_head[:12] in output
+
+
+def test_qpipe_compatibility_check_revision_skip_passes_when_blobs_match(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    from oai2.knowledge import QPIPE_COMPATIBILITY_SOURCE_BLOBS
+
+    operator_head = "different-from-pinned-head-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    qpipe = tmp_path / "q-pipe"
+    qpipe.mkdir()
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    monkeypatch.setenv("OAI2_QPIPE_REVISION_SKIP", "1")
+    monkeypatch.delenv("OAI2_QPIPE_REVISION", raising=False)
+    outputs = iter(
+        [
+            operator_head,
+            *QPIPE_COMPATIBILITY_SOURCE_BLOBS.values(),
+        ]
+    )
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout + "\n"
+
+    monkeypatch.setattr(
+        verify.subprocess,
+        "run",
+        lambda *args, **kwargs: Result(next(outputs)),
+    )
+    assert verify.run_qpipe_compatibility_check() is True
+    output = capsys.readouterr().out
+    assert "PASS qpipe-compat" in output
+    assert "revision skipped" in output
+    assert operator_head[:12] in output
+
+
+def test_qpipe_compatibility_check_revision_skip_still_enforces_blob_drift(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    from oai2.knowledge import QPIPE_COMPATIBILITY_SOURCE_BLOBS
+
+    operator_head = "any-head-cccccccccccccccccccccccccccccccccccccccccccccc"
+    wrong_blob = "0" * 40
+    pinned_blobs = QPIPE_COMPATIBILITY_SOURCE_BLOBS
+    first_blob_path = next(iter(pinned_blobs))
+    first_blob_expected = pinned_blobs[first_blob_path]
+    qpipe = tmp_path / "q-pipe"
+    qpipe.mkdir()
+    monkeypatch.setenv("OAI2_QPIPE_REPO", str(qpipe))
+    monkeypatch.setenv("OAI2_QPIPE_REVISION_SKIP", "1")
+    monkeypatch.delenv("OAI2_QPIPE_REVISION", raising=False)
+    outputs = iter(
+        [
+            operator_head,
+            wrong_blob if first_blob_expected != wrong_blob else "f" * 40,
+        ]
+    )
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+        def __init__(self, stdout: str) -> None:
+            self.stdout = stdout + "\n"
+
+    monkeypatch.setattr(
+        verify.subprocess,
+        "run",
+        lambda *args, **kwargs: Result(next(outputs)),
+    )
+    assert verify.run_qpipe_compatibility_check() is False
+    output = capsys.readouterr().out
+    assert "FAIL qpipe-compat" in output
+    assert "source blob changed" in output
