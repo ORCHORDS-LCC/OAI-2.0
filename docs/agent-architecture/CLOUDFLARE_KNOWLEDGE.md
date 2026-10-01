@@ -59,7 +59,7 @@ Content-addressed knowledge bodies under a hash-derived object key. R2 is used f
 
 ### Vectorize
 
-Intended semantic index keyed back to knowledge IDs. `CloudflareVectorizeStore` now provides a deployment-neutral async Worker-binding wrapper for documented `upsert([{id, values, metadata}])` and `query(vector, {topK})` operations, with fail-closed match parsing. Vectorize mutations are eventually query-visible, so source does not treat successful upsert return as immediate query visibility. `KnowledgeStore.retrieve()` still does **not yet use a deployed production Vectorize index end-to-end**.
+Intended semantic index keyed back to knowledge IDs. `CloudflareVectorizeStore` provides a deployment-neutral async Worker-binding wrapper for documented `upsert([{id, values, metadata}])` and `query(vector, {topK})` operations. The assembled async runtime now over-fetchs semantic candidates, treats Vectorize as non-authoritative, removes stale/deleted vector IDs that have no D1 row, applies authoritative D1 status/authority filtering, verifies D1/R2 content integrity, and preserves semantic score + source provenance + content hash in `RetrievalCandidate`. A Vectorize ID that disagrees with authoritative D1 metadata still raises an explicit integrity error. Semantic retrieval deliberately bypasses the existing topic-only KV cache because that key does not include the query vector. Production embeddings/live known-query precision-recall evidence remain unverified.
 
 Cloudflare's current Vectorize API uses vector objects such as `{id, values, metadata}`; updating existing IDs uses `upsert`. Mutations are asynchronous and may take time to become query-visible.
 
@@ -223,3 +223,18 @@ Real account IDs, database IDs, private bucket names, namespace IDs, API tokens,
 ## Official references
 
 See [SOURCES.md](SOURCES.md) for current D1, R2, Vectorize, KV, bindings, and Python Workers documentation.
+
+
+## Semantic retrieval correctness
+
+The current source-level semantic path follows this authority order:
+
+1. Vectorize supplies ranked candidate IDs/scores.
+2. The runtime over-fetchs before filtering so an ineligible top hit does not hide an eligible lower-ranked item.
+3. Missing D1 metadata removes a stale/deleted vector candidate instead of making Vectorize authoritative.
+4. D1 status and authority constraints decide eligibility.
+5. R2 hydration plus content-hash verification validates the body.
+6. RetrievalCandidate carries stable knowledge ID, content hash, source URI and semantic score for eligible candidates.
+7. Empty eligible results remain explicit rather than padded with lower-quality/ineligible hits.
+
+Semantic queries do not currently reuse the topic-only KV query cache because its fingerprint does not include the query vector. This avoids incorrect cache collisions until a vector-aware semantic cache contract is added.
