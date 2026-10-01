@@ -6,7 +6,10 @@ import pytest
 
 from oai2.knowledge.gc_lease_d1 import (
     GC_LEASE_ACQUIRE_SQL,
+    GC_LEASE_FINALIZE_SQL,
+    GC_LEASE_RECORD_FAILURE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
+    GC_LEASE_RELEASE_SQL,
     GC_LEASE_UPSERT_SQL,
     GC_LEASE_VALIDATE_SQL,
     GC_LEASE_WRITER_BLOCK_SQL,
@@ -285,4 +288,87 @@ async def test_acquire_lease_fails_closed_on_bad_change_count_or_ttl() -> None:
             now=10.0,
             ttl_seconds=0.0,
             authority_revision=12,
+        )
+
+
+
+@pytest.mark.asyncio
+async def test_delete_failure_transition_binds_token_time_and_revision() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_RECORD_FAILURE_SQL] = FakeResult(
+        success=True,
+        meta=FakeMeta(changes=1),
+    )
+    store = D1GcLeaseStore(db)
+
+    assert await store.record_delete_failure(
+        object_key="oai2-blobs/a",
+        token="lease-1",
+        now=12.0,
+        authority_revision=8,
+    ) is True
+    stmt = db.prepared[-1]
+    assert stmt.query == GC_LEASE_RECORD_FAILURE_SQL
+    assert stmt.bound == ("oai2-blobs/a", "lease-1", 12.0, 8)
+
+
+@pytest.mark.asyncio
+async def test_finalize_delete_binds_terminal_decision_and_revision() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_FINALIZE_SQL] = {
+        "success": True,
+        "meta": {"changes": 1},
+    }
+    store = D1GcLeaseStore(db)
+
+    assert await store.finalize_delete(
+        object_key="oai2-blobs/a",
+        token="lease-1",
+        now=12.0,
+        already_absent=True,
+        authority_revision=9,
+    ) is True
+    stmt = db.prepared[-1]
+    assert stmt.query == GC_LEASE_FINALIZE_SQL
+    assert stmt.bound == (
+        "oai2-blobs/a",
+        "lease-1",
+        12.0,
+        "already_absent",
+        9,
+    )
+
+
+@pytest.mark.asyncio
+async def test_release_lease_returns_false_when_guard_matches_no_row() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_RELEASE_SQL] = {
+        "success": True,
+        "meta": {"changes": 0},
+    }
+    store = D1GcLeaseStore(db)
+
+    assert await store.release_lease(
+        object_key="oai2-blobs/a",
+        token="wrong-token",
+        now=12.0,
+        authority_revision=10,
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_outcome_transition_fails_closed_on_multirow_change_count() -> None:
+    db = FakeDatabase()
+    db.run_results[GC_LEASE_RELEASE_SQL] = {
+        "success": True,
+        "meta": {"changes": 2},
+    }
+    store = D1GcLeaseStore(db)
+
+    with pytest.raises(RuntimeError, match="unexpected number of rows"):
+        await store.release_lease(
+            object_key="oai2-blobs/a",
+            token="lease-1",
+            now=12.0,
+            authority_revision=10,
         )
