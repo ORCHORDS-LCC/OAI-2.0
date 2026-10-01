@@ -6,7 +6,10 @@ from contextlib import contextmanager
 
 from oai2.knowledge.gc_lease_d1 import (
     GC_LEASE_ACQUIRE_SQL,
+    GC_LEASE_FINALIZE_SQL,
+    GC_LEASE_RECORD_FAILURE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
+    GC_LEASE_RELEASE_SQL,
     GC_LEASE_SCHEMA_VERSION,
     GC_LEASE_SELECT_SQL,
     GC_LEASE_UPSERT_SQL,
@@ -194,3 +197,74 @@ def test_conditional_acquire_allows_expired_takeover_but_rechecks_references() -
         row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
         assert row is not None
         assert row[1] == "lease-new"
+
+
+
+def test_failure_finalize_and_release_transitions_are_token_guarded() -> None:
+    with _db() as db:
+        key = "oai2-blobs/a"
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-1", "gc-sweep", 10.0, 30.0, 7),
+        )
+
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_RECORD_FAILURE_SQL,
+            (key, "wrong-token", 12.0, 8),
+        )
+        assert db.total_changes == before
+
+        db.execute(
+            GC_LEASE_RECORD_FAILURE_SQL,
+            (key, "lease-1", 12.0, 8),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[5] == "delete_failed"
+        assert row[6] == 1
+        assert row[7] == "retryable_failure_recorded"
+
+        db.execute(
+            GC_LEASE_RELEASE_SQL,
+            (key, "lease-1", 13.0, 9),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[5] == "released"
+        assert row[7] is None
+
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-2", "gc-sweep", 14.0, 30.0, 10),
+        )
+        db.execute(
+            GC_LEASE_FINALIZE_SQL,
+            (key, "lease-2", 15.0, "deleted", 11),
+        )
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[5] == "deleted"
+        assert row[7] == "deleted"
+
+
+def test_finalize_fails_when_reference_reappears() -> None:
+    with _db() as db:
+        key = "oai2-blobs/a"
+        db.execute(
+            GC_LEASE_ACQUIRE_SQL,
+            (key, "lease-1", "gc-sweep", 10.0, 30.0, 7),
+        )
+        db.execute(
+            "INSERT INTO knowledge_index(knowledge_id, r2_blob_key) VALUES (?, ?)",
+            ("ko_race", key),
+        )
+        before = db.total_changes
+        db.execute(
+            GC_LEASE_FINALIZE_SQL,
+            (key, "lease-1", 15.0, "deleted", 8),
+        )
+        assert db.total_changes == before
+        row = db.execute(GC_LEASE_SELECT_SQL, (key,)).fetchone()
+        assert row is not None
+        assert row[5] == "active"
