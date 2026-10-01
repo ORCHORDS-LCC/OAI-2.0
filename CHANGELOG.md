@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Repository metadata: the previous-cycle commit `86d1f04e1cfdab934ebe10a6a71001d93980cb3c` (chore: ruff nits in knowledge sweep async tests) was authored locally with the dev-shell identity `ZCode <zcode@local>` instead of the campaign identity `ORCHORDS.COM <72497645+ORCHORDS@users.noreply.github.com>` that the rest of the `main` history uses. Its content (one unused-import removal, one EOF newline) is correct and verified live (full local gate `ALL LOCAL CHECKS PASSED`); the SHA is preserved to avoid invalidating references already fetched by other agents, and this entry records the attribution regression so the trail is auditable.
+
 ### Added
 
 - Versioned numerical safety policy, structured finite/range sentinels, extreme-value fixtures, and MLX smoke-probe integration for WP-71.
