@@ -222,23 +222,43 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
         GC_LEASE_SELECT_SQL,
         GC_LEASE_TABLE,
         GC_LEASE_UPSERT_SQL,
-        GC_LEASE_VALIDATE_SQL,
         GC_LEASE_WRITER_BLOCK_SQL,
         gc_lease_schema_statements,
     )
     from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_ACQUIRE_SQL as SourceAcquireSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_FINALIZE_SQL as SourceFinalizeSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_RECORD_FAILURE_SQL as SourceRecordFailureSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_REFERENCE_COUNT_SQL as SourceReferenceCountSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_RELEASE_SQL as SourceReleaseSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_SCHEMA_SQL as SourceSchemaSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_SCHEMA_VERSION as SourceSchemaVersion,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_SELECT_SQL as SourceSelectSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_TABLE as SourceTable,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_UPSERT_SQL as SourceUpsertSql,
-        GC_LEASE_VALIDATE_SQL as SourceValidateSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         GC_LEASE_WRITER_BLOCK_SQL as SourceWriterBlockSql,
+    )
+    from oai2.knowledge.gc_lease_d1 import (
         gc_lease_schema_statements as SourceStatements,
     )
 
@@ -253,7 +273,6 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
     assert GC_LEASE_SELECT_SQL is SourceSelectSql
     assert GC_LEASE_TABLE == SourceTable == "knowledge_gc_delete_lease"
     assert GC_LEASE_UPSERT_SQL is SourceUpsertSql
-    assert GC_LEASE_VALIDATE_SQL is SourceValidateSql
     assert GC_LEASE_WRITER_BLOCK_SQL is SourceWriterBlockSql
 
 
@@ -261,7 +280,11 @@ def test_gc_lease_d1_schema_symbols_are_exported_from_knowledge_package() -> Non
 def test_gc_lease_d1_runtime_symbols_are_exported_from_knowledge_package() -> None:
     from oai2.knowledge import (
         D1DatabaseBinding as ExportedDatabaseBinding,
+    )
+    from oai2.knowledge import (
         D1GcLeaseStore as ExportedLeaseStore,
+    )
+    from oai2.knowledge import (
         D1PreparedStatementBinding as ExportedStatementBinding,
     )
     from oai2.knowledge.gc_lease_d1_runtime import (
