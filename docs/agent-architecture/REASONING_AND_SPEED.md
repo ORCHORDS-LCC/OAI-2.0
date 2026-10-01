@@ -22,7 +22,7 @@ These are targets, not current OAI-2.0 model results.
 
 ## Corrected measured smoke result
 
-The v0.2 harness measures prefill and decode separately. One committed M5 Max smoke run for `Qwen2.5-0.5B-Instruct-4bit` recorded:
+The v0.2 harness records first-token timing separately from the subsequent generation interval and MLX-LM-reported generation throughput. One committed M5 Max smoke run for `Qwen2.5-0.5B-Instruct-4bit` recorded:
 
 | Metric | Result |
 | --- | ---: |
@@ -30,12 +30,12 @@ The v0.2 harness measures prefill and decode separately. One committed M5 Max sm
 | Generated tokens | 32 |
 | Prefill/TTFT | ~25.44 ms |
 | Prefill throughput | ~5,227.9 tok/s |
-| Pure decode throughput | ~198.47 tok/s |
+| MLX-reported generation throughput | ~198.47 tok/s |
 | Decode duration | ~165.66 ms |
 | End-to-end generation phase | ~191.10 ms |
 | Peak MLX memory | ~0.402 GB |
 
-One repetition is not enough to establish a stable baseline.
+One repetition is not enough to establish a stable baseline, and the generation-throughput field is not a kernel-only decode claim.
 
 ## Superseded measurements
 

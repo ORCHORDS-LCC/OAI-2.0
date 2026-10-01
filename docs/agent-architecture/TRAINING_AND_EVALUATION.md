@@ -21,7 +21,7 @@ The scaffold can run locally against a runtime interface, including placeholder 
 
 ## Benchmarking
 
-Use `scripts/bench.py` for load/compile/warm-up, TTFT/prefill, MLX-reported generation throughput, end-to-end, and MLX memory metrics. Do not label the generation-throughput field as kernel-only/pure decode without a lower-level measurement proving that distinction.
+Use `scripts/bench.py` for load/compile/warm-up, TTFT/prefill, MLX-reported generation throughput, end-to-end, and MLX memory metrics. Do not label the generation-throughput field as kernel-only/kernel-only decode without a lower-level measurement proving that distinction.
 
 Architecture decisions require repeated runs and real task success, not one prompt.
 
