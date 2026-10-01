@@ -42,6 +42,17 @@ from .truth import (
     evaluate_truth_promotion,
     summarize_truth,
 )
+from .truth_runner import (
+    CandidateRunner,
+    CandidateTruthInput,
+    CandidateTruthResponse,
+    HiddenVerifier,
+    TruthCase,
+    TruthRunResult,
+    TruthVerifierVerdict,
+    classify_truth_outcome,
+    run_held_out_truth_cases,
+)
 
 
 class Scorer(Protocol):
@@ -515,6 +526,15 @@ __all__ = [
     "TruthSample",
     "evaluate_truth_promotion",
     "summarize_truth",
+    "TruthCase",
+    "CandidateTruthInput",
+    "CandidateTruthResponse",
+    "TruthVerifierVerdict",
+    "CandidateRunner",
+    "HiddenVerifier",
+    "TruthRunResult",
+    "run_held_out_truth_cases",
+    "classify_truth_outcome",
 ]
 
 
