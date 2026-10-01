@@ -96,7 +96,7 @@ The canonical detailed dependency map is [Master Issue #1](https://github.com/OR
 | WP-68 | [#199](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/199) | Cloudflare quota/backpressure/migrations | PROPOSED |
 | WP-69 | [#200](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/200) | Temporal/conflicting knowledge | PROPOSED |
 | WP-70 | [#209](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/209) | Knowledge blob lifecycle / GC | #214 reconciliation **CLOSED**; #215 sweep and #233 D1 lease/live concurrency **OPEN** |
-| WP-71 | [#210](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/210) | Numerical stability / precision | **EXPERIMENTAL** #216 policy/sentinels + MLX smoke integration; #217 tolerance/fallback matrix remaining |
+| WP-71 | [#210](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/210) | Numerical stability / precision | **EXPERIMENTAL** precision/sentinels + tolerance/fallback matrix + canonical backend/export/kernel promotion gate; real optimized-path measurements/local proof remaining |
 | WP-72 | [#211](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/211) | Architecture/hyperparameter search | PROPOSED |
 | WP-73 | [#212](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/212) | Client SDKs / typed APIs | PROPOSED |
 | WP-74 | [#213](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/213) | Artifact registry / distribution integrity | PROPOSED |
