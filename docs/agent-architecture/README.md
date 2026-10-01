@@ -29,6 +29,7 @@ Experimental source currently includes:
 - versioned public-safe Cloudflare transport/schema models;
 - reference-safe R2 reconciliation and conservative sweep core;
 - deterministic GC lease state model plus versioned D1 lease schema, async binding-facing adapter, durable D1 knowledge-index/corpus-revision writer, and async D1/R2 delete boundary;
+- async R2, KV, and Vectorize Worker-binding wrappers;
 - QoS workload/tail/useful-work/deadline metrics, deterministic admission/backpressure policy core, and p95/p99/deadline promotion regression gate;
 - strict q-pipe verified-import policy.
 
@@ -38,7 +39,7 @@ Not yet implemented as production capabilities:
 - trained dynamic expert router/adaptive depth;
 - real multimodal vision encoder;
 - real parallel swarm inference;
-- full live Cloudflare Worker transport (D1 metadata/revision writer and D1/R2 GC delete boundary exist, but the Worker endpoint plus end-to-end R2/Vectorize/KV transport are not verified);
+- full live Cloudflare Worker transport (D1 metadata/revision writer plus R2/KV/Vectorize binding wrappers and a D1/R2 GC delete boundary exist, but the authenticated Worker endpoint and end-to-end transport are not verified);
 - production Vectorize semantic retrieval;
 - Android Studio/Hermes/OpenCode integrations.
 
