@@ -8,9 +8,9 @@ import pytest
 
 from oai2.model import (
     NUMERICAL_POLICY_VERSION,
+    REFERENCE_PRECISION_RULES,
     NumericalFailure,
     NumericalOperation,
-    REFERENCE_PRECISION_RULES,
     check_numerics,
     extreme_value_fixtures,
     precision_rule,
@@ -81,24 +81,56 @@ def test_debug_sentinel_can_be_disabled_without_reading_values() -> None:
 def test_numerical_policy_exports_from_model_package() -> None:
     from oai2.model import (
         NUMERICAL_POLICY_VERSION as ExportedVersion,
-        NumericalCheckResult as ExportedCheckResult,
-        NumericalFailure as ExportedFailure,
-        NumericalOperation as ExportedOperation,
-        PrecisionRule as ExportedRule,
+    )
+    from oai2.model import (
         REFERENCE_PRECISION_RULES as ExportedReferenceRules,
+    )
+    from oai2.model import (
+        NumericalCheckResult as ExportedCheckResult,
+    )
+    from oai2.model import (
+        NumericalFailure as ExportedFailure,
+    )
+    from oai2.model import (
+        NumericalOperation as ExportedOperation,
+    )
+    from oai2.model import (
+        PrecisionRule as ExportedRule,
+    )
+    from oai2.model import (
         check_numerics as ExportedChecker,
+    )
+    from oai2.model import (
         extreme_value_fixtures as ExportedFixtures,
+    )
+    from oai2.model import (
         precision_rule as ExportedPrecisionRule,
     )
     from oai2.model.numerics import (
         NUMERICAL_POLICY_VERSION as SourceVersion,
-        NumericalCheckResult as SourceCheckResult,
-        NumericalFailure as SourceFailure,
-        NumericalOperation as SourceOperation,
-        PrecisionRule as SourceRule,
+    )
+    from oai2.model.numerics import (
         REFERENCE_PRECISION_RULES as SourceReferenceRules,
+    )
+    from oai2.model.numerics import (
+        NumericalCheckResult as SourceCheckResult,
+    )
+    from oai2.model.numerics import (
+        NumericalFailure as SourceFailure,
+    )
+    from oai2.model.numerics import (
+        NumericalOperation as SourceOperation,
+    )
+    from oai2.model.numerics import (
+        PrecisionRule as SourceRule,
+    )
+    from oai2.model.numerics import (
         check_numerics as SourceChecker,
+    )
+    from oai2.model.numerics import (
         extreme_value_fixtures as SourceFixtures,
+    )
+    from oai2.model.numerics import (
         precision_rule as SourcePrecisionRule,
     )
 

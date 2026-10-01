@@ -61,6 +61,7 @@ def smoke_check() -> tuple[bool, str]:
         a = mx.array([1.0, 2.0, 3.0])
         b = mx.array([[1.0], [1.0], [1.0]])
         out = (a @ b).item()
+        assert isinstance(out, float)
         check_numerics(
             [float(out)],
             operation=NumericalOperation.LONG_CONTEXT_REDUCTION,

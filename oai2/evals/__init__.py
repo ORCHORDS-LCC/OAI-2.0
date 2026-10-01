@@ -32,7 +32,6 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
-
 from .truth import (
     TruthCaseClass,
     TruthOutcome,

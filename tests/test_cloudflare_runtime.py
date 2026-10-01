@@ -257,7 +257,7 @@ async def test_topic_retrieve_populates_revisioned_best_effort_cache() -> None:
 
     result = await runtime.retrieve(RetrievalRequest(topic="runtime"))
 
-    assert [item.kg.rehydration_id for item in result.objects] == [obj.knowledge_id]
+    assert [item.knowledge_id for item in result.objects] == [obj.knowledge_id]
     assert len(kv.puts) == 1
     assert kv.puts[0][2] == 300
     assert writer.revision_reads == [4, 4]

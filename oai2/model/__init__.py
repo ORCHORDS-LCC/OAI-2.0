@@ -11,11 +11,11 @@ from .numerical_compare import (
 )
 from .numerics import (
     NUMERICAL_POLICY_VERSION,
+    REFERENCE_PRECISION_RULES,
     NumericalCheckResult,
     NumericalFailure,
     NumericalOperation,
     PrecisionRule,
-    REFERENCE_PRECISION_RULES,
     check_numerics,
     extreme_value_fixtures,
     precision_rule,

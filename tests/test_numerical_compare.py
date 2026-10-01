@@ -131,20 +131,44 @@ def test_reject_policy_raises_instead_of_falling_back() -> None:
 def test_numerical_comparison_exports_from_model_package() -> None:
     from oai2.model import (
         NumericalArtifactIdentity as ExportedArtifactIdentity,
+    )
+    from oai2.model import (
         NumericalComparison as ExportedComparison,
+    )
+    from oai2.model import (
         NumericalFallback as ExportedFallback,
+    )
+    from oai2.model import (
         NumericalSelection as ExportedSelection,
+    )
+    from oai2.model import (
         NumericalToleranceProfile as ExportedToleranceProfile,
+    )
+    from oai2.model import (
         compare_numerical_paths as ExportedCompare,
+    )
+    from oai2.model import (
         select_numerical_path as ExportedSelect,
     )
     from oai2.model.numerical_compare import (
         NumericalArtifactIdentity as SourceArtifactIdentity,
+    )
+    from oai2.model.numerical_compare import (
         NumericalComparison as SourceComparison,
+    )
+    from oai2.model.numerical_compare import (
         NumericalFallback as SourceFallback,
+    )
+    from oai2.model.numerical_compare import (
         NumericalSelection as SourceSelection,
+    )
+    from oai2.model.numerical_compare import (
         NumericalToleranceProfile as SourceToleranceProfile,
+    )
+    from oai2.model.numerical_compare import (
         compare_numerical_paths as SourceCompare,
+    )
+    from oai2.model.numerical_compare import (
         select_numerical_path as SourceSelect,
     )
 
