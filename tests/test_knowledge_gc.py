@@ -86,15 +86,16 @@ def test_incomplete_inventory_refuses_final_report() -> None:
 
 
 def test_snapshot_round_trip_allows_resume() -> None:
-    state = GcReconciliationState.from_rows(
-        [_Row("ko-1", "oai2-blobs/a")], observed_at=100.0
-    )
+    rows = [_Row("ko-1", "oai2-blobs/a")]
+    state = GcReconciliationState.from_rows(rows, observed_at=100.0)
     state.consume_page(
         [R2InventoryObject(key="oai2-blobs/a", size_bytes=3, uploaded_at=90.0)],
         next_cursor="next-page",
     )
 
-    restored = GcReconciliationState.from_snapshot(state.to_snapshot())
+    restored = GcReconciliationState.from_snapshot(
+        state.to_snapshot(), authoritative_rows=rows
+    )
     assert restored.next_cursor == "next-page"
     assert restored.pages_processed == 1
 
@@ -109,7 +110,7 @@ def test_snapshot_round_trip_allows_resume() -> None:
     assert report.unreferenced_candidate_count == 1
 
 
-def test_conflicting_duplicate_inventory_metadata_is_rejected() -> None:
+def test_conflicting_duplicate_inventory_metadata_is_rejected_atomically() -> None:
     state = GcReconciliationState.from_rows([], observed_at=100.0)
     state.consume_page(
         [R2InventoryObject(key="oai2-blobs/a", size_bytes=3)],
@@ -118,13 +119,20 @@ def test_conflicting_duplicate_inventory_metadata_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="conflicting inventory metadata"):
         state.consume_page(
-            [R2InventoryObject(key="oai2-blobs/a", size_bytes=4)],
+            [
+                R2InventoryObject(key="oai2-blobs/new", size_bytes=1),
+                R2InventoryObject(key="oai2-blobs/a", size_bytes=4),
+            ],
             next_cursor=None,
         )
 
+    assert "oai2-blobs/new" not in state.inventory
+    assert state.pages_processed == 1
+    assert state.next_cursor == "next"
+
 
 def test_inventory_object_rejects_negative_size() -> None:
-    with pytest.raises(ValueError, match="size_bytes must be non-negative"):
+    with pytest.raises(ValueError, match="size_bytes"):
         R2InventoryObject(key="oai2-blobs/a", size_bytes=-1)
 
 
@@ -139,3 +147,35 @@ def test_unknown_size_is_counted_where_metrics_are_available() -> None:
     assert report.inventory_bytes_known == 0
     assert report.unreferenced_candidate_bytes_known == 0
     assert report.unknown_size_object_count == 1
+
+
+def test_snapshot_rejects_string_boolean_completion() -> None:
+    state = GcReconciliationState.from_rows([], observed_at=1.0)
+    snapshot = state.to_snapshot()
+    snapshot["inventory_complete"] = "false"
+
+    with pytest.raises(ValueError, match="inventory_complete must be a boolean"):
+        GcReconciliationState.from_snapshot(snapshot)
+
+
+def test_snapshot_rejects_authoritative_reference_drift() -> None:
+    original_rows = [_Row("ko-1", "oai2-blobs/a")]
+    state = GcReconciliationState.from_rows(original_rows, observed_at=10.0)
+    snapshot = state.to_snapshot()
+    current_rows = [_Row("ko-2", "oai2-blobs/b")]
+
+    with pytest.raises(ValueError, match="authoritative reference set changed"):
+        GcReconciliationState.from_snapshot(
+            snapshot, authoritative_rows=current_rows
+        )
+
+
+def test_snapshot_rejects_inconsistent_cursor_completion_state() -> None:
+    state = GcReconciliationState.from_rows([], observed_at=1.0)
+    snapshot = state.to_snapshot()
+    snapshot["pages_processed"] = 1
+    snapshot["inventory_complete"] = True
+    snapshot["next_cursor"] = "still-more"
+
+    with pytest.raises(ValueError, match="completed inventory cannot have next_cursor"):
+        GcReconciliationState.from_snapshot(snapshot)
