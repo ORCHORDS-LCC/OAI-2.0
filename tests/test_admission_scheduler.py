@@ -186,3 +186,18 @@ def test_admission_does_not_bypass_exact_batch_compatibility() -> None:
         "a",
         "b",
     }
+
+
+def test_admission_scheduler_symbols_are_exported_from_runtime_package() -> None:
+    from oai2.runtime import AdmissionBatchController as ExportedController
+    from oai2.runtime import AdmissionScheduledRequest as ExportedScheduledRequest
+    from oai2.runtime import AdmissionSchedulerMetrics as ExportedMetrics
+    from oai2.runtime.admission_scheduler import (
+        AdmissionBatchController,
+        AdmissionScheduledRequest,
+        AdmissionSchedulerMetrics,
+    )
+
+    assert ExportedController is AdmissionBatchController
+    assert ExportedScheduledRequest is AdmissionScheduledRequest
+    assert ExportedMetrics is AdmissionSchedulerMetrics
