@@ -9,6 +9,11 @@ from .evidence import (
     EvidenceNode,
     EvidenceStatus,
 )
+from .paths import (
+    assess_repository_evidence,
+    assess_tool_runtime_evidence,
+    assess_web_evidence,
+)
 from .policy import (
     EVIDENCE_POLICY_VERSION,
     ClaimClass,
@@ -27,6 +32,9 @@ __all__ = [
     "EvidenceGraph",
     "EvidenceNode",
     "EvidenceStatus",
+    "assess_repository_evidence",
+    "assess_tool_runtime_evidence",
+    "assess_web_evidence",
     "EVIDENCE_POLICY_VERSION",
     "ClaimClass",
     "ClaimEvidencePolicy",
