@@ -52,3 +52,29 @@ A generated claim is not verified merely because the model is confident, a tool 
 External knowledge objects carry source URI, content hash, retrieval time, authority, lifecycle status, and future artifact/vector references.
 
 q-pipe knowledge does not become active shared knowledge simply because it exists; it must pass the strict import gate.
+
+
+## Versioned claim/evidence policy
+
+Current source now includes an **EXPERIMENTAL** versioned claim/evidence policy in `oai2/verification/policy.py`.
+
+Claim classes are explicit:
+
+- repository state;
+- tool/runtime observation;
+- current external fact;
+- stable external fact;
+- inference;
+- assumption;
+- plan;
+- target;
+- preference;
+- hypothetical content.
+
+The policy distinguishes evidence-requiring claims from declarations that should not be forced through external evidence. Repository/tool claims are state-version scoped. Current external facts require an observation/retrieval time and a caller-supplied freshness window; the repository does **not** hard-code one universal age limit for every domain.
+
+Policy outcomes are explicit: `NOT_REQUIRED`, `NEEDS_EVIDENCE`, `SUPPORTED`, `REFUTED`, `STALE`, or `CONFLICTING`. Every assessment carries the evidence-policy version. Changed repository/tool state invalidates prior state-scoped support instead of silently inheriting it.
+
+Focused fixtures cover taxonomy, state-version invalidation, current-fact expiry, conflict/refutation, wrong-evidence-class rejection, and assumption/plan/target/preference/hypothetical paths that do not require external evidence.
+
+The remaining WI-TRUTH-001 boundary is runtime consumption: repository, tool/runtime, and web-research paths must call this policy consistently, and the current-main runner-free local verification gate must be recorded before closure.
