@@ -172,7 +172,7 @@ Current source has advanced beyond the deterministic model:
 - mutation success is fail-closed using D1 result success plus `meta.changes`;
 - focused SQLite semantics tests and async fake-binding contract tests cover these paths.
 
-This is still **not** full live-Worker proof. Current source now includes `oai2/knowledge/knowledge_d1.py` with a durable `knowledge_index` schema, singleton corpus-revision authority, lease-aware conditional metadata upsert, and revision-advance SQL, plus `D1KnowledgeWriter` which executes the metadata write and revision advance in one D1 batch transaction using one expected revision. A write is denied when the expected revision is stale or the target R2 key has an active deletion lease, and inconsistent mutation counts fail closed. The destructive sweep still does not consume this D1-backed store end-to-end, and no controlled private Worker/D1/R2 concurrency demonstration has been recorded.
+This is still **not** full live-Worker proof. Current source now includes `oai2/knowledge/knowledge_d1.py` with a durable `knowledge_index` schema, singleton corpus-revision authority, lease-aware conditional metadata upsert, and revision-advance SQL, plus `D1KnowledgeWriter` which executes the metadata write and revision advance in one D1 batch transaction using one expected revision. A write is denied when the expected revision is stale or the target R2 key has an active deletion lease, and inconsistent mutation counts fail closed. Current source now also includes `oai2/knowledge/gc_delete_d1_runtime.py`, an async D1/R2 delete boundary that acquires the D1 lease, revalidates it immediately before the R2 operation, handles already-absent/delete-failure/post-delete verification, and finalizes or records retryable failure through the D1 store. The conservative sweep planner is not yet wired to invoke this boundary end-to-end in a live Worker, and no controlled private Worker/D1/R2 concurrency demonstration has been recorded.
 
 ## q-pipe import contract
 
@@ -203,7 +203,7 @@ The committed 50-row test is **synthetic** and validates importer/store round-tr
 - no production embeddings pipeline;
 - no network integration test;
 - no controlled private R2 sweep demonstration;
-- D1 claim acquisition/revalidation/outcome operations and a lease-aware normal metadata writer exist at binding level, but destructive sweep integration and live Worker deployment are not demonstrated;
+- D1 claim acquisition/revalidation/outcome operations, a lease-aware normal metadata writer, and an async D1/R2 destructive-delete boundary exist at binding level, but full sweep-planner integration and live Worker deployment are not demonstrated;
 - current GC/sweep/lease evidence is focused local source testing, not a full current-main Mac preflight.
 
 ## Public-safe deployment rule
