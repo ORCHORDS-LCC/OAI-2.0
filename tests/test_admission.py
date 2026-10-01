@@ -198,9 +198,47 @@ def test_cancellation_removes_queued_work_immediately() -> None:
 
 
 def test_admission_symbols_are_exported_from_runtime_package() -> None:
-    from oai2.runtime import AdmissionPolicy as ExportedPolicy
-    from oai2.runtime import AdmissionQueue as ExportedQueue
-    from oai2.runtime.admission import AdmissionPolicy, AdmissionQueue
+    """Every name in ``oai2/runtime/admission.py`` ``__all__`` is importable
+    from ``oai2.runtime`` and aliases its source-of-truth.
 
+    Closes a coverage gap where ``oai2.runtime`` re-exported 7
+    ``oai2/runtime/admission.py`` ``__all__`` entries via its own
+    ``__all__`` but ``tests/test_admission.py`` only pinned 2 of them
+    (``AdmissionPolicy`` and ``AdmissionQueue``) at the package
+    surface. The remaining 5 — ``AdmissionAction``, ``AdmissionDecision``,
+    ``AdmissionReason``, ``AdmissionRequest``, ``CapacitySnapshot`` —
+    were not pinned at the package surface, leaving a 71 percent
+    coverage gap on the admission policy's public contract.
+
+    The 11 pre-existing tests in ``tests/test_admission.py`` are
+    preserved byte-for-byte. The test now imports all 7 names from
+    ``oai2.runtime`` (the package-level re-export) and asserts each is
+    identical to the canonical binding in ``oai2.runtime.admission``
+    (the source-of-truth module).
+    """
+    from oai2.runtime import (
+        AdmissionAction as ExportedAction,
+        AdmissionDecision as ExportedDecision,
+        AdmissionPolicy as ExportedPolicy,
+        AdmissionQueue as ExportedQueue,
+        AdmissionReason as ExportedReason,
+        AdmissionRequest as ExportedRequest,
+        CapacitySnapshot as ExportedCapacitySnapshot,
+    )
+    from oai2.runtime.admission import (
+        AdmissionAction,
+        AdmissionDecision,
+        AdmissionPolicy,
+        AdmissionQueue,
+        AdmissionReason,
+        AdmissionRequest,
+        CapacitySnapshot,
+    )
+
+    assert ExportedAction is AdmissionAction
+    assert ExportedDecision is AdmissionDecision
     assert ExportedPolicy is AdmissionPolicy
     assert ExportedQueue is AdmissionQueue
+    assert ExportedReason is AdmissionReason
+    assert ExportedRequest is AdmissionRequest
+    assert ExportedCapacitySnapshot is CapacitySnapshot
