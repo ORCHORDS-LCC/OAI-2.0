@@ -85,13 +85,15 @@ from .knowledge_d1 import (
     KNOWLEDGE_CORPUS_ADVANCE_SQL,
     KNOWLEDGE_CORPUS_REVISION_SQL,
     KNOWLEDGE_CORPUS_STATE_TABLE,
+    KNOWLEDGE_GET_SQL,
     KNOWLEDGE_INDEX_TABLE,
     KNOWLEDGE_SCHEMA_SQL,
     KNOWLEDGE_SCHEMA_VERSION,
     KNOWLEDGE_WRITER_UPSERT_SQL,
+    knowledge_query_sql,
     knowledge_schema_statements,
 )
-from .knowledge_d1_runtime import D1KnowledgeWriter
+from .knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
 from .qpipe_import import (
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
     QPIPE_COMPATIBILITY_SOURCE_REVISION,
@@ -187,11 +189,13 @@ __all__ = [
     "KNOWLEDGE_SCHEMA_VERSION",
     "KNOWLEDGE_INDEX_TABLE",
     "KNOWLEDGE_CORPUS_STATE_TABLE",
+    "KNOWLEDGE_GET_SQL",
     "KNOWLEDGE_SCHEMA_SQL",
     "KNOWLEDGE_CORPUS_REVISION_SQL",
     "KNOWLEDGE_WRITER_UPSERT_SQL",
     "KNOWLEDGE_CORPUS_ADVANCE_SQL",
     "knowledge_schema_statements",
+    "D1KnowledgeReader",
     "D1KnowledgeWriter",
     "GcSweepBatchResult",
     "GcSweepCandidate",
