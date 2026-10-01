@@ -53,6 +53,7 @@ from .gc_lease_d1 import (
     GC_LEASE_SELECT_SQL,
     GC_LEASE_TABLE,
     GC_LEASE_UPSERT_SQL,
+    GC_LEASE_VALIDATE_SQL,
     GC_LEASE_WRITER_BLOCK_SQL,
     gc_lease_schema_statements,
 )
@@ -134,6 +135,7 @@ __all__ = [
     "GC_LEASE_SELECT_SQL",
     "GC_LEASE_REFERENCE_COUNT_SQL",
     "GC_LEASE_UPSERT_SQL",
+    "GC_LEASE_VALIDATE_SQL",
     "GC_LEASE_WRITER_BLOCK_SQL",
     "gc_lease_schema_statements",
     "D1PreparedStatementBinding",
