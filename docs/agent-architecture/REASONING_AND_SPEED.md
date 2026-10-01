@@ -78,4 +78,4 @@ The current policy surface:
 
 Deterministic tests cover overload, queue-full behavior, SWARM aggregate memory, deadline expiry, starvation prevention, and cancellation. This policy is **not yet integrated** with the live service/inference scheduler, actual model/expert residency accounting, or sustained target-hardware tail-latency testing.
 
-Promotion must consider p95/p99 and false-success/verified-work metrics, not only mean throughput or tokens per second.
+Promotion now has an explicit source-level regression gate: candidate p95/p99 and deadline-miss rate are compared against the baseline and can block promotion even when mean token throughput improves. False-success/verified-work service budgets remain separate mandatory gates.
