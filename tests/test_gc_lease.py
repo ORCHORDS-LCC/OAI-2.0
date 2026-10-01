@@ -203,10 +203,8 @@ def test_wrong_token_cannot_finalize_or_release() -> None:
 
 
 def test_gc_lease_symbols_are_exported_from_knowledge_package() -> None:
-    from oai2.knowledge import (
-        GcDeleteLeaseAuthority as ExportedAuthority,
-        GcDeleteLeaseDecision as ExportedDecision,
-    )
+    from oai2.knowledge import GcDeleteLeaseAuthority as ExportedAuthority
+    from oai2.knowledge import GcDeleteLeaseDecision as ExportedDecision
 
     assert ExportedAuthority is GcDeleteLeaseAuthority
     assert ExportedDecision is GcDeleteLeaseDecision
