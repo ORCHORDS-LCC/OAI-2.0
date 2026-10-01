@@ -47,6 +47,7 @@ from .gc_lease import (
     GcReferenceDecision,
 )
 from .gc_lease_d1 import (
+    GC_LEASE_ACQUIRE_SQL,
     GC_LEASE_REFERENCE_COUNT_SQL,
     GC_LEASE_SCHEMA_SQL,
     GC_LEASE_SCHEMA_VERSION,
@@ -131,6 +132,7 @@ __all__ = [
     "GcReferenceDecision",
     "GC_LEASE_SCHEMA_VERSION",
     "GC_LEASE_TABLE",
+    "GC_LEASE_ACQUIRE_SQL",
     "GC_LEASE_SCHEMA_SQL",
     "GC_LEASE_SELECT_SQL",
     "GC_LEASE_REFERENCE_COUNT_SQL",
