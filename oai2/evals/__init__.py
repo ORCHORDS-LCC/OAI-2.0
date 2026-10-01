@@ -81,6 +81,12 @@ class CapabilityCase:
     forbidden_patterns: tuple[str, ...] = ()
     # Optional structural check (run before regex checks).
     must_contain_action_token: str | None = None  # e.g. "<READ F:".
+    preconditions: tuple[str, ...] = ("runtime available",)
+    procedure: tuple[str, ...] = (
+        "submit the case prompt to the runtime",
+        "capture the complete response text",
+    )
+    expected_evidence: tuple[str, ...] = ("captured response text",)
     tags: tuple[str, ...] = ()
     notes: str = ""
 
@@ -199,8 +205,42 @@ def _regex_or_scorer(case: CapabilityCase, response: InferenceResponse) -> Capab
     )
 
 
+def _regex_all_scorer(
+    case: CapabilityCase,
+    response: InferenceResponse,
+) -> CapabilityScore:
+    """Pass only when every expected pattern is present and none are forbidden."""
+    text = response.text or ""
+    forbidden = tuple(p for p in case.forbidden_patterns if re.search(p, text))
+    matches = tuple(p for p in case.expected_patterns if re.search(p, text))
+    token_ok = (
+        case.must_contain_action_token is None
+        or case.must_contain_action_token in text
+    )
+    passed = (
+        bool(case.expected_patterns)
+        and len(matches) == len(case.expected_patterns)
+        and not forbidden
+        and token_ok
+    )
+    return CapabilityScore(
+        case_id=case.case_id,
+        capability=case.capability,
+        score=1.0 if passed else 0.0,
+        passed=passed,
+        matched_pattern=" && ".join(matches) if matches else None,
+        forbidden_matched=forbidden,
+        notes="" if passed else (
+            "forbidden-match" if forbidden else
+            "missing-action-token" if not token_ok else
+            "missing-required-pattern"
+        ),
+    )
+
+
 SCORERS: dict[str, Callable[[CapabilityCase, InferenceResponse], CapabilityScore]] = {
     "regex_or": _regex_or_scorer,
+    "regex_all": _regex_all_scorer,
 }
 
 
@@ -489,6 +529,82 @@ def _orchestration_suite() -> CapabilitySuite:
     )
 
 
+def _multi_file_reasoning_suite() -> CapabilitySuite:
+    return CapabilitySuite(
+        suite_id="multi_file_reasoning_basic",
+        capability="multi_file_reasoning",
+        description="Reason across coupled source and test files.",
+        scorer="regex_all",
+        cases=[
+            CapabilityCase(
+                case_id="rename-helper-and-test",
+                capability="multi_file_reasoning",
+                prompt=(
+                    "File src/service.py defines def old_name(): return 1. "
+                    "File tests/test_service.py imports old_name and asserts old_name() == 1. "
+                    "The requested change is to rename old_name to new_name without breaking tests. "
+                    "Name both files that must change and the new symbol."
+                ),
+                expected_patterns=(
+                    r"src/service\.py",
+                    r"tests/test_service\.py",
+                    r"\bnew_name\b",
+                ),
+                tags=("python", "multi-file"),
+            )
+        ],
+    )
+
+
+def _abstention_suite() -> CapabilitySuite:
+    return CapabilitySuite(
+        suite_id="abstention_basic",
+        capability="abstention",
+        description="Decline unsupported completion claims when evidence is absent.",
+        scorer="regex_all",
+        cases=[
+            CapabilityCase(
+                case_id="missing-runtime-evidence",
+                capability="abstention",
+                prompt=(
+                    "You have not run any tests and have no runtime output. "
+                    "State whether the patch is verified working."
+                ),
+                expected_patterns=(
+                    r"(?i)(not|cannot|isn't|is not).*(verified|proven|confirmed)",
+                ),
+                forbidden_patterns=(r"(?i)\bverified working\b",),
+                tags=("verification", "abstention"),
+            )
+        ],
+    )
+
+
+def _conflicting_evidence_suite() -> CapabilitySuite:
+    return CapabilitySuite(
+        suite_id="conflicting_evidence_basic",
+        capability="conflicting_evidence",
+        description="Preserve unresolved contradictory evidence.",
+        scorer="regex_all",
+        cases=[
+            CapabilityCase(
+                case_id="two-sources-disagree",
+                capability="conflicting_evidence",
+                prompt=(
+                    "Repository source A says feature_x=true. "
+                    "Captured runtime output B says feature_x=false. "
+                    "No newer authority is available. Describe the evidence state."
+                ),
+                expected_patterns=(
+                    r"(?i)(conflict|contradict|disagree)",
+                    r"(?i)(recheck|unresolved|cannot determine|need.*evidence)",
+                ),
+                tags=("verification", "conflict"),
+            )
+        ],
+    )
+
+
 _BUILTIN_SUITES: dict[str, Callable[[], CapabilitySuite]] = {
     "coding": _coding_suite,
     "tool_use": _tool_use_suite,
@@ -497,6 +613,9 @@ _BUILTIN_SUITES: dict[str, Callable[[], CapabilitySuite]] = {
     "verification": _verification_suite,
     "vision": _vision_suite,
     "orchestration": _orchestration_suite,
+    "multi_file_reasoning": _multi_file_reasoning_suite,
+    "abstention": _abstention_suite,
+    "conflicting_evidence": _conflicting_evidence_suite,
 }
 
 
