@@ -16,6 +16,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEXT_SUFFIXES = {".md", ".py", ".toml", ".yaml", ".yml", ".json", ".txt"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "node_modules",
+    "build",
+    "dist",
+}
 SECRET_PATTERNS = (
     ("private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("github-token", re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]+\b")),
@@ -24,8 +36,8 @@ SECRET_PATTERNS = (
     (
         "hard-coded-secret",
         re.compile(
-            r"(?i)\b(?:api[_-]?key|secret|password|access[_-]?token)\s*[:=]\s*"
-            r"["'][^"']{16,}["']"
+            r'(?i)\b(?:api[_-]?key|secret|password|access[_-]?token)\s*[:=]\s*'
+            r'["\'][^"\']{16,}["\']'
         ),
     ),
 )
@@ -58,7 +70,7 @@ def iter_text_files() -> list[Path]:
         path
         for path in ROOT.rglob("*")
         if path.is_file()
-        and ".git" not in path.parts
+        and not any(part in SKIP_DIRS for part in path.parts)
         and path.suffix.lower() in TEXT_SUFFIXES
     ]
 
@@ -85,7 +97,7 @@ def run_public_safety_scan() -> bool:
 def run_markdown_link_scan() -> bool:
     failures: list[tuple[Path, str]] = []
     for path in ROOT.rglob("*.md"):
-        if ".git" in path.parts:
+        if any(part in SKIP_DIRS for part in path.parts):
             continue
         text = path.read_text(encoding="utf-8")
         for target in MARKDOWN_LINK.findall(text):
