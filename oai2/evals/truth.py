@@ -95,6 +95,15 @@ class TruthPromotionEvaluation:
     failures: tuple[str, ...]
 
 
+@dataclass(slots=True, frozen=True)
+class TruthCandidatePromotionEvaluation:
+    budget_version: str
+    passed: bool
+    truth_failures: tuple[str, ...]
+    verified_task_regression: float
+    speedup_ratio: float | None = None
+
+
 def summarize_truth(samples: list[TruthSample]) -> TruthReport:
     """Summarize adversarial truth outcomes without collapsing classes together."""
     if not samples:
@@ -116,6 +125,60 @@ def summarize_truth(samples: list[TruthSample]) -> TruthReport:
         stale_claim_rate=rate(TruthOutcome.STALE_CLAIM),
         ignored_contradiction_rate=rate(TruthOutcome.IGNORED_CONTRADICTION),
     )
+
+
+def evaluate_truth_candidate_promotion(
+    report: TruthReport,
+    budget: TruthPromotionBudget,
+    *,
+    baseline_verified_task_rate: float,
+    candidate_verified_task_rate: float,
+    max_verified_task_regression: float,
+    speedup_ratio: float | None = None,
+) -> TruthCandidatePromotionEvaluation:
+    """Combine truth gates with verified-task regression.
+
+    Speed is recorded for evidence only. It never overrides a truth failure or
+    an excessive verified-task regression.
+    """
+    baseline = _rate(baseline_verified_task_rate, "baseline_verified_task_rate")
+    candidate = _rate(candidate_verified_task_rate, "candidate_verified_task_rate")
+    maximum_regression = _rate(
+        max_verified_task_regression,
+        "max_verified_task_regression",
+    )
+    normalized_speedup: float | None = None
+    if speedup_ratio is not None:
+        if (
+            isinstance(speedup_ratio, bool)
+            or not isinstance(speedup_ratio, (int, float))
+            or not math.isfinite(float(speedup_ratio))
+            or float(speedup_ratio) <= 0.0
+        ):
+            raise ValueError("speedup_ratio must be finite and > 0")
+        normalized_speedup = float(speedup_ratio)
+
+    truth = evaluate_truth_promotion(report, budget)
+    regression = max(baseline - candidate, 0.0)
+    passed = truth.passed and regression <= maximum_regression
+    return TruthCandidatePromotionEvaluation(
+        budget_version=budget.version,
+        passed=passed,
+        truth_failures=truth.failures,
+        verified_task_regression=regression,
+        speedup_ratio=normalized_speedup,
+    )
+
+
+def _rate(value: object, name: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or not 0.0 <= float(value) <= 1.0
+    ):
+        raise ValueError(f"{name} must be between 0 and 1")
+    return float(value)
 
 
 def evaluate_truth_promotion(
@@ -160,6 +223,8 @@ __all__ = [
     "TruthReport",
     "TruthPromotionBudget",
     "TruthPromotionEvaluation",
+    "TruthCandidatePromotionEvaluation",
     "summarize_truth",
     "evaluate_truth_promotion",
+    "evaluate_truth_candidate_promotion",
 ]
