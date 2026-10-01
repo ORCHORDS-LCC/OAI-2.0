@@ -8,6 +8,7 @@ from oai2.evals.qos import (
     WorkloadClass,
     WorkloadSample,
     evaluate_budget,
+    evaluate_promotion,
     summarize_samples,
     useful_work_rank_key,
 )
@@ -26,6 +27,7 @@ def _sample(
     retrieval_ms: float = 0.0,
     vision_ms: float = 0.0,
     build_test_ms: float = 0.0,
+    deadline_missed: bool = False,
 ) -> WorkloadSample:
     return WorkloadSample(
         workload=WorkloadClass.NORMAL,
@@ -43,6 +45,7 @@ def _sample(
         retrieval_ms=retrieval_ms,
         vision_ms=vision_ms,
         build_test_ms=build_test_ms,
+        deadline_missed=deadline_missed,
     )
 
 
@@ -191,3 +194,72 @@ def test_mixed_identity_and_invalid_budget_fail_closed() -> None:
             max_false_success_rate=0.1,
             min_verified_success_rate=0.9,
         )
+
+
+
+def test_deadline_miss_rate_is_reported_and_budgeted() -> None:
+    report = summarize_samples(
+        [
+            _sample(ttft=10, useful=50, total=100, deadline_missed=False),
+            _sample(ttft=10, useful=60, total=120, deadline_missed=True),
+        ]
+    )
+    assert report.deadline_miss_rate == 0.5
+
+    budget = WorkloadBudget(
+        version="deadline-v1",
+        workload=WorkloadClass.NORMAL,
+        kind=BudgetKind.SERVICE_BUDGET,
+        target_hardware="mac-studio-m5",
+        config_id="normal-v1",
+        first_useful_action_p95_ms=200,
+        end_to_end_p95_ms=300,
+        end_to_end_p99_ms=350,
+        max_false_success_rate=1.0,
+        min_verified_success_rate=0.0,
+        max_deadline_miss_rate=0.25,
+    )
+    result = evaluate_budget(report, budget)
+    assert result.passed is False
+    assert "deadline_miss_rate" in result.failures
+
+
+def test_promotion_rejects_faster_mean_when_tail_regresses() -> None:
+    baseline = summarize_samples(
+        [
+            _sample(ttft=20, useful=80, total=100, tps=100),
+            _sample(ttft=20, useful=90, total=110, tps=100),
+            _sample(ttft=20, useful=100, total=120, tps=100),
+            _sample(ttft=20, useful=100, total=130, tps=100),
+        ]
+    )
+    candidate = summarize_samples(
+        [
+            _sample(ttft=5, useful=50, total=60, tps=500),
+            _sample(ttft=5, useful=50, total=60, tps=500),
+            _sample(ttft=5, useful=50, total=60, tps=500),
+            _sample(ttft=5, useful=50, total=250, tps=500),
+        ]
+    )
+    assert candidate.decode_tokens_per_second.mean > baseline.decode_tokens_per_second.mean
+    result = evaluate_promotion(candidate, baseline)
+    assert result.passed is False
+    assert "p95_regression" in result.failures or "p99_regression" in result.failures
+
+
+def test_promotion_rejects_deadline_miss_regression() -> None:
+    baseline = summarize_samples(
+        [
+            _sample(ttft=10, useful=50, total=100, deadline_missed=False),
+            _sample(ttft=10, useful=50, total=100, deadline_missed=False),
+        ]
+    )
+    candidate = summarize_samples(
+        [
+            _sample(ttft=10, useful=50, total=90, deadline_missed=False),
+            _sample(ttft=10, useful=50, total=90, deadline_missed=True),
+        ]
+    )
+    result = evaluate_promotion(candidate, baseline)
+    assert result.passed is False
+    assert result.failures == ("deadline_miss_regression",)
