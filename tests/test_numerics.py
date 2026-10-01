@@ -79,8 +79,35 @@ def test_debug_sentinel_can_be_disabled_without_reading_values() -> None:
 
 
 def test_numerical_policy_exports_from_model_package() -> None:
-    from oai2.model.numerics import NumericalFailure as SourceFailure
-    from oai2.model.numerics import NumericalOperation as SourceOperation
+    from oai2.model import (
+        NUMERICAL_POLICY_VERSION as ExportedVersion,
+        NumericalCheckResult as ExportedCheckResult,
+        NumericalFailure as ExportedFailure,
+        NumericalOperation as ExportedOperation,
+        PrecisionRule as ExportedRule,
+        REFERENCE_PRECISION_RULES as ExportedReferenceRules,
+        check_numerics as ExportedChecker,
+        extreme_value_fixtures as ExportedFixtures,
+        precision_rule as ExportedPrecisionRule,
+    )
+    from oai2.model.numerics import (
+        NUMERICAL_POLICY_VERSION as SourceVersion,
+        NumericalCheckResult as SourceCheckResult,
+        NumericalFailure as SourceFailure,
+        NumericalOperation as SourceOperation,
+        PrecisionRule as SourceRule,
+        REFERENCE_PRECISION_RULES as SourceReferenceRules,
+        check_numerics as SourceChecker,
+        extreme_value_fixtures as SourceFixtures,
+        precision_rule as SourcePrecisionRule,
+    )
 
-    assert NumericalFailure is SourceFailure
-    assert NumericalOperation is SourceOperation
+    assert ExportedVersion is SourceVersion
+    assert ExportedCheckResult is SourceCheckResult
+    assert ExportedFailure is SourceFailure
+    assert ExportedOperation is SourceOperation
+    assert ExportedRule is SourceRule
+    assert ExportedReferenceRules is SourceReferenceRules
+    assert ExportedChecker is SourceChecker
+    assert ExportedFixtures is SourceFixtures
+    assert ExportedPrecisionRule is SourcePrecisionRule
