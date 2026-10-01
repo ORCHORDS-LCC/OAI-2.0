@@ -74,6 +74,7 @@ class GcSweepState:
     candidates: tuple[GcSweepCandidate, ...]
     cursor: int = 0
     records: list[GcSweepRecord] = field(default_factory=list)
+    retired_keys: set[str] = field(default_factory=set)
     candidate_fingerprint: str = ""
 
     def __post_init__(self) -> None:
@@ -82,8 +83,11 @@ class GcSweepState:
         if self.cursor < 0 or self.cursor > len(self.candidates):
             raise ValueError("cursor is outside candidate bounds")
         keys = [candidate.key for candidate in self.candidates]
-        if len(set(keys)) != len(keys):
+        key_set = set(keys)
+        if len(key_set) != len(keys):
             raise ValueError("sweep candidates contain duplicate keys")
+        if not self.retired_keys <= key_set:
+            raise ValueError("retired_keys contain unknown candidates")
         expected = _candidate_fingerprint(self.candidates)
         if not self.candidate_fingerprint:
             self.candidate_fingerprint = expected
@@ -129,11 +133,17 @@ class GcSweepState:
         _require_non_negative_number(now, "now")
         _require_non_negative_number(grace_seconds, "grace_seconds")
         _require_positive_int(max_items, "max_items")
+        _require_bool(destructive, "destructive")
+        _require_bool(authorized, "authorized")
+        _require_bool(recovery_ready, "recovery_ready")
 
         emitted: list[GcSweepRecord] = []
         attempted = 0
         while self.cursor < len(self.candidates) and attempted < max_items:
             candidate = self.candidates[self.cursor]
+            if candidate.key in self.retired_keys:
+                self.cursor += 1
+                continue
             attempted += 1
             age = max(0.0, float(now) - candidate.first_seen_at)
 
@@ -162,6 +172,7 @@ class GcSweepState:
                 break
 
             if knowledge_ids:
+                self.retired_keys.add(candidate.key)
                 record = GcSweepRecord(
                     key=candidate.key,
                     disposition=GcSweepDisposition.RE_REFERENCED,
@@ -203,7 +214,9 @@ class GcSweepState:
                 continue
 
             try:
-                exists_before = bool(blob_exists(candidate.key))
+                exists_before = _require_bool_result(
+                    blob_exists(candidate.key), "blob_exists"
+                )
             except Exception:
                 record = GcSweepRecord(
                     key=candidate.key,
@@ -225,8 +238,36 @@ class GcSweepState:
                 continue
 
             try:
+                final_knowledge_ids = tuple(
+                    sorted({str(value) for value in reference_lookup(candidate.key)})
+                )
+            except Exception:
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.FAILED,
+                    processed_at=float(now),
+                    detail="final authoritative reference lookup failed",
+                )
+                self._record_without_advance(record, emitted)
+                break
+
+            if final_knowledge_ids:
+                self.retired_keys.add(candidate.key)
+                record = GcSweepRecord(
+                    key=candidate.key,
+                    disposition=GcSweepDisposition.RE_REFERENCED,
+                    processed_at=float(now),
+                    knowledge_ids=final_knowledge_ids,
+                    detail="authoritative reference appeared before deletion",
+                )
+                self._record_and_advance(record, emitted)
+                continue
+
+            try:
                 delete_blob(candidate.key)
-                still_exists = bool(blob_exists(candidate.key))
+                still_exists = _require_bool_result(
+                    blob_exists(candidate.key), "blob_exists"
+                )
             except Exception:
                 record = GcSweepRecord(
                     key=candidate.key,
@@ -282,6 +323,7 @@ class GcSweepState:
                 for candidate in self.candidates
             ],
             "cursor": self.cursor,
+            "retired_keys": sorted(self.retired_keys),
             "records": [
                 {
                     "key": record.key,
@@ -309,9 +351,14 @@ class GcSweepState:
         if fingerprint != _snapshot_fingerprint(fingerprint_payload):
             raise ValueError("snapshot fingerprint is invalid")
         raw_candidates = snapshot.get("candidates")
+        raw_retired_keys = snapshot.get("retired_keys", [])
         raw_records = snapshot.get("records", [])
         if not isinstance(raw_candidates, list):
             raise ValueError("snapshot candidates must be a list")
+        if not isinstance(raw_retired_keys, list) or any(
+            not isinstance(value, str) or not value for value in raw_retired_keys
+        ):
+            raise ValueError("snapshot retired_keys must be a string list")
         if not isinstance(raw_records, list):
             raise ValueError("snapshot records must be a list")
 
@@ -368,6 +415,7 @@ class GcSweepState:
             candidates=tuple(candidates),
             cursor=cursor,
             records=records,
+            retired_keys=set(raw_retired_keys),
             candidate_fingerprint=fingerprint,
         )
 
@@ -424,6 +472,18 @@ def _require_non_negative_number(value: object, name: str) -> float:
 def _require_non_negative_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
+    return value
+
+
+def _require_bool(value: object, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+    return value
+
+
+def _require_bool_result(value: object, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} returned a non-boolean value")
     return value
 
 
