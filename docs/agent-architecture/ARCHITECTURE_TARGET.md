@@ -70,6 +70,10 @@ Reject an optimization if it materially harms coding, reasoning, architecture un
 
 The final sparse/adaptive model is still **PROPOSED**. Supporting truth/evidence infrastructure has advanced with a versioned claim-evidence policy, but that is not a trained reasoning model or proof of hallucination resistance. Current `main` contains supporting experimental infrastructure—runner-free verification, controller/tool/evidence scaffolds, knowledge/GC/QoS primitives, and a safe session-batching scheduler core—but no trained 10–30B+ specialist-capacity OAI-2.0 model.
 
+## Numerical-safety foundation
+
+WP-71 now has a versioned reference precision/sentinel policy and the MLX smoke probe consumes the sentinel path. This is infrastructure evidence only; backend/quantized/custom-kernel numerical equivalence and overhead/fallback measurements remain open.
+
 ## Current evidence
 
 The corrected MLX harness has one committed v0.2 smoke result on the M5 Max for a 0.5B 4-bit Qwen model: ~198.47 tok/s **MLX-reported generation throughput** with a 133-token prompt and 32 output tokens. This is not a claim of kernel-only decode throughput. This is infrastructure evidence, not architecture proof.

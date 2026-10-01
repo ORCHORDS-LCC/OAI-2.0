@@ -58,6 +58,10 @@ Current source includes a versioned claim-evidence policy, repository/tool/web p
 
 Current source includes QoS/tail/deadline promotion checks, admission/backpressure primitives, and an admission→scheduler bridge into safe batching. They are supporting gates, not a substitute for held-out capability, truth/evidence, safety, retrieval, vision, tool, and long-horizon acceptance.
 
+## Numerical promotion gate
+
+Current source includes a versioned reference precision policy and structured numerical sentinels. Candidate backends/quantization/custom kernels must still pass WI-NUM-002 reference/tolerance/fallback evidence before numerical optimizations can be promoted.
+
 ## Promotion gate
 
 A speed improvement is rejected if verified capability materially regresses.

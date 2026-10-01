@@ -36,6 +36,7 @@ The master implementation map is [Issue #1](https://github.com/ORCHORDS-LCC/OAI-
 | Multi-agent orchestrator interfaces | **EXPERIMENTAL scaffold** — no production swarm runtime yet |
 | Capability-eval harness | **EXPERIMENTAL** |
 | MLX benchmark harness | **EXPERIMENTAL**, corrected prefill/decode split |
+| Numerical safety policy (WP-71) | **EXPERIMENTAL source implementation** — versioned precision/sentinel rules + MLX smoke-probe integration; overhead/tolerance evidence still open |
 | Cloudflare knowledge contract + mocks | **EXPERIMENTAL source contract / tested mock behavior** |
 | Versioned Cloudflare transport schemas | **EXPERIMENTAL source implementation** — D1 reader/writer, R2/KV/Vectorize wrappers, and D1/R2 delete-boundary pieces exist; authenticated Worker + private end-to-end proof still incomplete |
 | R2 liveness dry-run reconciliation | **IMPLEMENTED work item / CLOSED #214** — non-destructive reconciliation and acceptance evidence recorded |

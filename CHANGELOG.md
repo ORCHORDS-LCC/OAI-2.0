@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Versioned numerical safety policy, structured finite/range sentinels, extreme-value fixtures, and MLX smoke-probe integration for WP-71.
+
 - Repository/tool/web claim-evidence path adapters consuming the versioned WP-75 evidence policy.
 - Deterministic truthfulness metrics and a versioned promotion gate for false success, unsupported claims, stale claims, ignored contradictions, and unnecessary abstention.
 
