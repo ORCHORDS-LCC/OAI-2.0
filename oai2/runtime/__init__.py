@@ -86,7 +86,7 @@ __all__ = [
     "GatewayRuntimeError",
     "InferenceRequest",\n    "create_local_service_app",
     "InferenceResponse",
-    "InferenceRuntime",
+    "InferenceRuntime",\n    "create_local_service_app",
     "IsolatedSessionRegistry",
     "PlaceholderRuntime",
     "ServiceCompatibility",
