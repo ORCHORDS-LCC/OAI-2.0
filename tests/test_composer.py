@@ -370,11 +370,20 @@ class TestCompactRefs:
     """REQ-PROMPT-023 — refs where resolvable, inline where not."""
 
     def test_resolvable_ref_replaces_the_body(self):
+        """A reference is used only once the receiving session is verified."""
         body = "A long evidence body that would otherwise be resent."
         ref = CompactRef(ref_id="ev-1", version="2")
-        r = RefResolver()
+        r = RefResolver(session_id="s1")
         r.put("ev-1", "2", body)
-        c = compose(prefix=spec(), user_goal="g", evidence=[body], evidence_refs=[ref], resolver=r)
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[body],
+            evidence_refs=[ref],
+            resolver=r,
+            session_id="s1",
+            retained_state_verified=True,
+        )
         text = " ".join(str(m["content"]) for m in c.messages)
         assert "[ref:ev-1@2]" in text
         assert c.provenance.compact_refs == (ref,)
@@ -625,3 +634,175 @@ class TestNegativeMemoryIsNotAuthorization:
         ev = [s for s in c.provenance.segments if s.kind.value == "evidence"][0]
         assert ev.precedence is Precedence.UNTRUSTED
         assert ev.origin == "negative-memory"
+
+
+class TestEffectivePrefixDrivesTheDigest:
+    """Regression: the repository override must move the cache key.
+
+    `compose()` may replace the project segment with the caller's own
+    `repository_text`. Keying the digest on the unmodified `PrefixSpec` would
+    let that override change the effective prefix text while leaving the prefix
+    KV-cache key identical — stale reuse, which is the one thing REQ-PROMPT-024
+    exists to prevent.
+    """
+
+    def test_repository_override_moves_the_digest(self):
+        base = compose(prefix=spec(), user_goal="g")
+        overridden = compose(prefix=spec(), user_goal="g", repository_text="AGENTS.md rules")
+        assert base.prefix_digest != overridden.prefix_digest
+
+    def test_two_different_repository_overrides_do_not_collide(self):
+        a = compose(prefix=spec(), user_goal="g", repository_text="AGENTS.md rules")
+        b = compose(prefix=spec(), user_goal="g", repository_text="CONTRIBUTING rules")
+        assert a.prefix_digest != b.prefix_digest
+
+    def test_override_to_the_declared_text_restores_the_base_digest(self):
+        base = compose(prefix=spec(), user_goal="g")
+        same = compose(prefix=spec(), user_goal="g", repository_text=PROJECT)
+        assert base.prefix_digest == same.prefix_digest
+
+    def test_repository_version_moves_the_digest(self):
+        a = compose(prefix=spec(), user_goal="g", repository_text="rules", repository_version="1")
+        b = compose(prefix=spec(), user_goal="g", repository_text="rules", repository_version="2")
+        assert a.prefix_digest != b.prefix_digest
+
+    def test_the_override_is_actually_what_gets_rendered(self):
+        c = compose(prefix=spec(), user_goal="g", repository_text="OVERRIDE-MARKER")
+        assert any("OVERRIDE-MARKER" in str(m["content"]) for m in c.messages)
+        assert "OVERRIDE-MARKER" in c.prefix_text()
+
+    def test_digest_for_agrees_with_the_rendered_composition(self):
+        c = compose(
+            prefix=spec(), user_goal="g", repository_text="RULES-X", repository_version="rv-2"
+        )
+        assert c.prefix_digest == spec().digest_for(
+            repository_text="RULES-X", repository_version="rv-2"
+        )
+        # And the override's version is the one carried in provenance.
+        repo = [s for s in c.provenance.segments if s.kind.value == "prefix"][1]
+        assert repo.version == "rv-2"
+
+
+class TestCompactRefsRequireARealReceivingSession:
+    """Regression: a reference must never outrun what the receiver can resolve.
+
+    A local `RefResolver` hit says nothing about the receiving side. A fresh
+    session, a restarted runtime, or a different client would be handed an
+    opaque `[ref:...]` marker with no way to dereference it — silent context
+    loss. Inline is the safe default.
+    """
+
+    BODY = "A long lesson body the receiver may not be able to resolve."
+
+    def _ref(self) -> CompactRef:
+        return CompactRef(ref_id="ev-1", version="2")
+
+    def _resolver(self, session_id: str = "s1") -> RefResolver:
+        r = RefResolver(session_id=session_id)
+        r.put("ev-1", "2", self.BODY)
+        return r
+
+    def test_a_populated_resolver_alone_is_not_enough(self):
+        """The exact defect: local hit, unverified receiver -> must inline."""
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=self._resolver(),
+        )
+        text = " ".join(str(m["content"]) for m in c.messages)
+        assert self.BODY in text
+        assert "[ref:" not in text
+        assert c.provenance.compact_refs == ()
+
+    def test_reference_is_used_only_when_the_receiver_is_verified(self):
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=self._resolver(),
+            session_id="s1",
+            retained_state_verified=True,
+        )
+        text = " ".join(str(m["content"]) for m in c.messages)
+        assert "[ref:ev-1@2]" in text
+        assert c.provenance.compact_refs == (self._ref(),)
+
+    def test_a_fresh_session_with_no_state_inlines(self):
+        """Fresh session: no retained state, therefore no opaque pointer."""
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=self._resolver(),
+            session_id="s2",  # different session
+            retained_state_verified=True,
+        )
+        text = " ".join(str(m["content"]) for m in c.messages)
+        assert self.BODY in text
+        assert "[ref:" not in text
+
+    def test_cross_session_resolution_fails_closed(self):
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=self._resolver(session_id="session-A"),
+            session_id="session-B",
+            retained_state_verified=True,
+        )
+        assert "[ref:" not in " ".join(str(m["content"]) for m in c.messages)
+
+    def test_an_unregistered_resolver_serves_nobody(self):
+        r = RefResolver()
+        r.put("ev-1", "2", self.BODY)
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=r,
+            session_id="s1",
+            retained_state_verified=True,
+        )
+        assert "[ref:" not in " ".join(str(m["content"]) for m in c.messages)
+
+    def test_empty_session_id_is_never_served(self):
+        r = self._resolver(session_id="")
+        assert r.serves("") is False
+        assert r.serves("s1") is False
+
+    def test_restart_rehydrates_rather_than_leaving_a_dangling_ref(self):
+        """A restarted runtime has an empty resolver; the body must return."""
+        after_restart = RefResolver(session_id="s1")
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=after_restart,
+            session_id="s1",
+            retained_state_verified=True,
+        )
+        text = " ".join(str(m["content"]) for m in c.messages)
+        assert self.BODY in text
+        assert "[ref:" not in text
+
+    def test_changed_body_version_falls_back_even_when_verified(self):
+        r = RefResolver(session_id="s1")
+        r.put("ev-1", "1", self.BODY)  # ref asks for version 2
+        c = compose(
+            prefix=spec(),
+            user_goal="g",
+            evidence=[self.BODY],
+            evidence_refs=[self._ref()],
+            resolver=r,
+            session_id="s1",
+            retained_state_verified=True,
+        )
+        assert self.BODY in " ".join(str(m["content"]) for m in c.messages)
+        assert "[ref:" not in " ".join(str(m["content"]) for m in c.messages)

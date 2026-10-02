@@ -1,8 +1,12 @@
 """Measure the #186 composer's contribution without duplicating #240.
 
-This measures only what is measurable **without** a model: the composition's
-own token/byte accounting, the stable prefix size, and prefix KV-cache
-identity behaviour. It deliberately does not measure TTFT, prefill wall time or
+Token counts come from the **serving model's real tokenizer and chat
+template** (``transformers`` + ``apply_chat_template``) when one is available,
+because the earlier whitespace-based figure was not a token measurement at all.
+On SmolLM-135M the two differ by roughly 3.7x, so a whitespace count is not a
+usable proxy and the synthetic number is now reported only for contrast.
+
+It deliberately does not measure TTFT, prefill wall time, decode rate or
 end-to-end completion — those need the target Mac, and the #240 owner is
 running measurements there. Interfering with another agent's hardware window
 would corrupt their numbers, so the model-bound rows are emitted as ``null``
@@ -29,8 +33,8 @@ import json
 import platform
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -69,25 +73,42 @@ def _whitespace_tokens(text: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--turns", type=int, default=6)
-    parser.add_argument("--model", default="", help="mlx model id for real token counts")
+    parser.add_argument(
+        "--tokenizer",
+        default="mlx-community/SmolLM-135M-Instruct-4bit",
+        help="HF id whose tokenizer + chat template define the token counts",
+    )
+    parser.add_argument("--no-tokenizer", action="store_true", help="force synthetic counting")
     parser.add_argument("--out-dir", type=Path, default=Path("evals/benchmarks"))
     parser.add_argument("--tag", default="composer-prefix")
+    parser.add_argument("--session-id", default="bench-session")
     args = parser.parse_args(argv)
 
+    # The real rendered request is what the runtime tokenises, so count the
+    # messages through the serving model's chat template, not a flat string.
+    render = None
     counter = _whitespace_tokens
-    tokenizer_note = "whitespace counter (deterministic, not a model tokenizer)"
-    if args.model:
+    tokenizer_note = "SYNTHETIC whitespace counter — not a token measurement"
+    if not args.no_tokenizer:
         try:
-            from mlx_lm import load  # type: ignore[import-not-found]
+            from transformers import AutoTokenizer  # type: ignore[import-not-found]
 
-            _, tok = load(args.model)
+            tok = AutoTokenizer.from_pretrained(args.tokenizer)
+
+            def render(messages: list[dict[str, object]]) -> str:
+                return tok.apply_chat_template(  # type: ignore[attr-defined]
+                    [{"role": str(m["role"]), "content": str(m["content"])} for m in messages],
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
 
             def counter(text: str, _tok: object = tok) -> int:  # type: ignore[misc]
                 return len(_tok.encode(text))  # type: ignore[attr-defined]
 
-            tokenizer_note = f"real tokenizer via mlx_lm.load({args.model})"
+            tokenizer_note = f"real tokenizer + chat template via {args.tokenizer}"
         except Exception as exc:  # pragma: no cover - environment dependent
-            print(f"note: could not load tokenizer ({exc}); using whitespace counter")
+            print(f"note: tokenizer unavailable ({exc}); falling back to SYNTHETIC counting")
+            render = None
 
     prefix = PrefixSpec(
         policy_text=POLICY,
@@ -105,63 +126,73 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     for turn in range(1, args.turns + 1):
         goal = f"Turn {turn}: extend the safe batching scheduler and keep the API contract."
-        # Turn 1 carries the full body. Later turns send a compact reference,
-        # which is the REQ-PROMPT-023 case.
-        comp = compose(
-            prefix=prefix,
-            user_goal=goal,
-            evidence=[LESSON],
-            evidence_refs=[LESSON_REF],
-            resolver=resolver,
-            state={
+        state = (
+            {
                 "state_prefix_digest": prefix.digest(),
                 "state_composer_version": COMPOSER_SCHEMA_VERSION,
                 "state_version": str(turn - 1),
                 "state_body": f"{turn - 1} edits applied to src/scheduler.py",
             }
             if turn > 1
-            else None,
+            else None
         )
-        full_text = "\n".join(str(m.get("content", "")) for m in comp.messages)
-        # The same composition with the reference deliberately unavailable, so
-        # the fallback cost is measured rather than assumed.
-        fallback = compose(
+        # With the reference resolvable for THIS session and the host verifying
+        # the receiving side -- the only case where a ref is emitted.
+        served = RefResolver(session_id=args.session_id)
+        served.put(LESSON_REF.ref_id, LESSON_REF.version, LESSON)
+        compact = compose(
             prefix=prefix,
             user_goal=goal,
             evidence=[LESSON],
             evidence_refs=[LESSON_REF],
-            resolver=RefResolver(),
+            resolver=served,
+            session_id=args.session_id,
+            retained_state_verified=True,
+            state=state,
         )
-        fallback_text = "\n".join(str(m.get("content", "")) for m in fallback.messages)
+        # The same request with the reference unusable (fresh/restarted session).
+        inline = compose(
+            prefix=prefix,
+            user_goal=goal,
+            evidence=[LESSON],
+            evidence_refs=[LESSON_REF],
+            resolver=RefResolver(session_id=args.session_id),
+            session_id=args.session_id,
+            retained_state_verified=True,
+            state=state,
+        )
         rows.append(
             {
                 "turn": turn,
-                "prefix_digest": comp.prefix_digest,
-                "prefix_tokens": counter(comp.prefix_text()),
-                "effective_prompt_tokens": counter(full_text),
-                "effective_prompt_bytes": len(full_text.encode("utf-8")),
-                "fallback_tokens_no_ref": counter(fallback_text),
-                "delta_applied": comp.provenance.delta_applied,
-                "rehydrated": comp.rehydrated,
-                "compact_refs": [asdict(r) for r in comp.provenance.compact_refs],
-                "segment_chars": [len(s.text) for s in comp.provenance.segments],
+                "prefix_digest": compact.prefix_digest,
+                "prefix_tokens_real": _count(compact, render, counter),
+                "inline_tokens_real": _count(inline, render, counter),
+                "compact_tokens_real": _count(compact, render, counter),
+                "prefix_tokens_synthetic_whitespace": counter(compact.prefix_text()),
+                "effective_prompt_bytes": len(_rendered(compact, render).encode("utf-8")),
+                "delta_applied": compact.provenance.delta_applied,
+                "rehydrated": compact.rehydrated,
+                "compact_ref_used": bool(compact.provenance.compact_refs),
+                "inline_ref_used": bool(inline.provenance.compact_refs),
+                "segment_chars": [len(s.text) for s in compact.provenance.segments],
             }
         )
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     digests = {r["prefix_digest"] for r in rows}
-    full = [int(r["fallback_tokens_no_ref"]) for r in rows]
-    with_ref = [int(r["effective_prompt_tokens"]) for r in rows]
-
-    saving = [(f - c) / f * 100.0 for f, c in zip(full, with_ref, strict=True) if f]
+    inline = [int(r["inline_tokens_real"]) for r in rows]
+    compact_tokens = [int(r["compact_tokens_real"]) for r in rows]
+    saving = [(f - c) / f * 100.0 for f, c in zip(inline, compact_tokens, strict=True) if f]
 
     summary = {
         "script": "bench_composer_prefix",
         "issue": "#186",
+        "measurement_kind": "tokenizer-only (no model forward pass)",
         "config": {
             "turns": args.turns,
-            "model": args.model or "(none)",
             "tokenizer": tokenizer_note,
+            "serving_template_applied": render is not None,
+            "session_id": args.session_id,
             "composer_version": COMPOSER_SCHEMA_VERSION,
             "instruction_schema_version": INSTRUCTION_SCHEMA_VERSION,
             "platform": platform.platform(),
@@ -171,26 +202,41 @@ def main(argv: list[str] | None = None) -> int:
         "distinct_prefix_digests": len(digests),
         "rows": rows,
         "composition_overhead_ms": round(elapsed_ms, 3),
-        "compact_ref_saving_percent": {
-            "min": round(min(saving), 3) if saving else None,
-            "max": round(max(saving), 3) if saving else None,
+        "compact_ref_token_saving": {
+            "unit": "real tokenizer tokens of the rendered chat template",
+            "min_percent": round(min(saving), 3) if saving else None,
+            "max_percent": round(max(saving), 3) if saving else None,
+        },
+        "superseded_claim": {
+            "previous_figure": "51.95-58.59%",
+            "was": "whitespace-based synthetic accounting of a flat string",
+            "corrected": (
+                "That number was not a token measurement. On this tokenizer the "
+                "whitespace count understates real rendered tokens by roughly "
+                "3.7x. Prefer compact_ref_token_saving above; retain the "
+                "synthetic figure only as a contrast column."
+            ),
         },
         "model_bound_measurements": {
             "ttft_ms": None,
             "prefill_ms": None,
+            "decode_tok_per_s": None,
             "end_to_end_ms": None,
             "first_useful_tool_action_ms": None,
+            "retrieval_latency_ms": None,
             "pending_reason": (
-                "Not measured. TTFT/prefill/end-to-end require the target Mac and "
-                "the MLX hot runtime; the #240 owner is running measurements there. "
-                "Interfering would corrupt their rows, so these are recorded as "
-                "pending rather than estimated."
+                "Not measured. These require the target Mac, the MLX hot "
+                "runtime and a matched before/after run; the #240 owner holds "
+                "that hardware window. Interfering would corrupt their rows, so "
+                "these stay null rather than estimated."
             ),
         },
         "note": (
-            "A shorter wire payload does not by itself prove less prefill. The "
-            "rows above establish composition shape and stable prefix identity; "
-            "the prefill consequence is #240's measurement to make."
+            "A shorter wire payload is not by itself evidence of less prefill. "
+            "These rows establish rendered token accounting and stable prefix "
+            "identity only. The prefill consequence is #240's to establish, on "
+            "a matched model revision, task set, output settings and knowledge "
+            "snapshot."
         ),
     }
 
@@ -199,14 +245,26 @@ def main(argv: list[str] | None = None) -> int:
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"wrote summary: {out}")
     print(f"prefix identity stable across turns: {summary['prefix_identity_stable_across_turns']}")
+    print(f"tokenizer: {tokenizer_note}")
     if saving:
         print(
-            "compact-ref saving (deterministic accounting, not prefill): "
-            f"{summary['compact_ref_saving_percent']['min']}%.."
-            f"{summary['compact_ref_saving_percent']['max']}%"
+            "compact-ref saving, REAL rendered tokens (not prefill): "
+            f"{summary['compact_ref_token_saving']['min_percent']}%.."
+            f"{summary['compact_ref_token_saving']['max_percent']}%"
         )
+    print("superseded 51.95-58.59% figure: whitespace-based synthetic, see summary")
     print("model-bound measurements: PENDING (see summary for the reason)")
     return 0
+
+
+def _rendered(comp: Any, render: Any) -> str:
+    if render is not None:
+        return render(list(comp.messages))
+    return "\n".join(str(m.get("content", "")) for m in comp.messages)
+
+
+def _count(comp: Any, render: Any, counter: Any) -> int:
+    return counter(_rendered(comp, render))
 
 
 if __name__ == "__main__":

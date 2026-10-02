@@ -138,21 +138,81 @@ class PrefixSpec:
             if getattr(self, name) != getattr(self, name).strip():
                 raise ValueError(f"{name} must be normalized")
 
-    def _canonical(self) -> str:
+    def _canonical(
+        self, project_text: str | None = None, project_version: str | None = None
+    ) -> str:
+        text = self.project_text if project_text is None else project_text
+        version = self.project_version if project_version is None else project_version
         parts = [
             f"composer={COMPOSER_SCHEMA_VERSION}",
             f"policy_version={self.policy_version}",
             f"tool_schema_version={self.tool_schema_version}",
-            f"project_version={self.project_version}",
+            f"project_version={version}",
             f"policy_text={self.policy_text}",
-            f"project_text={self.project_text}",
+            f"project_text={text}",
             "tools=" + "|".join(_stable_json(tool) for tool in self.tool_wire),
         ]
         return "\n".join(parts)
 
+    @classmethod
+    def adopt_caller_prefix(
+        cls,
+        messages: Sequence[Mapping[str, Any]],
+        tool_wire: Sequence[Mapping[str, Any]] = (),
+    ) -> PrefixSpec:
+        """Derive a prefix identity from messages the host already owns.
+
+        The OpenAI-compatible surface is a **transport**: the caller (ZCode)
+        supplies its own system prompt and conversation, and the server must
+        not rewrite them. But the leading system block is exactly the stable
+        region the prefix KV cache wants, so the server *observes* it and
+        derives an identity instead of imposing one.
+
+        Only the contiguous leading ``system``/``developer`` block is treated
+        as the prefix; everything after it is per-turn content. A system
+        message appearing later is a template violation, not part of the
+        prefix, and is reported by :func:`assert_template_safe`.
+        """
+        head: list[str] = []
+        for message in messages:
+            role = message.get("role")
+            if role not in {"system", "developer"}:
+                break
+            head.append(str(message.get("content", "")))
+        return cls(
+            policy_text="\n".join(head) if head else "(no caller system prompt)",
+            policy_version="caller",
+            tool_wire=tuple(tool_wire),
+            tool_schema_version="caller",
+        )
+
     def digest(self) -> str:
         """Stable digest of the exact prefix text plus every version axis."""
-        return hashlib.sha256(self._canonical().encode("utf-8")).hexdigest()
+        return self.digest_for()
+
+    def digest_for(
+        self,
+        *,
+        repository_text: str | None = None,
+        repository_version: str | None = None,
+    ) -> str:
+        """Digest of the prefix **as actually rendered**.
+
+        :meth:`compose` may override the project segment with a
+        ``repository_text`` drawn from the caller's own configuration. Keying on
+        the unmodified :class:`PrefixSpec` would let that override change the
+        effective prefix text while leaving the digest — and therefore the
+        prefix KV-cache key — unchanged, which is exactly the stale reuse
+        REQ-PROMPT-024 exists to prevent. The effective text and its applicable
+        version are folded in here.
+        """
+        effective_text = repository_text if repository_text is not None else self.project_text
+        effective_version = (
+            repository_version if repository_version is not None else self.project_version
+        )
+        return hashlib.sha256(
+            self._canonical(effective_text, effective_version).encode("utf-8")
+        ).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,15 +325,31 @@ class Composition:
 
 
 class RefResolver:
-    """Resolves compact references back to their bodies.
+    """Resolves compact references back to their bodies, for one session.
+
+    A reference is only meaningful to the session that can actually fetch the
+    body, so the resolver is bound to a ``session_id`` and :func:`compose`
+    refuses a reference whose resolver belongs to a different session. A fresh
+    session therefore fails closed and receives inline content rather than an
+    opaque pointer it cannot use (REQ-PROMPT-023).
 
     Deliberately strict: a reference whose target is absent or whose version
-    does not match is reported as a miss so the composer can inline the body
-    instead of leaving the model a dangling pointer (REQ-PROMPT-023).
+    does not match is reported as a miss, and the composer inlines the body
+    instead of leaving the model a dangling pointer.
     """
 
-    def __init__(self, bodies: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        bodies: Mapping[str, str] | None = None,
+        *,
+        session_id: str = "",
+    ) -> None:
         self._bodies: dict[str, str] = dict(bodies or {})
+        self._session_id = session_id
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
 
     def put(self, ref_id: str, version: str, body: str) -> None:
         self._bodies[f"{ref_id}@{version}"] = body
@@ -284,6 +360,14 @@ class RefResolver:
 
     def has(self, ref: CompactRef) -> bool:
         return f"{ref.ref_id}@{ref.version}" in self._bodies
+
+    def serves(self, session_id: str) -> bool:
+        """True when this resolver provably backs ``session_id``.
+
+        Both sides must be non-empty and equal. An unregistered resolver serves
+        nobody, so a fresh session cannot inherit another session's bodies.
+        """
+        return bool(session_id) and bool(self._session_id) and self._session_id == session_id
 
 
 def assert_template_safe(messages: Sequence[Mapping[str, Any]]) -> None:
@@ -320,6 +404,8 @@ def compose(
     evidence_source: str = "knowledge",
     evidence_refs: Sequence[CompactRef] = (),
     resolver: RefResolver | None = None,
+    session_id: str = "",
+    retained_state_verified: bool = False,
     state: Mapping[str, Any] | None = None,
     max_evidence_chars: int = 2048,
     evidence_budget_tokens: int = 1024,
@@ -347,7 +433,17 @@ def compose(
         evidence_refs: Compact references eligible to replace ``evidence``
             bodies. A reference that does not resolve is skipped and the body
             is inlined instead.
-        resolver: Backing store for ``evidence_refs``.
+        resolver: Backing store for ``evidence_refs``, bound to ``session_id``.
+        Even a populated resolver is ignored unless
+        ``retained_state_verified`` is set.
+        session_id: Identity of the receiving session. A reference is only
+            emitted when the resolver provably serves this exact session, so a
+            fresh or different session fails closed to inline content.
+        retained_state_verified: Whether the host has positively established
+            that the receiving runtime/session can dereference a reference.
+            **Defaults to False**, so references are off unless the caller
+            vouches for the receiving side. A local resolver hit is not that
+            proof: it says nothing about the receiving session.
         state: Previously-sent state, if the caller retained it. A delta is
             emitted only when this matches ``state_prefix_digest`` and
             ``state_composer_version``; otherwise the composer rehydrates.
@@ -365,7 +461,16 @@ def compose(
         raise ValueError("user_goal must be a non-empty string")
 
     counter = token_counter or (lambda text: max(1, len(text.split())))
-    digest = prefix.digest()
+    # The repository segment may be overridden by the caller's own configuration,
+    # so the identity must be derived from what is actually rendered.
+    # An override replaces BOTH the project text and the version that applies
+    # to it; without an override the spec's own project version stands.
+    overridden = bool(repository_text) and repository_text != prefix.project_text
+    effective_repo = repository_text or prefix.project_text
+    digest = prefix.digest_for(
+        repository_text=effective_repo,
+        repository_version=repository_version if overridden else prefix.project_version,
+    )
 
     # --- trusted ingestion ------------------------------------------------
     # Trust is assigned HERE, by the composition layer, from the segment's
@@ -419,7 +524,7 @@ def compose(
                 text=repository_text or prefix.project_text,
                 precedence=Precedence.REPOSITORY,
                 origin=repository_source,
-                version=prefix.project_version or repository_version,
+                version=repository_version if overridden else prefix.project_version,
             )
         )
 
@@ -455,6 +560,8 @@ def compose(
         evidence,
         evidence_refs=evidence_refs,
         resolver=resolver,
+        session_id=session_id,
+        retained_state_verified=retained_state_verified,
         max_chars=max_evidence_chars,
         budget_tokens=evidence_budget_tokens,
         counter=counter,
@@ -534,6 +641,8 @@ def _render_evidence(
     *,
     evidence_refs: Sequence[CompactRef],
     resolver: RefResolver | None,
+    session_id: str,
+    retained_state_verified: bool,
     max_chars: int,
     budget_tokens: int,
     counter: Callable[[str], int],
@@ -541,17 +650,27 @@ def _render_evidence(
 ) -> str:
     """Fence and bound the evidence block.
 
-    A compact reference replaces its body only when the resolver can actually
-    return it. Otherwise the body is inlined: a dangling ``[ref:...]`` marker
-    would be a silent context loss.
+    A compact reference replaces its body only when **all three** hold:
+
+    1. the host has verified that the receiving session can dereference
+       references at all (``retained_state_verified``);
+    2. the resolver provably serves this exact session;
+    3. the resolver actually holds that body at that version.
+
+    Otherwise the body is inlined. Condition 1 exists because a local resolver
+    hit proves nothing about the receiving side: a fresh session, a restarted
+    runtime or a different client would receive an opaque ``[ref:...]`` marker
+    it has no way to resolve, which is worse than sending the body.
     """
+    usable = retained_state_verified and resolver is not None and resolver.serves(session_id)
     rendered: list[str] = []
     refs = list(evidence_refs)
     for index, body in enumerate(bodies):
         if not body or not body.strip():
             continue
-        if index < len(refs) and resolver is not None:
+        if usable and index < len(refs):
             ref = refs[index]
+            assert resolver is not None
             if resolver.has(ref) and resolver.resolve(ref) is not None:
                 used_refs.append(ref)
                 rendered.append(ref.marker())

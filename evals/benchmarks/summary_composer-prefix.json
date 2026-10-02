@@ -1,10 +1,12 @@
 {
   "script": "bench_composer_prefix",
   "issue": "#186",
+  "measurement_kind": "tokenizer-only (no model forward pass)",
   "config": {
     "turns": 6,
-    "model": "(none)",
-    "tokenizer": "whitespace counter (deterministic, not a model tokenizer)",
+    "tokenizer": "real tokenizer + chat template via mlx-community/SmolLM-135M-Instruct-4bit",
+    "serving_template_applied": true,
+    "session_id": "bench-session",
     "composer_version": "1.0",
     "instruction_schema_version": "1.0",
     "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
@@ -16,18 +18,15 @@
     {
       "turn": 1,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 106,
-      "effective_prompt_bytes": 722,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 187,
+      "inline_tokens_real": 453,
+      "compact_tokens_real": 187,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 857,
       "delta_applied": false,
       "rehydrated": true,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -38,18 +37,15 @@
     {
       "turn": 2,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 123,
-      "effective_prompt_bytes": 836,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 220,
+      "inline_tokens_real": 486,
+      "compact_tokens_real": 220,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -61,18 +57,15 @@
     {
       "turn": 3,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 123,
-      "effective_prompt_bytes": 836,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 220,
+      "inline_tokens_real": 486,
+      "compact_tokens_real": 220,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -84,18 +77,15 @@
     {
       "turn": 4,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 123,
-      "effective_prompt_bytes": 836,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 220,
+      "inline_tokens_real": 486,
+      "compact_tokens_real": 220,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -107,18 +97,15 @@
     {
       "turn": 5,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 123,
-      "effective_prompt_bytes": 836,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 220,
+      "inline_tokens_real": 486,
+      "compact_tokens_real": 220,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -130,18 +117,15 @@
     {
       "turn": 6,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens": 40,
-      "effective_prompt_tokens": 123,
-      "effective_prompt_bytes": 836,
-      "fallback_tokens_no_ref": 256,
+      "prefix_tokens_real": 220,
+      "inline_tokens_real": 486,
+      "compact_tokens_real": 220,
+      "prefix_tokens_synthetic_whitespace": 67,
+      "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
-      "compact_refs": [
-        {
-          "ref_id": "lesson-zero-rows",
-          "version": "3"
-        }
-      ],
+      "compact_ref_used": true,
+      "inline_ref_used": false,
       "segment_chars": [
         164,
         125,
@@ -151,17 +135,25 @@
       ]
     }
   ],
-  "composition_overhead_ms": 0.308,
-  "compact_ref_saving_percent": {
-    "min": 51.953,
-    "max": 58.594
+  "composition_overhead_ms": 7.456,
+  "compact_ref_token_saving": {
+    "unit": "real tokenizer tokens of the rendered chat template",
+    "min_percent": 54.733,
+    "max_percent": 58.72
+  },
+  "superseded_claim": {
+    "previous_figure": "51.95-58.59%",
+    "was": "whitespace-based synthetic accounting of a flat string",
+    "corrected": "That number was not a token measurement. On this tokenizer the whitespace count understates real rendered tokens by roughly 3.7x. Prefer compact_ref_token_saving above; retain the synthetic figure only as a contrast column."
   },
   "model_bound_measurements": {
     "ttft_ms": null,
     "prefill_ms": null,
+    "decode_tok_per_s": null,
     "end_to_end_ms": null,
     "first_useful_tool_action_ms": null,
-    "pending_reason": "Not measured. TTFT/prefill/end-to-end require the target Mac and the MLX hot runtime; the #240 owner is running measurements there. Interfering would corrupt their rows, so these are recorded as pending rather than estimated."
+    "retrieval_latency_ms": null,
+    "pending_reason": "Not measured. These require the target Mac, the MLX hot runtime and a matched before/after run; the #240 owner holds that hardware window. Interfering would corrupt their rows, so these stay null rather than estimated."
   },
-  "note": "A shorter wire payload does not by itself prove less prefill. The rows above establish composition shape and stable prefix identity; the prefill consequence is #240's measurement to make."
+  "note": "A shorter wire payload is not by itself evidence of less prefill. These rows establish rendered token accounting and stable prefix identity only. The prefill consequence is #240's to establish, on a matched model revision, task set, output settings and knowledge snapshot."
 }
