@@ -85,7 +85,7 @@ The final sparse/adaptive model is still **PROPOSED**. Supporting truth/evidence
 
 ## Numerical-safety foundation
 
-WP-71 now has a versioned reference precision/sentinel policy, a reference-vs-optimized tolerance/fallback matrix, and a canonical backend/export/kernel promotion gate. The gate carries the applicable tolerance profile and artifact identity and refuses speed-only promotion. The MLX smoke probe consumes the sentinel path, but real backend/quantized/custom-kernel numerical equivalence, overhead and fallback measurements remain open.
+WP-71 now has a versioned reference precision/sentinel policy, a reference-vs-optimized tolerance/fallback matrix, and a canonical backend/export/kernel promotion gate. The gate carries the applicable tolerance profile and artifact identity and refuses speed-only promotion. The MLX smoke probe consumes the sentinel path, and reference-sentinel overhead plus false-positive analysis is recorded (82-89 ns per element with sentinels enabled, disabled path unchecked by design, 0/6 fixture false positives), but real backend/quantized/custom-kernel numerical equivalence, overhead and fallback measurements remain open.
 
 ## Current evidence
 
