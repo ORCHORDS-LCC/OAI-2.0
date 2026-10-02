@@ -50,6 +50,7 @@ from oai2.agents import (
 from oai2.core import KnowledgeId, Status
 from oai2.knowledge import (
     InMemoryKnowledgeStore,
+    KnowledgeObject,
     sha256_hex,
 )
 from oai2.runtime import (
@@ -2011,6 +2012,440 @@ def session_retention_round3(store: InMemoryKnowledgeStore) -> bool:
     )
 
 
+def session_real_glob_tool(store: InMemoryKnowledgeStore) -> bool:
+    """Round 36 (REAL Glob): execute_tool runs a real recursive glob;
+    the tool-role message carries real matched paths.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 36: REAL GLOB — execute_tool lists real files")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    # Create a distinctive file for the glob to find.
+    root = Path("/tmp/oai2-battle-glob")
+    (root / "sub").mkdir(parents=True, exist_ok=True)
+    marker_file = root / "sub" / "needle_battle36.txt"
+    marker_file.write_text("battle36\n", encoding="utf-8")
+
+    call = {
+        "id": "c36",
+        "type": "function",
+        "function": {
+            "name": "Glob",
+            "arguments": json.dumps({"pattern": "sub/needle_battle36.txt"}),
+        },
+    }
+    rt = _StubRuntime(
+        script=[
+            {"text": "", "tool_calls": (call,), "finish_reason": "tool_calls"},
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        cwd=root,
+        policy=default_dispatch_policy(budget_calls=8),
+        max_steps=4,
+    )
+    loop.run("battle 36 glob")
+    tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+    content = tool_msgs[0].get("content", "") if tool_msgs else ""
+    if "needle_battle36.txt" not in content:
+        print(f"  [SESSION 36] FAIL: real glob result missing the needle: {content!r}")
+        return False
+    print(f"  [SESSION 36] PASS: real Glob returned {content.strip()!r}")
+    return True
+
+
+def session_real_grep_tool(store: InMemoryKnowledgeStore) -> bool:
+    """Round 37 (REAL Grep): execute_tool searches real file contents;
+    the tool-role message carries path:lineno: line matches.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 37: REAL GREP — execute_tool searches real contents")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    root = Path("/tmp/oai2-battle-grep")
+    root.mkdir(exist_ok=True)
+    (root / "hay.txt").write_text(
+        "line one\nthe SECRET_NEEDLE_37 is here\nline three\n", encoding="utf-8"
+    )
+    call = {
+        "id": "c37",
+        "type": "function",
+        "function": {
+            "name": "Grep",
+            "arguments": json.dumps({"pattern": "SECRET_NEEDLE_37", "path": "."}),
+        },
+    }
+    rt = _StubRuntime(
+        script=[
+            {"text": "", "tool_calls": (call,), "finish_reason": "tool_calls"},
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        cwd=root,
+        policy=default_dispatch_policy(budget_calls=8),
+        max_steps=4,
+    )
+    loop.run("battle 37 grep")
+    tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+    content = tool_msgs[0].get("content", "") if tool_msgs else ""
+    if "SECRET_NEEDLE_37" not in content or "hay.txt:2" not in content:
+        print(f"  [SESSION 37] FAIL: real grep result wrong: {content!r}")
+        return False
+    print(f"  [SESSION 37] PASS: real Grep returned {content.strip()!r}")
+    return True
+
+
+def session_real_edit_cycle(store: InMemoryKnowledgeStore) -> bool:
+    """Round 38 (REAL Edit): full fs cycle — Write a file, Edit it via
+    exact old_string match, Read it back, all through the real
+    dispatcher + execute_tool.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 38: REAL WRITE→EDIT→READ — full fs mutation cycle")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    target = "/tmp/oai2-battle-edit.txt"
+    Path(target).write_text("version one\n", encoding="utf-8")
+    policy = default_dispatch_policy(
+        resource_scopes={target},
+        budget_calls=8,
+    )
+
+    def _gate(call: dict[str, Any], expect: str) -> bool:
+        rt = _StubRuntime(
+            script=[
+                {"text": "", "tool_calls": (call,), "finish_reason": "tool_calls"},
+                {"text": "done", "finish_reason": "stop"},
+            ]
+        )
+        loop = AgentLoop(
+            runtime=rt, cwd=Path("/tmp"), policy=policy, max_steps=4
+        )
+        loop.run("battle 38 edit cycle")
+        tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+        content = tool_msgs[0].get("content", "") if tool_msgs else ""
+        if expect not in content:
+            print(f"  [SESSION 38] FAIL: expected {expect!r}, got {content!r}")
+            return False
+        print(f"  [SESSION 38] step ok: {content.strip()!r}")
+        return True
+
+    ok_edit = _gate(
+        {
+            "id": "c38e",
+            "type": "function",
+            "function": {
+                "name": "Edit",
+                "arguments": json.dumps(
+                    {"path": target, "old_string": "version one", "new_string": "version two — EDITED"}
+                ),
+            },
+        },
+        "replaced 1 occurrence",
+    )
+    if not ok_edit:
+        return False
+    if "version two — EDITED" not in Path(target).read_text(encoding="utf-8"):
+        print("  [SESSION 38] FAIL: edit did not land on disk")
+        return False
+    print("  [SESSION 38] verified on disk: file now contains the edited version")
+    return _gate(
+        {
+            "id": "c38r",
+            "type": "function",
+            "function": {"name": "Read", "arguments": json.dumps({"path": target})},
+        },
+        "version two — EDITED",
+    )
+
+
+def _gate_to_negative(
+    store: InMemoryKnowledgeStore,
+    *,
+    session_no: int,
+    failure_class: str,
+    gate_call: dict[str, Any],
+    policy: Any,
+    expected_denial: str,
+    negative_topic: str,
+) -> bool:
+    """Shared: run a REAL gate denial, record it as negative memory,
+    then retrieve it into the next task's context.
+    """
+    rt = _StubRuntime(
+        script=[
+            {"text": "", "tool_calls": (gate_call,), "finish_reason": "tool_calls"},
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    loop = AgentLoop(
+        runtime=rt, cwd=Path("/tmp"), policy=policy, max_steps=4
+    )
+    loop.run(f"battle {session_no} gate")
+    tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+    denial = tool_msgs[0].get("content", "") if tool_msgs else ""
+    if expected_denial not in denial:
+        print(f"  [SESSION {session_no}] FAIL: expected {expected_denial!r}, got {denial!r}")
+        return False
+    print(f"  [SESSION {session_no}] REAL denial: {denial.strip()!r}")
+
+    neg = record_failure(
+        _make_run(
+            user_prompt=negative_topic,
+            final_text=denial,
+            finished_reason="tool_calls",
+            total_tool_calls=1,
+        ),
+        task_id=f"bt-{session_no:03d}-fail",
+        failure_class=failure_class,
+        evidence_ref=f"verifier://battle/{session_no:03d}",
+        source_version="38d911e",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(neg.model_copy(update={
+        "topic": f"oai2:negative:{failure_class}:{negative_topic}",
+        "knowledge_id": KnowledgeId(sha256_hex(f"neg|{negative_topic}")[:32]),
+    }))
+    rt2 = _StubRuntime(script=[{"text": "ok"}])
+    loop2 = AgentLoop(runtime=rt2, knowledge_store=store, evidence_budget_tokens=512)
+    loop2.run(negative_topic)
+    content = rt2.requests[0].messages[-1].get("content", "")
+    if "diagnostic:" not in content or failure_class not in content:
+        print(f"  [SESSION {session_no}] FAIL: diagnostic not retrievable: {content[:120]!r}")
+        return False
+    print(f"  [SESSION {session_no}] PASS: {failure_class} denial stored + retrieved")
+    return True
+
+
+def session_budget_retry_negative(store: InMemoryKnowledgeStore) -> bool:
+    """Round 39: REAL gate-5 RETRY recorded as negative memory."""
+    print("\n" + "=" * 70)
+    print("SESSION 39: gate-5 RETRY → negative memory → retrieval")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    return _gate_to_negative(
+        store,
+        session_no=39,
+        failure_class="budget_exceeded",
+        gate_call={
+            "id": "c39",
+            "type": "function",
+            "function": {"name": "Bash", "arguments": json.dumps({"command": "echo hi"})},
+        },
+        policy=default_dispatch_policy(budget_calls=0),
+        expected_denial="dispatch:retry:budget exceeded",
+        negative_topic="battle 39 run bash with exhausted budget",
+    )
+
+
+def session_repair_negative(store: InMemoryKnowledgeStore) -> bool:
+    """Round 40: REAL gate-2 REPAIR recorded as negative memory."""
+    print("\n" + "=" * 70)
+    print("SESSION 40: gate-2 REPAIR → negative memory → retrieval")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    return _gate_to_negative(
+        store,
+        session_no=40,
+        failure_class="bad_arguments",
+        gate_call={
+            "id": "c40",
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "arguments": json.dumps({"path": "/tmp/x", "bogus": "y"}),
+            },
+        },
+        policy=default_dispatch_policy(resource_scopes={"/tmp/x"}),
+        expected_denial="dispatch:repair_arguments",
+        negative_topic="battle 40 call read with unknown arguments",
+    )
+
+
+def session_replan_negative(store: InMemoryKnowledgeStore) -> bool:
+    """Round 41: REAL gate-1 REPLAN recorded as negative memory."""
+    print("\n" + "=" * 70)
+    print("SESSION 41: gate-1 REPLAN → negative memory → retrieval")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    return _gate_to_negative(
+        store,
+        session_no=41,
+        failure_class="unknown_tool",
+        gate_call={
+            "id": "c41",
+            "type": "function",
+            "function": {
+                "name": "NukeEverything",
+                "arguments": json.dumps({"target": "prod"}),
+            },
+        },
+        policy=default_dispatch_policy(),
+        expected_denial="dispatch:replan:unknown tool",
+        negative_topic="battle 41 invoke a tool that does not exist",
+    )
+
+
+def session_sanitization_in_package(store: InMemoryKnowledgeStore) -> bool:
+    """Round 42: a lesson whose content contains a secret-shaped token
+    is sanitized BEFORE the model sees it — the evidence package
+    carries [REDACTED], never the raw key.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 42: SANITIZATION — secret-shaped token redacted in the package")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="configure the OAI-2.0 gateway with the provided key",
+        final_text="export OAI2_GATEWAY_API_KEY=sk-proj-abc123def456ghi789jkl012mno",
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-042-A",
+        verification_ref="verifier://battle/042",
+        source_version="38d911e",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(lesson.model_copy(update={
+        "topic": "configure the OAI-2.0 gateway with the provided key",
+    }))
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("configure the OAI-2.0 gateway with the provided key")
+    evidence = next(
+        (m for m in rt.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 42] FAIL: no evidence message")
+        return False
+    content = evidence["content"]
+    if "sk-proj-abc123def456ghi789jkl012mno" in content:
+        print("  [SESSION 42] FAIL: RAW KEY reached the model context")
+        return False
+    if "REDACTED" not in content:
+        print("  [SESSION 42] FAIL: expected [REDACTED] marker")
+        return False
+    print("  [SESSION 42] PASS: raw key never reached the model; [REDACTED] present")
+    return True
+
+
+def session_authority_ranking(store: InMemoryKnowledgeStore) -> bool:
+    """Round 43: two lessons on the same topic — the higher-authority
+    one must be retrieved first (rank-1 in the evidence package).
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 43: AUTHORITY — higher-authority lesson ranks first")
+    print("=" * 70)
+    topic = "battle 43 authority ranking"
+    low = KnowledgeObject(
+        knowledge_id=KnowledgeId(sha256_hex(topic + "low")[:32]),
+        topic=topic,
+        content="LOW AUTHORITY lesson: tentative guidance",
+        content_hash=sha256_hex("LOW AUTHORITY lesson: tentative guidance"),
+        source_uri="battle://43/low",
+        authority=0.3,
+        status=Status.IMPLEMENTED,
+    )
+    high = KnowledgeObject(
+        knowledge_id=KnowledgeId(sha256_hex(topic + "high")[:32]),
+        topic=topic,
+        content="HIGH AUTHORITY lesson: verified guidance",
+        content_hash=sha256_hex("HIGH AUTHORITY lesson: verified guidance"),
+        source_uri="battle://43/high",
+        authority=0.95,
+        status=Status.IMPLEMENTED,
+    )
+    store.put(low)
+    store.put(high)
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run(topic)
+    evidence = next(
+        (m for m in rt.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 43] FAIL: no evidence message")
+        return False
+    content = evidence["content"]
+    i_high = content.find("HIGH AUTHORITY")
+    i_low = content.find("LOW AUTHORITY")
+    if i_high == -1 or i_low == -1:
+        print("  [SESSION 43] FAIL: both lessons not in package")
+        return False
+    if i_high > i_low:
+        print("  [SESSION 43] FAIL: low-authority lesson ranked above high-authority")
+        return False
+    print("  [SESSION 43] PASS: high-authority lesson appears before low-authority")
+    return True
+
+
+def session_negative_isolation(store: InMemoryKnowledgeStore) -> bool:
+    """Round 44: a negative memory stored for topic X must NOT leak
+    into an unrelated topic Y's retrieval.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 44: ISOLATION — negative memory for topic X does not leak into topic Y")
+    print("=" * 70)
+    neg = record_failure(
+        _make_run(
+            user_prompt="battle 44 topic X specific failure",
+            final_text="diagnostic: X failed",
+            finished_reason="error",
+            total_tool_calls=0,
+        ),
+        task_id="bt-044-fail",
+        failure_class="topic_x_failure",
+        evidence_ref="verifier://battle/044",
+        source_version="38d911e",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(neg.model_copy(update={
+        "topic": "battle 44 topic X specific failure",
+    }))
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("battle 44 topic Y completely unrelated cooking recipe")
+    leaked = any(
+        "topic_x_failure" in m.get("content", "")
+        for m in rt.requests[0].messages
+    )
+    if leaked:
+        print("  [SESSION 44] FAIL: topic-X negative memory leaked into topic-Y context")
+        return False
+    print("  [SESSION 44] PASS: no cross-topic leakage")
+    return True
+
+
+def session_retention_round4(store: InMemoryKnowledgeStore) -> bool:
+    """Round 45 (RETENTION 4): after the store now holds ~30 entries
+    (positives + 4 new gate negatives), the very FIRST lesson
+    (Session 1, find Python files) is still retrievable.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 45: RETENTION 4 — Session 1 lesson after ~30 store entries")
+    print("=" * 70)
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("list all Python files in the OAI-2.0 repository")
+    _print_messages("SESSION 45 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 45", rt.requests[0].messages, "find . -name '*.py'",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -2061,6 +2496,16 @@ def main() -> int:
         session_real_deny_to_negative_loop,
         session_evidence_budget_enforced,
         session_mixed_positive_negative,
+        session_real_glob_tool,
+        session_real_grep_tool,
+        session_real_edit_cycle,
+        session_budget_retry_negative,
+        session_repair_negative,
+        session_replan_negative,
+        session_sanitization_in_package,
+        session_authority_ranking,
+        session_negative_isolation,
+        session_retention_round4,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
