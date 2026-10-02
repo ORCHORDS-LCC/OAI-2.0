@@ -73,8 +73,29 @@ class MLXHotRuntime(InferenceRuntime):
         tokenizer: TokenizerWrapper = self._tokenizer
         model: Any = self._model
 
+        # When the caller passes a messages list, apply the tokenizer's
+        # chat template so the model sees a properly-formatted prompt.
+        # Otherwise fall back to the raw ``prompt`` field.
+        if request.messages:
+            try:
+                prompt_str = tokenizer.apply_chat_template(
+                    list(request.messages),
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            except Exception:
+                parts = []
+                for m in request.messages:
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    parts.append(f"### {role}:\n{content}\n")
+                parts.append("### assistant:\n")
+                prompt_str = "\n".join(parts)
+        else:
+            prompt_str = request.prompt
+
         _reset_peak_memory()
-        prompt_tokens = len(tokenizer.encode(request.prompt))
+        prompt_tokens = len(tokenizer.encode(prompt_str))
         t_prefill_start = time.perf_counter()
         text = ""
         tokens_generated = 0
@@ -82,7 +103,7 @@ class MLXHotRuntime(InferenceRuntime):
         for response in stream_generate(
             model,
             tokenizer,
-            prompt=request.prompt,
+            prompt=prompt_str,
             max_tokens=request.max_tokens,
         ):
             if first_token_at is None:
