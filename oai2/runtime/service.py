@@ -80,6 +80,9 @@ class ServiceLifecycle:
     def restart(self, actual: ServiceCompatibility) -> bool:
         if self._state not in {ServiceState.STOPPED, ServiceState.FAILED}:
             raise RuntimeError("restart requires stopped or failed service")
+        # ``start`` accepts only fresh or cleanly-stopped services, so a failed
+        # service must re-enter STARTING before compatibility revalidation.
+        self._state = ServiceState.STARTING
         return self.start(actual)
 
     def mark_failed(self, failure_kind: str) -> None:
