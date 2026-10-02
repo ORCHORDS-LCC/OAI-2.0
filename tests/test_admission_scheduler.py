@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import fields
+
 from oai2.reasoning import ReasoningMode
 from oai2.runtime.admission import (
     AdmissionAction,
@@ -143,6 +145,7 @@ def test_cancellation_removes_pending_or_ready_work() -> None:
     assert controller.cancel("missing") is False
     assert controller.metrics.pending_admission == 0
     assert controller.metrics.ready_queue_depth == 0
+    assert controller.telemetry.cancelled == 2
 
 
 def test_queue_full_rejection_does_not_create_pending_work() -> None:
@@ -188,16 +191,82 @@ def test_admission_does_not_bypass_exact_batch_compatibility() -> None:
     }
 
 
+def test_public_safe_telemetry_explains_decision_without_workload_identity() -> None:
+    controller = AdmissionBatchController()
+    controller.submit(
+        _request("private-request-id", "private-session-id", memory=8.0),
+        _capacity(used=52.0),
+        now_ms=10.0,
+    )
+
+    telemetry = controller.telemetry
+    assert telemetry.decisions_total == 1
+    assert telemetry.admitted == 0
+    assert telemetry.queued == 1
+    assert telemetry.rejected == 0
+    assert telemetry.reason_counts == (("memory_pressure", 1),)
+
+    trace = telemetry.last_decision
+    assert trace is not None
+    assert trace.action is AdmissionAction.QUEUE
+    assert trace.reason is AdmissionReason.MEMORY_PRESSURE
+    assert trace.mode == "NORMAL"
+    assert trace.pending_admission == 1
+    assert trace.ready_queue_depth == 0
+    assert trace.available_memory_gb == 4.0
+    assert trace.required_memory_gb == 8.0
+    trace_fields = {item.name for item in fields(trace)}
+    assert "request_id" not in trace_fields
+    assert "session_id" not in trace_fields
+
+
+def test_telemetry_counts_rejection_and_promotion_attempts() -> None:
+    controller = AdmissionBatchController()
+    controller.submit(
+        _request("queued", "s1", memory=8.0),
+        _capacity(used=52.0, max_queue=1),
+        now_ms=10.0,
+    )
+    controller.submit(
+        _request("rejected", "s2", memory=8.0),
+        _capacity(used=52.0, max_queue=1),
+        now_ms=11.0,
+    )
+    promoted = controller.promote_one(
+        _capacity(used=10.0, max_queue=1),
+        now_ms=12.0,
+    )
+
+    assert promoted is not None
+    assert promoted.action is AdmissionAction.ADMIT
+    telemetry = controller.telemetry
+    assert telemetry.decisions_total == 3
+    assert telemetry.admitted == 1
+    assert telemetry.queued == 1
+    assert telemetry.rejected == 1
+    assert telemetry.reason_counts == (
+        ("capacity_available", 1),
+        ("memory_pressure", 1),
+        ("queue_full", 1),
+    )
+
+
 def test_admission_scheduler_symbols_are_exported_from_runtime_package() -> None:
     from oai2.runtime import AdmissionBatchController as ExportedController
+    from oai2.runtime import AdmissionDecisionTrace as ExportedDecisionTrace
     from oai2.runtime import AdmissionScheduledRequest as ExportedScheduledRequest
     from oai2.runtime import AdmissionSchedulerMetrics as ExportedMetrics
+    from oai2.runtime import AdmissionTelemetry as ExportedTelemetry
     from oai2.runtime.admission_scheduler import (
         AdmissionBatchController,
+        AdmissionDecisionTrace,
         AdmissionScheduledRequest,
         AdmissionSchedulerMetrics,
+        AdmissionTelemetry,
     )
 
     assert ExportedController is AdmissionBatchController
+    assert ExportedDecisionTrace is AdmissionDecisionTrace
     assert ExportedScheduledRequest is AdmissionScheduledRequest
     assert ExportedMetrics is AdmissionSchedulerMetrics
+    assert ExportedTelemetry is AdmissionTelemetry
