@@ -50,6 +50,13 @@ from .inference import (
 )
 from .local_service import create_local_service_app
 from .model import ModelSpec, discover_default_device, smoke_check
+from .residency import (
+    CapacityTrendPoint,
+    ResidencyAccountant,
+    ResidencyOutcome,
+    ResidencyRecord,
+    ResidencySummary,
+)
 from .scheduler import (
     BatchPlan,
     SafeBatchScheduler,
@@ -73,6 +80,11 @@ __all__ = [
     "AdmissionReason",
     "AdmissionRequest",
     "CapacitySnapshot",
+    "CapacityTrendPoint",
+    "ResidencyAccountant",
+    "ResidencyOutcome",
+    "ResidencyRecord",
+    "ResidencySummary",
     "AccessPolicy",
     "ChatReply",
     "DEFAULT_GATEWAY_BASE_URL",
@@ -89,7 +101,6 @@ __all__ = [
     "InferenceResponse",
     "InferenceRuntime",
     "IsolatedSessionRegistry",
-    "PlaceholderRuntime",
     "ServiceCompatibility",
     "ServiceHealth",
     "ServiceLifecycle",
