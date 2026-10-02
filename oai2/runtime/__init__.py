@@ -40,7 +40,7 @@ from .gateway_runtime import (
     GatewayRuntimeError,
     load_gateway_config_from_env,
 )
-from .local_service import create_local_service_app\nfrom .inference import (
+from .inference import (
     InferenceRequest,
     InferenceResponse,
     InferenceRuntime,
@@ -48,6 +48,7 @@ from .local_service import create_local_service_app\nfrom .inference import (
     default_runtime,
     select_runtime_from_env,
 )
+from .local_service import create_local_service_app
 from .model import ModelSpec, discover_default_device, smoke_check
 from .scheduler import (
     BatchPlan,
@@ -84,9 +85,9 @@ __all__ = [
     "GatewayModelClient",
     "GatewayRuntime",
     "GatewayRuntimeError",
-    "InferenceRequest",\n    "create_local_service_app",
+    "InferenceRequest",
     "InferenceResponse",
-    "InferenceRuntime",\n    "create_local_service_app",
+    "InferenceRuntime",
     "IsolatedSessionRegistry",
     "PlaceholderRuntime",
     "ServiceCompatibility",
@@ -94,6 +95,7 @@ __all__ = [
     "ServiceLifecycle",
     "ServiceState",
     "SessionRecord",
+    "create_local_service_app",
     "default_runtime",
     "load_gateway_config_from_env",
     "select_runtime_from_env",
