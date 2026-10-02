@@ -53,6 +53,10 @@ CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("uv", "run", "mypy", "--ignore-missing-imports", "oai2"),
     ),
     ("pytest", ("uv", "run", "pytest", "-W", "error")),
+    (
+        "backend-smoke",
+        ("uv", "run", "python", "scripts/backend_smoke.py"),
+    ),
 )
 
 
