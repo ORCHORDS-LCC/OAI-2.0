@@ -110,3 +110,94 @@ def test_claim_state_machine_open_filter() -> None:
         )
     )
     assert [c.id for c in ctx.open()] == ["c_open"]
+
+
+# --- EvidenceNode status invariant (Refs #239) ---
+#
+# `EvidenceNode.status` is documented as derived from supporting/refuting
+# contents (UNVERIFIED / VERIFIED / CONFLICTING). Every construction path —
+# direct constructor, model_validate — must end with the derived value.
+# The following tests pin that invariant.
+
+
+def test_evidence_node_status_default_empty_is_unverified() -> None:
+    n = EvidenceNode(claim_id="c_empty_default")
+    assert n.status is EvidenceStatus.UNVERIFIED
+    assert n.supporting == ()
+    assert n.refuting == ()
+
+
+def test_evidence_node_lying_verified_with_empty_buckets_coerced() -> None:
+    # Lying status=VERIFIED with empty supporting/refuting used to produce a
+    # node whose status lied about its contents. The validator must coerce
+    # to the derived UNVERIFIED value.
+    n = EvidenceNode(
+        claim_id="c_lying_verified",
+        supporting=(),
+        refuting=(),
+        status=EvidenceStatus.VERIFIED,
+    )
+    assert n.status is EvidenceStatus.UNVERIFIED
+
+
+def test_evidence_node_lying_conflicting_with_empty_buckets_coerced() -> None:
+    # CONFLICTING with both lists empty is impossible by construction;
+    # the validator must coerce to UNVERIFIED.
+    n = EvidenceNode(
+        claim_id="c_lying_conflicting",
+        supporting=(),
+        refuting=(),
+        status=EvidenceStatus.CONFLICTING,
+    )
+    assert n.status is EvidenceStatus.UNVERIFIED
+
+
+def test_evidence_node_lying_verified_with_full_buckets_coerced() -> None:
+    # status=VERIFIED with both supporting and refuting populated is
+    # actually CONFLICTING — the validator must coerce.
+    n = EvidenceNode(
+        claim_id="c_lying_verified_full",
+        supporting=(_evidence("s1"),),
+        refuting=(_evidence("r1"),),
+        status=EvidenceStatus.VERIFIED,
+    )
+    assert n.status is EvidenceStatus.CONFLICTING
+
+
+def test_evidence_node_truthful_status_unchanged() -> None:
+    # Truthful inputs are unchanged — the validator is a guard, not a
+    # transformer of correct state.
+    n_truthful = EvidenceNode(
+        claim_id="c_truthful_verified",
+        supporting=(_evidence("e1"),),
+        refuting=(),
+        status=EvidenceStatus.VERIFIED,
+    )
+    assert n_truthful.status is EvidenceStatus.VERIFIED
+
+
+def test_evidence_node_model_validate_lying_status_coerced() -> None:
+    # Same invariant must hold for model_validate (the deserialization path
+    # used by JSON round-trips).
+    n = EvidenceNode.model_validate(
+        {
+            "claim_id": "c_via_validate",
+            "supporting": [],
+            "refuting": [],
+            "status": "verified",
+        }
+    )
+    assert n.status is EvidenceStatus.UNVERIFIED
+
+
+def test_evidence_node_lying_status_does_not_survive_truthful_construction() -> None:
+    # When the caller passes truthful status alongside truthful contents
+    # (the normal EvidenceGraph.add/merge path), the validator is a no-op.
+    n = EvidenceNode(
+        claim_id="c_truthful_default",
+        supporting=(_evidence("e1"),),
+        refuting=(_evidence("e2"),),
+        status=EvidenceStatus.CONFLICTING,
+    )
+    assert n.status is EvidenceStatus.CONFLICTING
+    assert n.net_count == 0

@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core import EvidenceId
 
@@ -74,6 +74,21 @@ class EvidenceNode(BaseModel):
         if has_support or has_refute:
             return EvidenceStatus.VERIFIED
         return EvidenceStatus.UNVERIFIED
+
+    @model_validator(mode="after")
+    def _enforce_status_invariant(self) -> EvidenceNode:
+        # `status` is documented as derived from supporting/refuting contents
+        # (UNVERIFIED / VERIFIED / CONFLICTING). Every construction path —
+        # direct constructor, model_validate, model_copy — must end with the
+        # derived value, not whatever the caller happened to pass. Without
+        # this validator a caller could build EvidenceNode(claim_id="c",
+        # status=EvidenceStatus.VERIFIED) and produce a node whose status
+        # lies about empty supporting/refuting contents. The single source of
+        # truth is _derive_status, shared with EvidenceGraph.add/merge.
+        derived = self._derive_status(self.supporting, self.refuting)
+        if self.status is not derived:
+            object.__setattr__(self, "status", derived)
+        return self
 
     @property
     def net_count(self) -> int:
