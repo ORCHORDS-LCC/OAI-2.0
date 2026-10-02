@@ -89,7 +89,7 @@ _CANNED_TEXT = (
 )
 
 
-def _chat_completion(text: str, model: str = "oai-1.2") -> httpx.Response:
+def _chat_completion(text: str, model: str = "oai-2.0") -> httpx.Response:
     """Canned OpenAI chat-completions response for the mocked transport."""
     return httpx.Response(
         200,
@@ -134,7 +134,7 @@ def _build_mocked_runtime() -> tuple[GatewayRuntime, list[httpx.Request]]:
     cfg = GatewayConfig(
         base_url="http://mock.local",
         api_key="smoke-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
     )
     client = httpx.Client(
         base_url=cfg.base_url,
