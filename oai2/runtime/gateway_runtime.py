@@ -68,20 +68,46 @@ class GatewayConfig:
     Built from environment variables via :func:`load_gateway_config_from_env`.
     Never includes the API key in its ``repr`` to keep accidental logs
     safe.
+
+    ``candidate_models`` is an ordered fallback chain consulted by
+    :meth:`GatewayRuntime.with_resolved_model` and the
+    :func:`oai2.runtime.gateway_models.resolve_working_model` factory
+    when the primary ``model`` is unavailable on the gateway (404,
+    503, transport error). An empty tuple means "no fallback".
     """
 
     base_url: str
     api_key: str
     model: str
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    candidate_models: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
             f"GatewayConfig(base_url={self.base_url!r}, "
             f"model={self.model!r}, "
+            f"candidate_models={self.candidate_models!r}, "
             f"api_key=<redacted len={len(self.api_key)}>, "
             f"timeout_seconds={self.timeout_seconds!r})"
         )
+
+    def candidates_including_primary(self) -> tuple[str, ...]:
+        """Return primary ``model`` followed by ``candidate_models``.
+
+        De-duplicates while preserving order so callers can render
+        a single ordered list for the resolver.
+        """
+
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in (self.model, *self.candidate_models):
+            if not isinstance(item, str) or not item:
+                continue
+            if item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return tuple(out)
 
 
 def load_gateway_config_from_env(
@@ -113,12 +139,35 @@ def load_gateway_config_from_env(
             timeout = DEFAULT_TIMEOUT_SECONDS
     else:
         timeout = DEFAULT_TIMEOUT_SECONDS
+    candidates = _parse_candidate_models(env.get("OAI2_GATEWAY_CANDIDATE_MODELS", ""))
     return GatewayConfig(
         base_url=base_url,
         api_key=api_key,
         model=model,
         timeout_seconds=timeout,
+        candidate_models=candidates,
     )
+
+
+def _parse_candidate_models(raw: str) -> tuple[str, ...]:
+    """Parse the comma-separated ``OAI2_GATEWAY_CANDIDATE_MODELS`` value.
+
+    Empty / whitespace-only entries are dropped; surrounding
+    whitespace is stripped; order is preserved. Returns an empty
+    tuple when the input is empty.
+    """
+
+    if not raw:
+        return ()
+    seen: set[str] = set()
+    out: list[str] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk or chunk in seen:
+            continue
+        seen.add(chunk)
+        out.append(chunk)
+    return tuple(out)
 
 
 def _redact(value: str) -> str:
@@ -183,6 +232,68 @@ class GatewayRuntime(InferenceRuntime):
                 "OAI2_GATEWAY_API_KEY is not set; cannot build GatewayRuntime",
             )
         return cls(config, client=client)
+
+    @classmethod
+    def from_env_with_fallback(
+        cls,
+        *,
+        client: httpx.Client | None = None,
+        probe: bool = True,
+    ) -> tuple[GatewayRuntime | None, object]:
+        """Build a runtime that prefers a working cloud model.
+
+        Calls :func:`oai2.runtime.gateway_models.resolve_working_model`
+        over the candidate chain (primary + :attr:`GatewayConfig.candidate_models`)
+        and returns a runtime pinned to the first reachable id. When
+        ``probe`` is False the primary model is used without probing;
+        resolution is still recorded so the caller can see why the
+        primary was chosen.
+
+        Returns ``(runtime, None)`` when the primary works or a
+        fallback succeeds. Returns ``(None, resolution)`` when no
+        candidate is reachable — the caller can decide whether to
+        raise, fall back to :class:`PlaceholderRuntime`, or surface
+        the diagnostic.
+        """
+
+        # Imported lazily so the gateway_runtime module stays
+        # import-light for the common path that doesn't probe.
+        from .gateway_models import resolve_working_model
+
+        config = load_gateway_config_from_env()
+        if config is None:
+            raise GatewayConfigError(
+                "OAI2_GATEWAY_API_KEY is not set; cannot build GatewayRuntime",
+            )
+        owns_client = client is None
+        live_client = client or httpx.Client(
+            base_url=config.base_url,
+            timeout=httpx.Timeout(config.timeout_seconds),
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "oai2-gateway-runtime/0.1",
+            },
+        )
+        if not probe:
+            return cls(config, client=live_client), None
+        resolution = resolve_working_model(
+            live_client,
+            config.candidates_including_primary(),
+            timeout=config.timeout_seconds,
+        )
+        if resolution.selected_model_id is None:
+            if owns_client:
+                live_client.close()
+            return None, resolution
+        resolved_config = GatewayConfig(
+            base_url=config.base_url,
+            api_key=config.api_key,
+            model=resolution.selected_model_id,
+            timeout_seconds=config.timeout_seconds,
+            candidate_models=config.candidate_models,
+        )
+        return cls(resolved_config, client=live_client), resolution
 
     @property
     def config(self) -> GatewayConfig:

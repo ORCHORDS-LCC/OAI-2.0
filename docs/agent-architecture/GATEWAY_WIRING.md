@@ -28,15 +28,16 @@ cycle covers the wire path end-to-end with zero live calls.
 
 ## Configuration
 
-The gateway runtime reads four environment variables. The first is
+The gateway runtime reads five environment variables. The first is
 required; the others have documented defaults.
 
-| Variable                      | Required | Default                     | Purpose                                         |
-|-------------------------------|----------|------------------------------|--------------------------------------------------|
-| `OAI2_GATEWAY_API_KEY`        | yes      | (empty)                      | Bearer token sent on every request.             |
-| `OAI2_GATEWAY_BASE_URL`       | no       | `https://api.orchords.com`   | Base URL of the gateway.                        |
-| `OAI2_GATEWAY_MODEL`          | no       | `oai-1.2`                    | Default model id sent in the request body.      |
-| `OAI2_GATEWAY_TIMEOUT_SECONDS`| no       | `60`                         | Per-request HTTP timeout.                       |
+| Variable                        | Required | Default                     | Purpose                                         |
+|---------------------------------|----------|------------------------------|--------------------------------------------------|
+| `OAI2_GATEWAY_API_KEY`          | yes      | (empty)                      | Bearer token sent on every request.             |
+| `OAI2_GATEWAY_BASE_URL`         | no       | `https://api.orchords.com`   | Base URL of the gateway.                        |
+| `OAI2_GATEWAY_MODEL`            | no       | `oai-1.2`                    | Default model id sent in the request body.      |
+| `OAI2_GATEWAY_TIMEOUT_SECONDS`  | no       | `60`                         | Per-request HTTP timeout.                       |
+| `OAI2_GATEWAY_CANDIDATE_MODELS` | no       | (empty)                     | Comma-separated fallback chain consulted when the primary model is unavailable (404 / 503 / transport error). The first reachable id wins. |
 
 The populated values must live in a gitignored `.env`. `.env.example`
 documents the contract with empty values; real tokens are NEVER
@@ -70,6 +71,41 @@ environments keep working with a deterministic offline runtime.
 The static `oai2.runtime.default_runtime()` is **unchanged** and
 always returns `PlaceholderRuntime`; the selector is additive and
 does not flip the default. Tests pin both contracts.
+
+## Cloud-model discovery + working-model fallback
+
+When the configured `OAI2_GATEWAY_MODEL` is temporarily down, missing
+from the cloud, or unreachable from the local host, callers should
+prefer :meth:`oai2.runtime.GatewayRuntime.from_env_with_fallback` over
+plain :meth:`from_env`. The fallback factory:
+
+1. Loads the gateway config (same env vars as `from_env`).
+2. Calls :func:`oai2.runtime.resolve_working_model` over the
+   candidate chain — primary model first, then each id in
+   `OAI2_GATEWAY_CANDIDATE_MODELS` (in declared order).
+3. Returns `(GatewayRuntime, WorkingModelResolution)` when at least
+   one candidate answered with a usable response. The runtime is pinned
+   to the first hit so subsequent requests don't re-probe.
+4. Returns `(None, WorkingModelResolution)` when every candidate
+   failed. The caller can then choose to raise, fall back to
+   `PlaceholderRuntime`, or surface the diagnostic.
+
+The candidate chain MUST be a subset of
+:data:`oai2.runtime.KNOWN_CLOUD_MODELS` (currently
+`{oai-1.0, oai-1.2, orchordsai-gpt, orchordsai-m3}`). Unknown ids are
+recorded as failed probes with a descriptive error rather than
+raising, so the diagnostic always explains why the chain didn't
+work.
+
+For an operator-side view of "what does the cloud offer right now",
+the `scripts/gateway_probe_models.py` CLI prints a status table:
+
+```
+uv run python scripts/gateway_probe_models.py
+uv run python scripts/gateway_probe_models.py --json
+uv run python scripts/gateway_probe_models.py \
+    --candidates oai-1.2,orchordsai-m3
+```
 
 ## Local gate
 
