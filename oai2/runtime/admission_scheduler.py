@@ -13,6 +13,7 @@ from .admission import (
     AdmissionDecision,
     AdmissionPolicy,
     AdmissionQueue,
+    AdmissionReason,
     AdmissionRequest,
     CapacitySnapshot,
 )
@@ -39,6 +40,40 @@ class AdmissionSchedulerMetrics:
     requests_emitted: int
 
 
+@dataclass(slots=True, frozen=True)
+class AdmissionDecisionTrace:
+    """Public-safe metadata explaining the most recent admission decision.
+
+    Request/session identifiers and prompt/model payloads are intentionally
+    excluded so callers can expose this shape in diagnostics without leaking
+    user or workload identity.
+    """
+
+    action: AdmissionAction
+    reason: AdmissionReason
+    mode: str
+    swarm_lanes: int
+    required_memory_gb: float
+    available_memory_gb: float
+    active_tasks: int
+    max_active_tasks: int
+    pending_admission: int
+    max_queue_depth: int
+    ready_queue_depth: int
+    deadline_present: bool
+
+
+@dataclass(slots=True, frozen=True)
+class AdmissionTelemetry:
+    decisions_total: int
+    admitted: int
+    queued: int
+    rejected: int
+    cancelled: int
+    reason_counts: tuple[tuple[str, int], ...]
+    last_decision: AdmissionDecisionTrace | None
+
+
 class AdmissionBatchController:
     """Apply admission/backpressure before exact-compatibility batching."""
 
@@ -54,6 +89,12 @@ class AdmissionBatchController:
             starvation_after_ms=self._policy.starvation_after_ms
         )
         self._pending: dict[str, AdmissionScheduledRequest] = {}
+        self._decision_counts: dict[AdmissionAction, int] = {
+            action: 0 for action in AdmissionAction
+        }
+        self._reason_counts: dict[AdmissionReason, int] = {}
+        self._cancelled = 0
+        self._last_decision: AdmissionDecisionTrace | None = None
 
     def submit(
         self,
@@ -72,6 +113,7 @@ class AdmissionBatchController:
         elif decision.action is AdmissionAction.QUEUE:
             self._pending[request.admission.request_id] = request
             self._pending_queue.enqueue(request.admission)
+        self._record_decision(request.admission, decision, effective)
         return decision
 
     def promote_one(
@@ -93,17 +135,46 @@ class AdmissionBatchController:
         elif decision.action is AdmissionAction.QUEUE:
             self._pending[admission.request_id] = request
             self._pending_queue.enqueue(admission)
+        self._record_decision(admission, decision, effective)
         return decision
 
     def cancel(self, request_id: str) -> bool:
         pending = self._pending.pop(request_id, None)
         if pending is not None:
             self._pending_queue.cancel(request_id)
+            self._cancelled += 1
             return True
-        return self._scheduler.cancel_request(request_id)
+        cancelled = self._scheduler.cancel_request(request_id)
+        if cancelled:
+            self._cancelled += 1
+        return cancelled
 
     def pop_batch(self, *, max_batch_size: int) -> BatchPlan | None:
         return self._scheduler.pop_batch(max_batch_size=max_batch_size)
+
+    def _record_decision(
+        self,
+        request: AdmissionRequest,
+        decision: AdmissionDecision,
+        capacity: CapacitySnapshot,
+    ) -> None:
+        self._decision_counts[decision.action] += 1
+        self._reason_counts[decision.reason] = self._reason_counts.get(decision.reason, 0) + 1
+        scheduler_metrics = self._scheduler.metrics
+        self._last_decision = AdmissionDecisionTrace(
+            action=decision.action,
+            reason=decision.reason,
+            mode=request.mode.value,
+            swarm_lanes=request.swarm_lanes,
+            required_memory_gb=decision.required_memory_gb,
+            available_memory_gb=decision.available_memory_gb,
+            active_tasks=capacity.active_tasks,
+            max_active_tasks=capacity.max_active_tasks,
+            pending_admission=len(self._pending),
+            max_queue_depth=capacity.max_queue_depth,
+            ready_queue_depth=scheduler_metrics.queue_depth,
+            deadline_present=request.deadline_ms is not None,
+        )
 
     @property
     def metrics(self) -> AdmissionSchedulerMetrics:
@@ -117,9 +188,25 @@ class AdmissionBatchController:
             requests_emitted=scheduler_metrics.requests_emitted,
         )
 
+    @property
+    def telemetry(self) -> AdmissionTelemetry:
+        return AdmissionTelemetry(
+            decisions_total=sum(self._decision_counts.values()),
+            admitted=self._decision_counts[AdmissionAction.ADMIT],
+            queued=self._decision_counts[AdmissionAction.QUEUE],
+            rejected=self._decision_counts[AdmissionAction.REJECT],
+            cancelled=self._cancelled,
+            reason_counts=tuple(
+                sorted((reason.value, count) for reason, count in self._reason_counts.items())
+            ),
+            last_decision=self._last_decision,
+        )
+
 
 __all__ = [
     "AdmissionScheduledRequest",
     "AdmissionSchedulerMetrics",
+    "AdmissionDecisionTrace",
+    "AdmissionTelemetry",
     "AdmissionBatchController",
 ]
