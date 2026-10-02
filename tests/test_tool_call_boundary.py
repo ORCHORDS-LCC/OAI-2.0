@@ -141,6 +141,55 @@ def test_endpoint_does_not_return_a_violating_call_as_executable() -> None:
     assert any("undeclared" in p for p in resp["tool_contract_problems"])
 
 
+def test_streaming_endpoint_does_not_emit_a_violating_call_as_executable() -> None:
+    """Buffered SSE must enforce the same boundary as JSON responses."""
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from oai2.server import openai_compat_app as mod
+    from tests.test_zcode_composer_integration import BASE_MESSAGES, _StubHotRuntime
+
+    runtime = _StubHotRuntime(script=[
+        {"text": "", "tool_calls": ({"id": "c1", "type": "function",
+                                      "function": {"name": "delete_all", "arguments": "{}"}},),
+         "finish_reason": "tool_calls"},
+    ])
+    real = mod.MLXHotRuntime
+
+    class _Patched(_StubHotRuntime):
+        def __init__(self, spec, *, model_id="", prefix_cache=None, gate_digest=False, **_):
+            super().__init__(model_id=model_id or "stub")
+            self._shared = runtime
+            if prefix_cache is not None:
+                self._prefix_cache = prefix_cache
+
+        def generate(self, request):
+            return self._shared.generate(request)
+
+    mod.MLXHotRuntime = _Patched  # type: ignore[misc]
+    try:
+        client = TestClient(mod.create_app(model_id="stub", with_tools=True))
+    finally:
+        mod.MLXHotRuntime = real  # type: ignore[misc]
+
+    tools = [{"type": "function", "function": {"name": "list_dir", "parameters": {}}}]
+    response = client.post("/v1/chat/completions", json={
+        "model": "stub", "messages": BASE_MESSAGES, "tools": tools, "stream": True,
+    })
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    ]
+    final = events[-1]
+    choice = final["choices"][0]
+    assert "tool_calls" not in choice["delta"]
+    assert choice["finish_reason"] == "tool_contract_violation"
+    assert final["rejected_tool_calls"]
+    assert any("undeclared" in p for p in final["tool_contract_problems"])
+
+
 def test_endpoint_returns_a_clean_call_normally() -> None:
     from fastapi.testclient import TestClient
 

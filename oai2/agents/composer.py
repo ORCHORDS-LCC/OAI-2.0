@@ -37,6 +37,7 @@ Two rules that this module exists to enforce:
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -128,6 +129,10 @@ class PrefixSpec:
     tool_schema_version: str = "0"
     project_text: str = ""
     project_version: str = "0"
+    # Exact leading caller-owned messages, when this prefix came from an
+    # OpenAI-compatible request. Their roles and optional fields affect the
+    # serving template and therefore the rendered KV prefix.
+    caller_prefix: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("policy_text", "policy_version", "tool_schema_version"):
@@ -150,6 +155,7 @@ class PrefixSpec:
             f"project_version={version}",
             f"policy_text={self.policy_text}",
             f"project_text={text}",
+            "caller_prefix=" + "|".join(_stable_json(message) for message in self.caller_prefix),
             "tools=" + "|".join(_stable_json(tool) for tool in self.tool_wire),
         ]
         return "\n".join(parts)
@@ -174,16 +180,19 @@ class PrefixSpec:
         prefix, and is reported by :func:`assert_template_safe`.
         """
         head: list[str] = []
+        caller_prefix: list[Mapping[str, Any]] = []
         for message in messages:
             role = message.get("role")
             if role not in {"system", "developer"}:
                 break
             head.append(str(message.get("content", "")))
+            caller_prefix.append(dict(message))
         return cls(
             policy_text="\n".join(head) if head else "(no caller system prompt)",
             policy_version="caller",
             tool_wire=tuple(tool_wire),
             tool_schema_version="caller",
+            caller_prefix=tuple(caller_prefix),
         )
 
     def digest(self) -> str:
@@ -602,8 +611,8 @@ def compose(
 
 
 def _stable_json(value: Mapping[str, Any]) -> str:
-    """Order-independent JSON so tool schema key order cannot move the digest."""
-    return ",".join(f"{k}={value[k]!r}" for k in sorted(value))
+    """Canonicalise nested wire data without depending on insertion order."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _goal_version(state: Mapping[str, Any] | None, delta_applied: bool) -> str:

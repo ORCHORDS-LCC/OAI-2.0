@@ -333,8 +333,13 @@ def _sse(
                 ],
             }
         )
+    problems = validate_tool_calls(
+        response.tool_calls,
+        declared=tools,
+        tool_choice=body.tool_choice,
+    )
     final_delta: dict[str, Any] = {}
-    if response.tool_calls:
+    if response.tool_calls and not problems:
         final_delta["tool_calls"] = [
             {
                 "index": i,
@@ -344,25 +349,26 @@ def _sse(
             }
             for i, call in enumerate(response.tool_calls)
         ]
-    yield event(
-        {
-            **base,
-            "created": created,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": final_delta,
-                    "finish_reason": response.finish_reason or "stop",
-                }
-            ],
-            "usage": _usage(response),
-            "prefix_digest": prefix.digest(),
-            "prefix_cache": _prefix_report(runtime, response),
-            "tool_contract_problems": list(
-                validate_tool_calls(response.tool_calls, declared=tools, tool_choice=body.tool_choice)
-            ),
-        }
-    )
+    final_payload: dict[str, Any] = {
+        **base,
+        "created": created,
+        "choices": [
+            {
+                "index": 0,
+                "delta": final_delta,
+                "finish_reason": "tool_contract_violation" if problems else response.finish_reason or "stop",
+            }
+        ],
+        "usage": _usage(response),
+        "prefix_digest": prefix.digest(),
+        "prefix_cache": _prefix_report(runtime, response),
+        "tool_contract_problems": list(problems),
+    }
+    if problems and response.tool_calls:
+        # Keep rejected calls auditable, but never put them in an executable
+        # ``delta.tool_calls`` field where an SSE client may dispatch them.
+        final_payload["rejected_tool_calls"] = list(response.tool_calls)
+    yield event(final_payload)
     yield "data: [DONE]\n\n"
 
 

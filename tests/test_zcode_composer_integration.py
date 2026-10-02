@@ -147,6 +147,13 @@ class TestZCodePathCarriesPrefixIdentity:
         ).json()["prefix_digest"]
         assert a != b
 
+    def test_digest_tracks_leading_message_roles(self):
+        rt = _StubHotRuntime()
+        client = _client(rt)
+        system = _post(client, [{"role": "system", "content": "same"}, {"role": "user", "content": "U"}])
+        developer = _post(client, [{"role": "developer", "content": "same"}, {"role": "user", "content": "U"}])
+        assert system.json()["prefix_digest"] != developer.json()["prefix_digest"]
+
     def test_digest_tracks_the_advertised_tool_schema(self):
         rt = _StubHotRuntime()
         client = _client(rt)
