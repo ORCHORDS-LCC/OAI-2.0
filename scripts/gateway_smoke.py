@@ -66,7 +66,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Model id to request. Defaults to OAI2_GATEWAY_MODEL "
-            "(or oai-2.0)."
+            "(or oai-1.2)."
         ),
     )
     parser.add_argument(
