@@ -1,0 +1,287 @@
+{
+  "tag": "wi-perf-003-A-B",
+  "backend": "mlx",
+  "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+  "max_tokens": 128,
+  "repetitions": 5,
+  "warmup": true,
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "configs": [
+    {
+      "prompt_label": "~128tokens (98words)",
+      "prompt_tokens": 129,
+      "runs": [
+        {
+          "run_id": "bench_e58af72c7d",
+          "timestamp": 1790957715.755579,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 128,
+          "load_seconds": 0.4146494999877177,
+          "compile_seconds": 0.051496458996552974,
+          "warm_run_seconds": 0.022931542014703155,
+          "prefill_seconds": 0.009835958015173674,
+          "prefill_tokens_per_second": 13115.143415719658,
+          "decode_seconds": 0.20371295796940103,
+          "decode_tokens_per_second": 629.6990430616102,
+          "end_to_end_seconds": 0.2135489159845747,
+          "generation_tokens": 128,
+          "peak_memory_gb": 0.12456064,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.01902586,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effec",
+          "notes": []
+        },
+        {
+          "run_id": "bench_c609f0c220",
+          "timestamp": 1790957716.362417,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 128,
+          "load_seconds": 0.337078417011071,
+          "compile_seconds": 0.03292462497483939,
+          "warm_run_seconds": 0.024157250009011477,
+          "prefill_seconds": 0.010407084017060697,
+          "prefill_tokens_per_second": 12395.40295711323,
+          "decode_seconds": 0.19808237499091774,
+          "decode_tokens_per_second": 647.6972075487336,
+          "end_to_end_seconds": 0.20848945900797844,
+          "generation_tokens": 128,
+          "peak_memory_gb": 0.123970828,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.019028574,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effec",
+          "notes": []
+        },
+        {
+          "run_id": "bench_6ddd1fcbd3",
+          "timestamp": 1790957716.987919,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 128,
+          "load_seconds": 0.3462815840030089,
+          "compile_seconds": 0.027958250022493303,
+          "warm_run_seconds": 0.022935250017326325,
+          "prefill_seconds": 0.01126224995823577,
+          "prefill_tokens_per_second": 11454.194364214576,
+          "decode_seconds": 0.21307887503644451,
+          "decode_tokens_per_second": 602.0504992772934,
+          "end_to_end_seconds": 0.22434112499468029,
+          "generation_tokens": 128,
+          "peak_memory_gb": 0.120775924,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.019037382,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effec",
+          "notes": []
+        },
+        {
+          "run_id": "bench_94e6f5582a",
+          "timestamp": 1790957717.585241,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 128,
+          "load_seconds": 0.32905387500068173,
+          "compile_seconds": 0.030771250021643937,
+          "warm_run_seconds": 0.021000417007599026,
+          "prefill_seconds": 0.009278042009100318,
+          "prefill_tokens_per_second": 13903.795636349894,
+          "decode_seconds": 0.20312220801133662,
+          "decode_tokens_per_second": 631.5518102528943,
+          "end_to_end_seconds": 0.21240025002043694,
+          "generation_tokens": 128,
+          "peak_memory_gb": 0.123823364,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.019034308,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effec",
+          "notes": []
+        },
+        {
+          "run_id": "bench_7e9cebd55c",
+          "timestamp": 1790957718.185588,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 128,
+          "load_seconds": 0.32422262500040233,
+          "compile_seconds": 0.02905625000130385,
+          "warm_run_seconds": 0.02272266597719863,
+          "prefill_seconds": 0.011084500001743436,
+          "prefill_tokens_per_second": 11637.87270329831,
+          "decode_seconds": 0.20901158399647102,
+          "decode_tokens_per_second": 613.6518338164211,
+          "end_to_end_seconds": 0.22009608399821445,
+          "generation_tokens": 128,
+          "peak_memory_gb": 0.123970828,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.019035484,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs",
+          "output_excerpt": "on public functions, their inputs and outputs, error conditions, and any side effects. Be concise and accurate. Summarize the following Python module. Focus on public functions, their inputs and outputs, error conditions, and any side effec",
+          "notes": []
+        }
+      ],
+      "aggregate": {
+        "load_seconds": {
+          "count": 5,
+          "mean": 0.3502572002005763,
+          "median": 0.337078417011071,
+          "min": 0.32422262500040233,
+          "max": 0.4146494999877177,
+          "stddev": 0.03305520905324738
+        },
+        "compile_seconds": {
+          "count": 5,
+          "mean": 0.034441366803366694,
+          "median": 0.030771250021643937,
+          "min": 0.027958250022493303,
+          "max": 0.051496458996552974,
+          "stddev": 0.008691107165951558
+        },
+        "warm_run_seconds": {
+          "count": 5,
+          "mean": 0.022749425005167724,
+          "median": 0.022931542014703155,
+          "min": 0.021000417007599026,
+          "max": 0.024157250009011477,
+          "stddev": 0.0010108821694827397
+        },
+        "prefill_seconds": {
+          "count": 5,
+          "mean": 0.010373566800262779,
+          "median": 0.010407084017060697,
+          "min": 0.009278042009100318,
+          "max": 0.01126224995823577,
+          "stddev": 0.000746391981456232
+        },
+        "prefill_tokens_per_second": {
+          "count": 5,
+          "mean": 12501.281815339133,
+          "median": 12395.40295711323,
+          "min": 11454.194364214576,
+          "max": 13903.795636349894,
+          "stddev": 916.1821696829523
+        },
+        "decode_seconds": {
+          "count": 5,
+          "mean": 0.20540160000091418,
+          "median": 0.20371295796940103,
+          "min": 0.19808237499091774,
+          "max": 0.21307887503644451,
+          "stddev": 0.005168959874463224
+        },
+        "decode_tokens_per_second": {
+          "count": 5,
+          "mean": 624.9300787913905,
+          "median": 629.6990430616102,
+          "min": 602.0504992772934,
+          "max": 647.6972075487336,
+          "stddev": 15.720092035797066
+        },
+        "end_to_end_seconds": {
+          "count": 5,
+          "mean": 0.21577516680117698,
+          "median": 0.2135489159845747,
+          "min": 0.20848945900797844,
+          "max": 0.22434112499468029,
+          "stddev": 0.005682847160002062
+        },
+        "peak_memory_gb": {
+          "count": 5,
+          "mean": 0.12342031680000001,
+          "median": 0.123970828,
+          "min": 0.120775924,
+          "max": 0.12456064,
+          "stddev": 0.0013462334484946347
+        },
+        "active_memory_gb": {
+          "count": 5,
+          "mean": 0.078307976,
+          "median": 0.078307976,
+          "min": 0.078307976,
+          "max": 0.078307976,
+          "stddev": 0.0
+        },
+        "cache_memory_gb": {
+          "count": 5,
+          "mean": 0.0190323216,
+          "median": 0.019034308,
+          "min": 0.01902586,
+          "max": 0.019037382,
+          "stddev": 4.3669437184373155e-06
+        },
+        "generation_tokens": {
+          "count": 5,
+          "mean": 128.0,
+          "median": 128,
+          "min": 128,
+          "max": 128,
+          "stddev": 0.0
+        }
+      }
+    }
+  ]
+}
