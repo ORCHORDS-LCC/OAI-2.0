@@ -44,7 +44,7 @@ from .inference import InferenceRequest, InferenceResponse, InferenceRuntime
 from .model import ModelSpec
 
 DEFAULT_GATEWAY_BASE_URL = "https://api.orchords.com"
-DEFAULT_GATEWAY_MODEL = "oai-1.2"
+DEFAULT_GATEWAY_MODEL = "oai-2.0"
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 

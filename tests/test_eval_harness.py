@@ -71,7 +71,7 @@ def _chat_completion(text: str = "ok") -> httpx.Response:
             "id": "chatcmpl-harness",
             "object": "chat.completion",
             "created": 0,
-            "model": "oai-1.2",
+            "model": "oai-2.0",
             "choices": [
                 {
                     "index": 0,
@@ -93,7 +93,7 @@ def _gateway_runtime_with(handler) -> GatewayRuntime:
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="smoke-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         timeout_seconds=5.0,
     )
     client = httpx.Client(

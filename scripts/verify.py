@@ -310,7 +310,7 @@ def run_gateway_reach_check() -> bool:
         "OAI2_GATEWAY_BASE_URL",
         "https://api.orchords.com",
     ).strip().rstrip("/") or "https://api.orchords.com"
-    expected_model = os.getenv("OAI2_GATEWAY_MODEL", "oai-1.2").strip() or "oai-1.2"
+    expected_model = os.getenv("OAI2_GATEWAY_MODEL", "oai-2.0").strip() or "oai-2.0"
 
     try:
         import httpx

@@ -244,7 +244,7 @@ def test_select_runtime_from_env_returns_gateway_when_key_set(
     """
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "sel-token-xyz")
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
 
     rt = select_runtime_from_env()
     closed = False
@@ -254,7 +254,7 @@ def test_select_runtime_from_env_returns_gateway_when_key_set(
         assert isinstance(rt, GatewayRuntime)
         assert rt.config.api_key == "sel-token-xyz"
         assert rt.config.base_url == "https://gateway.example.test"
-        assert rt.config.model == "oai-1.2"
+        assert rt.config.model == "oai-2.0"
     finally:
         from oai2.runtime import GatewayRuntime
 
@@ -273,7 +273,7 @@ def test_select_runtime_from_env_falls_back_on_partial_config(
     """
     monkeypatch.delenv("OAI2_GATEWAY_API_KEY", raising=False)
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
 
     rt = select_runtime_from_env()
     assert isinstance(rt, PlaceholderRuntime)

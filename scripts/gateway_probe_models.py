@@ -2,16 +2,18 @@
 """OAI-2.0 cloud-model liveness probe — table view of every known cloud model.
 
 Reports the status of every id in :data:`oai2.runtime.KNOWN_CLOUD_MODELS`
-against the configured public gateway. Designed for an operator with
-``OAI2_GATEWAY_API_KEY`` in a gitignored ``.env`` to verify which
-cloud models are reachable right now — independent of any configured
+against the configured public gateway. ``KNOWN_CLOUD_MODELS`` is the
+strict single-id allowlist this client treats as acceptable — only
+``oai-2.0`` is in it. Designed for an operator with
+``OAI2_GATEWAY_API_KEY`` in a gitignored ``.env`` to verify whether
+``oai-2.0`` is reachable right now — independent of any configured
 ``OAI2_GATEWAY_MODEL`` default.
 
 Usage::
 
     uv run python scripts/gateway_probe_models.py
     uv run python scripts/gateway_probe_models.py --json
-    uv run python scripts/gateway_probe_models.py --candidates oai-2.0,oai-1.2,orchordsai-m3
+    uv run python scripts/gateway_probe_models.py --candidates oai-2.0
 
 The bearer token is read from ``OAI2_GATEWAY_API_KEY`` and never echoed.
 The script is runner-free; it talks to the gateway directly via httpx.
@@ -67,7 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default=None,
-        help="Configured primary model id (default: OAI2_GATEWAY_MODEL or oai-1.2).",
+        help="Configured primary model id (default: OAI2_GATEWAY_MODEL or oai-2.0).",
     )
     parser.add_argument(
         "--prompt",
@@ -156,15 +158,15 @@ def main() -> int:
         except Exception:
             exposed = None
 
-order = [primary] + [c for c in candidates if c != primary]
-    resolution: WorkingModelResolution = resolve_working_model(
-        client,
-        order,
-        prompt=args.prompt,
-        max_tokens=args.max_tokens,
-        timeout=args.timeout,
-    )
-    probes = list(resolution.probes)
+        order = [primary] + [c for c in candidates if c != primary]
+        resolution: WorkingModelResolution = resolve_working_model(
+            client,
+            order,
+            prompt=args.prompt,
+            max_tokens=args.max_tokens,
+            timeout=args.timeout,
+        )
+        probes = list(resolution.probes)
 
     if args.json:
         payload = {

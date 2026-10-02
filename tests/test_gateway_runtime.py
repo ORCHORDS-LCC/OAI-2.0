@@ -31,7 +31,7 @@ def _config(**overrides) -> GatewayConfig:
     payload = {
         "base_url": "https://gateway.example.test",
         "api_key": "test-token-xyz",
-        "model": "oai-1.2",
+        "model": "oai-2.0",
         "timeout_seconds": 5.0,
     }
     payload.update(overrides)
@@ -74,7 +74,7 @@ def test_load_gateway_config_from_env_strips_trailing_slash(
 ) -> None:
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://api.orchords.com/")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
     cfg = load_gateway_config_from_env()
     assert cfg is not None
     assert cfg.base_url == "https://api.orchords.com"
@@ -92,7 +92,7 @@ def test_load_gateway_config_from_env_rejects_bad_timeout(
 
 def test_gateway_runtime_requires_api_key() -> None:
     with pytest.raises(GatewayConfigError):
-        GatewayRuntime(GatewayConfig(base_url="x", api_key="", model="oai-1.2"))
+        GatewayRuntime(GatewayConfig(base_url="x", api_key="", model="oai-2.0"))
 
 
 def test_gateway_runtime_from_env_raises_when_key_missing(
@@ -114,7 +114,7 @@ def test_gateway_runtime_sends_chat_completion_request() -> None:
             200,
             json={
                 "id": "chatcmpl-1",
-                "model": "oai-1.2",
+                "model": "oai-2.0",
                 "choices": [
                     {
                         "index": 0,
@@ -151,7 +151,7 @@ def test_gateway_runtime_sends_chat_completion_request() -> None:
     assert captured["path"] == "/v1/chat/completions"
     assert captured["auth"] == "Bearer test-token-xyz"
     body = captured["body"]
-    assert body["model"] == "oai-1.2"
+    assert body["model"] == "oai-2.0"
     assert body["messages"] == [{"role": "user", "content": "ping"}]
     assert body["max_tokens"] == 64
     assert body["temperature"] == 0.2
@@ -296,7 +296,7 @@ def test_gateway_runtime_uses_request_model_when_provided() -> None:
             },
         )
 
-    cfg = _config(model="oai-1.2")
+    cfg = _config(model="oai-2.0")
     runtime = GatewayRuntime(
         cfg,
         client=httpx.Client(
@@ -310,12 +310,12 @@ def test_gateway_runtime_uses_request_model_when_provided() -> None:
         response = runtime.generate(
             InferenceRequest(
                 prompt="hi",
-                model=ModelSpec(name="oai-1.0"),
+                model=ModelSpec(name="oai-2.0"),
             )
         )
     finally:
         runtime.close()
-    assert captured["body"]["model"] == "oai-1.0"
+    assert captured["body"]["model"] == "oai-2.0"
     assert response.text == "ok"
 
 
@@ -338,7 +338,7 @@ def test_gateway_runtime_falls_back_to_config_model() -> None:
             },
         )
 
-    cfg = _config(model="oai-1.2")
+    cfg = _config(model="oai-2.0")
     runtime = GatewayRuntime(
         cfg,
         client=httpx.Client(
@@ -350,5 +350,5 @@ def test_gateway_runtime_falls_back_to_config_model() -> None:
         response = runtime.generate(InferenceRequest(prompt="hi"))
     finally:
         runtime.close()
-    assert captured["body"]["model"] == "oai-1.2"
+    assert captured["body"]["model"] == "oai-2.0"
     assert response.text == "ok"

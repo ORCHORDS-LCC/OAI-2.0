@@ -8,9 +8,9 @@ the path. No credentials or live tokens appear in this file.
 ## Data path
 
 ```
-+------------------+      HTTP (HTTPS)      +-------------------+      +--------+
-| OAI-2.0 runtime  |  ───────────────────▶  | api.orchords.com  |  ──▶ | oai-1.2 |
-| GatewayRuntime   |  POST /v1/chat/        | ORCHORDS gateway  |      +--------+
++------------------+      HTTP (HTTPS)      +-------------------+      +----------+
+| OAI-2.0 runtime  |  ───────────────────▶  | api.orchords.com  |  ──▶ | oai-2.0  |
+| GatewayRuntime   |  POST /v1/chat/        | ORCHORDS gateway  |      +----------+
 | (InferenceRuntime|       completions       | (q-pipe)          |
 |  subclass)       |  Authorization: Bearer |                   |
 +------------------+                        +-------------------+
@@ -35,7 +35,7 @@ required; the others have documented defaults.
 |---------------------------------|----------|------------------------------|--------------------------------------------------|
 | `OAI2_GATEWAY_API_KEY`          | yes      | (empty)                      | Bearer token sent on every request.             |
 | `OAI2_GATEWAY_BASE_URL`         | no       | `https://api.orchords.com`   | Base URL of the gateway.                        |
-| `OAI2_GATEWAY_MODEL`            | no       | `oai-1.2`                    | Default model id sent in the request body.      |
+| `OAI2_GATEWAY_MODEL`            | no       | `oai-2.0`                    | Default model id sent in the request body.      |
 | `OAI2_GATEWAY_TIMEOUT_SECONDS`  | no       | `60`                         | Per-request HTTP timeout.                       |
 | `OAI2_GATEWAY_CANDIDATE_MODELS` | no       | (empty)                     | Comma-separated fallback chain consulted when the primary model is unavailable (404 / 503 / transport error). The first reachable id wins. |
 
@@ -91,20 +91,31 @@ plain :meth:`from_env`. The fallback factory:
    `PlaceholderRuntime`, or surface the diagnostic.
 
 The candidate chain MUST be a subset of
-:data:`oai2.runtime.KNOWN_CLOUD_MODELS` (currently
-`{oai-1.0, oai-1.2, orchordsai-gpt, orchordsai-m3}`). Unknown ids are
+:data:`oai2.runtime.KNOWN_CLOUD_MODELS` — which is the **strict
+single-id allowlist** the OAI-2.0 client treats as acceptable cloud
+identities. It currently contains exactly one id:
+
+```python
+KNOWN_CLOUD_MODELS = frozenset({"oai-2.0"})
+```
+
+Historical ids (`oai-1.0`, `oai-1.2`, `orchordsai-gpt`,
+`orchordsai-m3`) are deliberately **not** in this set; any probe
+or resolve against them raises :class:`UnknownModelError` and
+fails closed. Widening the allowlist is an explicit code change,
+not a runtime configuration — see issue #237. Unknown ids are
 recorded as failed probes with a descriptive error rather than
 raising, so the diagnostic always explains why the chain didn't
 work.
 
-For an operator-side view of "what does the cloud offer right now",
+For an operator-side view of "is oai-2.0 reachable right now",
 the `scripts/gateway_probe_models.py` CLI prints a status table:
 
 ```
 uv run python scripts/gateway_probe_models.py
 uv run python scripts/gateway_probe_models.py --json
 uv run python scripts/gateway_probe_models.py \
-    --candidates oai-1.2,orchordsai-m3
+    --candidates oai-2.0
 ```
 
 ## Local gate
@@ -117,7 +128,7 @@ exits cleanly (SKIP) otherwise. When it runs, it sends one
 `OAI2_GATEWAY_MODEL` is in the response.
 
 ```
-PASS gateway-reach: https://api.orchords.com exposes oai-1.2 (of 1 models)
+PASS gateway-reach: https://api.orchords.com exposes oai-2.0 (of 1 models)
 ```
 
 The check is intentionally live (no `MockTransport`) — it is the
@@ -154,7 +165,7 @@ HTTP status code is preserved on `exc.status_code`.
 | `oai2.evals.run_eval_harness()` + `HarnessReport`    | IMPLEMENTED | Drives the builtin capability suites via `select_runtime_from_env()`; aggregates per-suite pass-rate; 12 dedicated tests in `tests/test_eval_harness.py` covering both placeholder and gateway (with MockTransport) paths plus `continue_on_error` fault isolation (`SuiteReport.error` carries `f"{ExcType}: {msg}"` for failing suites while surviving suites still complete). |
 | `scripts/verify.py backend-smoke`                    | IMPLEMENTED | Hermetic cross-repo seam smoke: `scripts/backend_smoke.py` exercises `run_eval_harness()` end-to-end through `select_runtime_from_env()` + mocked `GatewayRuntime` (no live token); 10 dedicated tests in `tests/test_backend_smoke.py` pin the `PASS/FAIL` stdout contract and exit codes 0/1/2 (forced-failure paths via patched selector / patched harness / boundary-routed subprocess wrapper + the `_owns_runtime()` guard regression test for `runtime.close()`). |
 | End-to-end from P50                                  | OPEN        | Not yet exercised — pending operator-supplied token.                                |
-| api.orchords.com model list                          | OPEN        | Cloud currently exposes 4 models; local qpipe exposes 1.                           |
+| api.orchords.com `oai-2.0` deployment                | OPEN        | Cloud currently exposes 4 historical ids; client is now pinned to `oai-2.0` only (Refs #237). |
 | Knowledge transport worker                           | PROPOSED    | Cloudflare Worker entrypoint in design phase.                                      |
 
 ## Test surface (cloud-touching layers)

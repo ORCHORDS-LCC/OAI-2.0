@@ -43,7 +43,7 @@ def _chat_completion(content: str) -> httpx.Response:
         200,
         json={
             "id": "chatcmpl-bench",
-            "model": "oai-1.2",
+            "model": "oai-2.0",
             "choices": [
                 {
                     "index": 0,
@@ -66,7 +66,7 @@ def _runtime_with(handler) -> GatewayRuntime:
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="bench-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         timeout_seconds=5.0,
     )
     client = httpx.Client(
@@ -154,7 +154,7 @@ def test_run_one_gateway_records_warmup_and_measured_separately(
     metrics = bench.run_one_gateway(
         base_url="https://gateway.example.test",
         api_key="bench-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         prompt=prompt,
         prompt_label="~16tokens (8words)",
         max_tokens=64,
@@ -171,7 +171,7 @@ def test_run_one_gateway_records_warmup_and_measured_separately(
     assert metrics.decode_seconds == 0.0
     assert metrics.prefill_tokens_per_second is not None
     assert metrics.device == "gateway:https://gateway.example.test"
-    assert metrics.model == "gateway:oai-1.2"
+    assert metrics.model == "gateway:oai-2.0"
     assert "prefill==end_to_end" in " ".join(metrics.notes)
 
 
@@ -190,7 +190,7 @@ def test_run_one_gateway_no_warmup_makes_only_one_call(
     metrics = bench.run_one_gateway(
         base_url="https://gateway.example.test",
         api_key="bench-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         prompt="hi",
         prompt_label="~16tokens",
         max_tokens=64,
@@ -217,7 +217,7 @@ def test_run_one_gateway_memory_metrics_are_none(
     metrics = bench.run_one_gateway(
         base_url="https://gateway.example.test",
         api_key="bench-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         prompt="hi",
         prompt_label="~16tokens",
         max_tokens=64,
@@ -243,7 +243,7 @@ def test_run_one_gateway_propagates_http_error(
     metrics = bench.run_one_gateway(
         base_url="https://gateway.example.test",
         api_key="bench-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         prompt="hi",
         prompt_label="~16tokens",
         max_tokens=64,
@@ -272,7 +272,7 @@ def test_run_one_gateway_api_key_does_not_leak_into_metrics(
     metrics = bench.run_one_gateway(
         base_url="https://gateway.example.test",
         api_key="decoy-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         prompt="hi",
         prompt_label="~16tokens",
         max_tokens=64,
@@ -311,7 +311,7 @@ def test_main_gateway_backend_writes_summary_with_backend_field(
             "--backend",
             "gateway",
             "--model",
-            "oai-1.2",
+            "oai-2.0",
             "--repetitions",
             "2",
             "--prompt-tokens",
@@ -327,7 +327,7 @@ def test_main_gateway_backend_writes_summary_with_backend_field(
     assert len(summary_files) == 1
     summary = json.loads(summary_files[0].read_text())
     assert summary["backend"] == "gateway"
-    assert summary["model"] == "oai-1.2"
+    assert summary["model"] == "oai-2.0"
     assert summary["repetitions"] == 2
     assert len(summary["configs"]) == 1
     config = summary["configs"][0]
@@ -386,7 +386,7 @@ def test_bench_main_boundary_exits_zero_via_runpy(
 
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "runpy-bench-token-xyz")
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
 
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -398,7 +398,7 @@ def test_bench_main_boundary_exits_zero_via_runpy(
         "--backend",
         "gateway",
         "--model",
-        "oai-1.2",
+        "oai-2.0",
         "--repetitions",
         "1",
         "--prompt-tokens",
@@ -437,7 +437,7 @@ def test_bench_main_boundary_exits_zero_via_runpy(
         f"stdout={stdout.getvalue()!r}\nstderr={stderr.getvalue()!r}"
     )
     err = stderr.getvalue()
-    assert "benchmark: backend=gateway model=oai-1.2" in err
+    assert "benchmark: backend=gateway model=oai-2.0" in err
     assert "wrote summary:" in err
 
     # Per-run + summary artifacts were written to tmp_path, not the real
@@ -449,7 +449,7 @@ def test_bench_main_boundary_exits_zero_via_runpy(
     assert len(summary_files) == 1
     summary = json.loads(summary_files[0].read_text())
     assert summary["backend"] == "gateway"
-    assert summary["model"] == "oai-1.2"
+    assert summary["model"] == "oai-2.0"
     assert summary["repetitions"] == 1
     assert summary["tag"] == "runpy-boundary"
 

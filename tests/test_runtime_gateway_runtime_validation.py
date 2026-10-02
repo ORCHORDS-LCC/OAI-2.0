@@ -195,7 +195,7 @@ def test_default_gateway_base_url_is_pinned_to_orchords() -> None:
 
 def test_default_gateway_model_is_pinned() -> None:
     """``DEFAULT_GATEWAY_MODEL`` must equal the configured model id."""
-    assert DEFAULT_GATEWAY_MODEL == "oai-1.2"
+    assert DEFAULT_GATEWAY_MODEL == "oai-2.0"
 
 
 def test_default_timeout_seconds_is_a_positive_finite_number() -> None:
@@ -213,7 +213,7 @@ def _config(**overrides: Any) -> GatewayConfig:
     payload: dict[str, Any] = {
         "base_url": "https://gateway.example.test",
         "api_key": "test-token-xyz",
-        "model": "oai-1.2",
+        "model": "oai-2.0",
         "timeout_seconds": 5.0,
     }
     payload.update(overrides)
@@ -237,9 +237,15 @@ def _mock_client(
 
 
 def test_gateway_config_field_set_is_pinned() -> None:
-    """``GatewayConfig`` must have exactly 4 fields with documented defaults."""
+    """``GatewayConfig`` must have exactly 5 fields with documented defaults."""
     fields = {f.name for f in GatewayConfig.__dataclass_fields__.values()}
-    assert fields == {"base_url", "api_key", "model", "timeout_seconds"}
+    assert fields == {
+        "base_url",
+        "api_key",
+        "model",
+        "timeout_seconds",
+        "candidate_models",
+    }
 
 
 def test_gateway_config_is_slots_and_frozen() -> None:
@@ -270,10 +276,10 @@ def test_gateway_config_repr_uses_redacted_len_marker() -> None:
 
 def test_gateway_config_repr_includes_base_url_and_model() -> None:
     """``__repr__`` must include the base_url and model (non-secret config)."""
-    cfg = _config(base_url="https://gateway.example.test", model="oai-1.2")
+    cfg = _config(base_url="https://gateway.example.test", model="oai-2.0")
     rendered = repr(cfg)
     assert "https://gateway.example.test" in rendered
-    assert "oai-1.2" in rendered
+    assert "oai-2.0" in rendered
 
 
 def test_gateway_config_repr_includes_timeout_seconds() -> None:
@@ -848,14 +854,14 @@ def test_generate_includes_status_code_in_notes() -> None:
 
 def test_generate_includes_model_marker_in_notes() -> None:
     """``notes`` must record the configured model id."""
-    cfg = _config(model="oai-1.2")
+    cfg = _config(model="oai-2.0")
     payload = {"choices": [{"finish_reason": "stop", "message": {"content": "x"}}]}
     runtime = GatewayRuntime(cfg, client=_transport_client(cfg, payload))
     try:
         response = runtime.generate(InferenceRequest(prompt="hi"))
     finally:
         runtime.close()
-    assert any("model=oai-1.2" in note for note in response.notes)
+    assert any("model=oai-2.0" in note for note in response.notes)
 
 
 def test_generate_includes_elapsed_ms_marker_in_notes() -> None:

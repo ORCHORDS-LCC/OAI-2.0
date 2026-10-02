@@ -1,25 +1,38 @@
 """Cloud-model discovery + working-model fallback for the public gateway.
 
 The OAI-2.0 :class:`GatewayRuntime` is configured with one model id
-(``OAI2_GATEWAY_MODEL``, default ``"oai-1.2"``). When that exact model
-is unavailable on the gateway (404), temporarily down (503), or
-unreachable from the local host (502), the runtime needs a way to
-discover what is exposed and pick the first model that answers.
+(``OAI2_GATEWAY_MODEL``, default ``"oai-2.0"``). ``oai-2.0`` is the
+**only** cloud model identity this client treats as acceptable —
+historical ``oai-1.0`` / ``oai-1.2`` / ``orchordsai-gpt`` /
+``orchordsai-m3`` ids are deliberately not in
+:data:`KNOWN_CLOUD_MODELS` and any probe against them raises
+:class:`UnknownModelError`. The OAI-2.0 client is intentionally
+opinionated about which cloud identity to talk to; widening the
+allowlist is an explicit code change.
+
+When the configured ``oai-2.0`` is unavailable on the gateway (404),
+temporarily down (503), or unreachable from the local host (502),
+the runtime needs a way to discover what is exposed and pick the
+first model that answers — but it will only resolve within the
+``oai-2.0`` allowlist, so the resolver fails closed until the cloud
+operator deploys ``oai-2.0``.
 
 This module owns that contract — independent of any specific runtime
 or scheduler — so multiple call sites (the runtime's
 ``select_runtime`` factory, :mod:`scripts.gateway_smoke`, the
 :mod:`scripts.gateway_probe_models` CLI, and the ``gateway-reach``
 sub-check in :mod:`scripts.verify`) can share the same source of
-truth for "what does the cloud offer right now".
+truth for "what does the cloud offer right now" and "is what it
+offers something we will use".
 
 Design points
 -------------
 
-- **Allowlist, not enum.** ``KNOWN_CLOUD_MODELS`` is the explicit set
-  of model ids the ORCHORDS cloud has historically exposed. Callers
-  may pass any string, but resolution against unknown ids fails fast
-  with :class:`UnknownModelError`.
+- **Single-id strict allowlist.** :data:`KNOWN_CLOUD_MODELS` is the
+  explicit set of model ids the OAI-2.0 client treats as acceptable
+  cloud identities — currently just ``{"oai-2.0"}``. Callers may
+  pass any string, but resolution against any id outside this set
+  fails fast with :class:`UnknownModelError`.
 - **No live calls in tests.** Every public helper accepts an
   :class:`httpx.Client` so unit tests can drive
   :class:`httpx.MockTransport`. The :func:`discover_cloud_models`
@@ -29,9 +42,9 @@ Design points
   are redacted before being stored on :class:`ModelProbe` so the
   result is safe to log.
 - **Deterministic.** :func:`resolve_working_model` walks candidates
-  in input order; the first reachable model wins. The full
-  per-model :class:`ModelProbe` list is preserved on the result so
-  callers can diagnose failures.
+  in input order; the first reachable id wins. The full per-id
+  :class:`ModelProbe` list is preserved on the result so callers can
+  diagnose failures.
 - **Status semantics.** ``ModelProbe.reachable`` is True when the
   upstream responded with HTTP 2xx and at least one non-empty
   completion choice. 4xx, 5xx, transport errors, and empty
@@ -47,20 +60,24 @@ from typing import Any
 
 import httpx
 
+#: The strict allowlist of model ids the OAI-2.0 client treats as
+#: acceptable cloud identities. ``oai-2.0`` is the sole target —
+#: historical ``oai-1.0`` / ``oai-1.2`` / ``orchordsai-gpt`` /
+#: ``orchordsai-m3`` ids are deliberately not in this set; any probe
+#: or resolve against them raises :class:`UnknownModelError`. Widening
+#: the allowlist is an explicit code change, not a runtime
+#: configuration. Order is not significant —
+#: :func:`resolve_working_model` walks whatever the caller passes in
+#: input order.
+#:
+#: Refs: #237.
+KNOWN_CLOUD_MODELS: frozenset[str] = frozenset({"oai-2.0"})
 
-#: The set of model ids the public ORCHORDS cloud has historically
-#: exposed via ``GET /v1/models``. New ids must be added here before
-#: any runtime treats them as expected (this is the contract #237
-#: tracks). Order is not significant — :func:`resolve_working_model`
-#: walks whatever the caller passes in input order.
-KNOWN_CLOUD_MODELS: frozenset[str] = frozenset(
-    {
-        "oai-1.0",
-        "oai-1.2",
-        "orchordsai-gpt",
-        "orchordsai-m3",
-    },
-)
+#: Convenience handle for the sole acceptable cloud identity. This is
+#: the same id that is the only member of :data:`KNOWN_CLOUD_MODELS`
+#: — exposed as a string constant so callers that need to branch on
+#: "is this id the canonical target?" have one place to look. Refs #237.
+STRICT_CLOUD_MODEL_ID: str = "oai-2.0"
 
 
 class CloudModelError(RuntimeError):
