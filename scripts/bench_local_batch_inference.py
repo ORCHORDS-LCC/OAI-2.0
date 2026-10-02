@@ -134,6 +134,7 @@ async def _submit_one(
     unique_prompts: bool,
     shared_client: bool,
     shared_security_context: str | None,
+    max_tokens: int,
 ) -> tuple[str, str, str, str, int, float]:
     """Open session + submit one request; return identifiers for later matching."""
     if shared_client:
@@ -165,6 +166,7 @@ async def _submit_one(
         "prefix_digest": prefix_digest,
         "tool_schema_version": "default",
         "world_state_version": "default",
+        "max_tokens": max_tokens,
     }
     if shared_security_context is not None:
         body["security_context"] = shared_security_context
@@ -240,6 +242,7 @@ async def _concurrent_agents(
                     unique_prompts=unique_prompts,
                     shared_client=shared_client,
                     shared_security_context=shared_security_context,
+                    max_tokens=max_tokens,
                 )
                 for agent_id in range(n_agents)
             ]

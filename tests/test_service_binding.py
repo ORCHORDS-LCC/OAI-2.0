@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from oai2.runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
 from oai2.runtime.scheduler import SafeBatchScheduler
 from oai2.runtime.service import ServiceCompatibility, ServiceLifecycle, ServiceState
 from oai2.runtime.service_binding import BatchInferenceSurface, create_batch_inference_app
@@ -55,6 +56,34 @@ def _surface(clock: _ScriptClock | None = None) -> BatchInferenceSurface:
         registry=IsolatedSessionRegistry(),
         clock=clock if clock is not None else _ScriptClock(),
     )
+
+
+class _RecordingRuntime(InferenceRuntime):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[InferenceRequest] = []
+
+    def generate(self, request: InferenceRequest) -> InferenceResponse:
+        self.requests.append(request)
+        return InferenceResponse(text="ok", tokens=1, elapsed_ms=1.0, device="test")
+
+
+def test_submission_max_tokens_flows_to_runtime() -> None:
+    runtime = _RecordingRuntime()
+    lifecycle = ServiceLifecycle(expected=_compat())
+    lifecycle.start(_compat())
+    surface = BatchInferenceSurface(
+        lifecycle=lifecycle,
+        scheduler=SafeBatchScheduler(),
+        registry=IsolatedSessionRegistry(),
+        runtime=runtime,
+    )
+    surface.open_session(client_id="c1", session_id="s-1")
+    surface.submit(
+        client_id="c1", session_id="s-1", request_id="r-1", prompt="p", max_tokens=5, **_key_kwargs()
+    )
+    surface.drain()
+    assert runtime.requests[0].max_tokens == 5
 
 
 def test_cross_client_access_is_rejected() -> None:

@@ -135,6 +135,7 @@ class BatchInferenceSurface:
         self._clock = clock
         self._prompts: dict[str, str] = {}
         self._session_requests: dict[str, str] = {}
+        self._request_max_tokens: dict[str, int] = {}
         self._last_batch_size = 0
         self._batches_executed = 0
         self._requests_executed = 0
@@ -159,6 +160,7 @@ class BatchInferenceSurface:
         request_id = self._session_requests.pop(session_id, None)
         if request_id is not None:
             self._prompts.pop(request_id, None)
+            self._request_max_tokens.pop(request_id, None)
         self._registry.remove(client_id=client_id, session_id=session_id)
         self._lifecycle.session_finished(session_id)
         return cancelled
@@ -176,6 +178,7 @@ class BatchInferenceSurface:
         tool_schema_version: str,
         world_state_version: str,
         security_context: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         """Enqueue one request under its exact session-compatibility key."""
         self._registry.require_owned(client_id=client_id, session_id=session_id)
@@ -196,6 +199,8 @@ class BatchInferenceSurface:
         self._scheduler.enqueue(request)
         self._prompts[request_id] = prompt
         self._session_requests[session_id] = request_id
+        if max_tokens is not None:
+            self._request_max_tokens[request_id] = max_tokens
 
     def drain(self) -> tuple[BatchExecutionResult, ...]:
         """Pop one compatibility-exact batch, execute it, and record telemetry."""
@@ -206,7 +211,13 @@ class BatchInferenceSurface:
         results: list[BatchExecutionResult] = []
         for scheduled in plan.requests:
             prompt = self._prompts.pop(scheduled.request_id, "")
-            response = self._runtime.generate(InferenceRequest(prompt=prompt))
+            max_tokens = self._request_max_tokens.pop(scheduled.request_id, None)
+            request = (
+                InferenceRequest(prompt=prompt)
+                if max_tokens is None
+                else InferenceRequest(prompt=prompt, max_tokens=max_tokens)
+            )
+            response = self._runtime.generate(request)
             notes = list(response.notes)
             results.append(
                 BatchExecutionResult(
@@ -275,6 +286,7 @@ class InferenceSubmission(BaseModel):
     tool_schema_version: str = Field(min_length=1)
     world_state_version: str = Field(min_length=1)
     security_context: str | None = None
+    max_tokens: int | None = None
 
 
 def _fail(exc: Exception) -> NoReturn:
@@ -349,6 +361,7 @@ def create_batch_inference_app(
                 tool_schema_version=body.tool_schema_version,
                 world_state_version=body.world_state_version,
                 security_context=body.security_context,
+                max_tokens=body.max_tokens,
             )
         except Exception as exc:
             _fail(exc)
