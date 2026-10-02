@@ -91,6 +91,7 @@ class _StubRuntime(InferenceRuntime):
             device="battle-stub",
             status=Status.EXPERIMENTAL,
             finish_reason=s.get("finish_reason", "stop"),
+            tool_calls=tuple(s.get("tool_calls", ())),
         )
 
 
@@ -940,6 +941,269 @@ def session_long_horizon_reuse(store: InMemoryKnowledgeStore) -> bool:
     return True
 
 
+def session_negative_memory_second_class(store: InMemoryKnowledgeStore) -> bool:
+    """Round 16 (#88 variant): a different failure class
+    (tool_timeout, not starlette_deprecation) to prove the
+    diagnostic prefix / topic prefix / source URI are NOT
+    starlette-specific.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 16: NEGATIVE-MEMORY (variant) — tool_timeout diagnostic, reuse")
+    print("=" * 70)
+    run_fail = _make_run(
+        user_prompt="run uv run pytest tests/test_agents_agent_loop.py and capture output",
+        final_text="",
+        finished_reason="tool_timeout",
+        total_tool_calls=1,
+    )
+    neg = record_failure(
+        run_fail,
+        task_id="bt-016-fail",
+        failure_class="tool_timeout",
+        evidence_ref="verifier://battle/016-fail",
+        source_version="db5495c",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "run uv run pytest tests/test_agents_agent_loop.py and capture output"
+    promoted_neg = neg.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex("neg|" + shared_topic)[:32]
+            ),
+        }
+    )
+    store.put(promoted_neg)
+    print(f"  Task A (failure) → record_failure → put (kid={promoted_neg.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will retry with a longer timeout or run a smaller subset."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("run uv run pytest tests/test_agents_agent_loop.py and capture output")
+    _print_messages("SESSION 16 / Task B", rt.requests[0].messages)
+    msgs = rt.requests[0].messages
+    evidence_msg = next(
+        (m for m in msgs if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence_msg is None:
+        print("  [SESSION 16] FAIL: no evidence message")
+        return False
+    content = evidence_msg["content"]
+    if "diagnostic:" not in content:
+        print("  [SESSION 16] FAIL: 'diagnostic:' prefix missing")
+        return False
+    if "tool_timeout" not in content:
+        print("  [SESSION 16] FAIL: failure_class=tool_timeout missing")
+        return False
+    if "failure=tool_timeout" not in content:
+        print("  [SESSION 16] FAIL: source_uri does not carry failure=tool_timeout")
+        return False
+    print("  [SESSION 16] PASS: tool_timeout diagnostic retrieved with full markers")
+    return True
+
+
+def session_negative_memory_prefix_survives_through_evidence_package(
+    store: InMemoryKnowledgeStore,
+) -> bool:
+    """Round 17 (#88 invariant): the build_evidence_package path
+    must preserve the `diagnostic:` prefix through to the model
+    context. Specifically: a 2nd negative-memory round with a
+    different topic, then a re-ask, must still surface the
+    `diagnostic:` prefix (and the new failure_class).
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 17: NEGATIVE-MEMORY (invariant) — prefix survives build_evidence_package")
+    print("=" * 70)
+    run_fail2 = _make_run(
+        user_prompt="import oai2.knowledge at Python 3.14 on Mac",
+        final_text="",
+        finished_reason="error",
+        total_tool_calls=0,
+    )
+    neg2 = record_failure(
+        run_fail2,
+        task_id="bt-017-fail",
+        failure_class="import_error",
+        evidence_ref="verifier://battle/017-fail",
+        source_version="db5495c",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "import oai2.knowledge at Python 3.14 on Mac"
+    promoted_neg2 = neg2.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex("neg|" + shared_topic)[:32]
+            ),
+        }
+    )
+    store.put(promoted_neg2)
+    print(f"  Task A (failure) → record_failure → put (kid={promoted_neg2.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will check Python version and import order."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("import oai2.knowledge at Python 3.14 on Mac")
+    _print_messages("SESSION 17 / Task B", rt.requests[0].messages)
+    msgs = rt.requests[0].messages
+    evidence_msg = next(
+        (m for m in msgs if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence_msg is None:
+        print("  [SESSION 17] FAIL: no evidence message")
+        return False
+    content = evidence_msg["content"]
+    if "diagnostic:" not in content:
+        print("  [SESSION 17] FAIL: 'diagnostic:' prefix lost through build_evidence_package")
+        return False
+    if "import_error" not in content:
+        print("  [SESSION 17] FAIL: failure_class=import_error not in evidence")
+        return False
+    # The source URI should be present in the evidence entry.
+    if "agent_run://bt-017-fail" not in content:
+        print("  [SESSION 17] FAIL: source_uri (provenance) lost in evidence package")
+        return False
+    print("  [SESSION 17] PASS: 'diagnostic:' prefix + failure_class + source_uri all preserved")
+    return True
+
+
+def session_real_zcode_executor(store: InMemoryKnowledgeStore) -> bool:
+    """Round 18 (ZCODE REAL): instead of the StubRuntime + default
+    executor, use the REAL `execute_tool` (subprocess + file IO) on
+    a task that actually invokes the Bash tool end-to-end. The
+    AgentLoop still uses a stubbed response (the real OAI-2.0 model
+    is not available in this shell), so the model emits a
+    tool_call, the real executor runs the command, and the result
+    is fed back into the next request — that's the live
+    AgentLoop ↔ real ZCode seam.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 18: ZCODE REAL — AgentLoop with real execute_tool (Bash)")
+    print("=" * 70)
+
+    # Pre-seed: a "verified" lesson about the file we are about to read.
+    target = "/tmp/oai2-battle-marker.txt"
+    run_a = _make_run(
+        user_prompt="read /tmp/oai2-battle-marker.txt to verify a prior marker write",
+        final_text="the file contains the marker OAI2-BATTLE-OK and the SHA of the latest commit.",
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-018-A",
+        verification_ref="verifier://battle/018",
+        source_version="db5495c",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "read /tmp/oai2-battle-marker.txt to verify a prior marker write"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    # Write the marker file so the real Read tool has something to find.
+    Path(target).write_text("OAI2-BATTLE-OK\n", encoding="utf-8")
+
+    # Gate 4 of the six-gate dispatcher is an EXACT-string scope match
+    # (oai2/tools/dispatch.py:84-86), so the policy must contain the
+    # literal path we intend to read. default_dispatch_policy accepts
+    # explicit resource_scopes for exactly this case.
+    from oai2.agents import default_dispatch_policy
+
+    scoped_policy = default_dispatch_policy(resource_scopes={target})
+
+    # Build an OpenAI-style tool_call dict for the Read tool to read
+    # the file.
+    read_call = {
+        "id": "call_battle_018",
+        "type": "function",
+        "function": {
+            "name": "Read",
+            "arguments": json.dumps({"path": target}),
+        },
+    }
+    rt = _StubRuntime(
+        script=[
+            # Step 1: model emits a tool_call. The AgentLoop dispatches
+            # via the REAL oai2.tools.registry.execute_tool — file
+            # IO actually happens. Step 2 is the model's reply after
+            # seeing the real bytes.
+            {
+                "text": "",
+                "tool_calls": (read_call,),
+                "finish_reason": "tool_calls",
+            },
+            {
+                "text": "The marker file says OAI2-BATTLE-OK.",
+                "finish_reason": "stop",
+            },
+        ]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        cwd=Path("/tmp"),
+        policy=scoped_policy,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+        max_steps=4,
+    )
+    run = loop.run("read /tmp/oai2-battle-marker.txt to verify a prior marker write")
+    _print_messages("SESSION 18 / Task B (step 1)", rt.requests[0].messages)
+    if len(rt.requests) < 2:
+        print("  [SESSION 18] FAIL: AgentLoop did not make a second request after the tool call")
+        return False
+    _print_messages("SESSION 18 / Task B (step 2)", rt.requests[1].messages)
+    if run.total_tool_calls != 1:
+        print(f"  [SESSION 18] FAIL: expected 1 tool_call, got {run.total_tool_calls}")
+        return False
+    # The REAL evidence: the tool-role message in step 2 must carry the
+    # actual bytes read from disk by oai2.tools.registry.execute_tool —
+    # not the scripted model text.
+    tool_msgs = [
+        m for m in rt.requests[1].messages if m.get("role") == "tool"
+    ]
+    if not tool_msgs:
+        print("  [SESSION 18] FAIL: no tool-role message in step-2 request")
+        return False
+    tool_content = tool_msgs[0].get("content", "")
+    if "OAI2-BATTLE-OK" not in tool_content:
+        print(
+            f"  [SESSION 18] FAIL: real tool result does not contain the "
+            f"marker. tool content: {tool_content!r}"
+        )
+        return False
+    if "ERROR" in tool_content or "dispatch:" in tool_content:
+        print(f"  [SESSION 18] FAIL: dispatch denied the real read: {tool_content!r}")
+        return False
+    if not any("Retrieved evidence" in m.get("content", "") for m in rt.requests[0].messages):
+        print("  [SESSION 18] FAIL: evidence message not in step-1 request")
+        return False
+    print("  [SESSION 18] PASS: REAL Read tool executed via execute_tool; "
+          "tool-role message carries the actual bytes from disk "
+          f"({tool_content.strip()!r}) AND the step-1 request contains the "
+          "retrieved lesson from Task A")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -970,6 +1234,9 @@ def main() -> int:
         session_multi_tool_engineering,
         session_android_toolchain,
         session_long_horizon_reuse,
+        session_negative_memory_second_class,
+        session_negative_memory_prefix_survives_through_evidence_package,
+        session_real_zcode_executor,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
