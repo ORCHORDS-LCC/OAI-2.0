@@ -232,7 +232,7 @@ class TestInferenceRequest:
         with pytest.raises(ValidationError):
             InferenceRequest(prompt="x", not_a_real_field="y")  # type: ignore[call-arg]
 
-    def test_field_set_pinned_to_nine_names(self) -> None:
+    def test_field_set_pinned_to_ten_names(self) -> None:
         assert set(InferenceRequest.model_fields.keys()) == {
             "prompt",
             "max_tokens",
@@ -245,6 +245,7 @@ class TestInferenceRequest:
             "messages",
             "tools",
             "tool_choice",
+            "prefix_digest",
         }
 
     def test_prompt_is_mandatory(self) -> None:
