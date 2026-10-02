@@ -63,6 +63,7 @@ from .inference import (
 from .local_service import create_local_service_app
 from .mlx_hot_runtime import MLXHotRuntime
 from .model import ModelSpec, discover_default_device, smoke_check
+from .prefix_kv_cache import PrefixCacheEntry, PrefixCacheMetrics, PrefixKVCache
 from .residency import (
     CapacityTrendPoint,
     ResidencyAccountant,
@@ -140,6 +141,9 @@ __all__ = [
     "resolve_working_model",
     "select_runtime_from_env",
     "ModelSpec",
+    "PrefixCacheEntry",
+    "PrefixCacheMetrics",
+    "PrefixKVCache",
     "discover_default_device",
     "smoke_check",
     "SessionCompatibilityKey",
