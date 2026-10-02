@@ -49,6 +49,10 @@ class AgentSample:
     end_to_end_ms: float
     submitted_at_ms: float
     completed_at_ms: float
+    # Hot-surface TTFT: time to the first generated token. Equals prefill_ms
+    # (the runtime streams, so the first token lands at prefill end); a
+    # cold-start TTFT adds model load (see scripts/bench.py load_seconds).
+    ttft_ms: float | None = None
     notes: list[str] = field(default_factory=list)
 
 
@@ -320,6 +324,7 @@ async def _concurrent_agents(
                 generated_tokens=result.get("generated_tokens"),
                 queue_wait_ms=queue_wait_ms,
                 prefill_ms=result.get("prefill_ms"),
+                ttft_ms=result.get("prefill_ms"),
                 decode_ms=result.get("decode_ms"),
                 decode_tokens_per_second=result.get("decode_tokens_per_second"),
                 text_excerpt=text[:120],
@@ -337,6 +342,7 @@ def _aggregate(samples: list[AgentSample]) -> dict[str, dict[str, float | int | 
         "end_to_end_ms",
         "queue_wait_ms",
         "prefill_ms",
+        "ttft_ms",
         "decode_ms",
         "decode_tokens_per_second",
         "generated_tokens",
@@ -345,7 +351,7 @@ def _aggregate(samples: list[AgentSample]) -> dict[str, dict[str, float | int | 
     for name in metric_names:
         values = [getattr(s, name) for s in samples]
         # Drop None values for stats (we want % over real samples, not None-padding).
-        if name in ("prefill_ms", "decode_ms", "decode_tokens_per_second", "generated_tokens"):
+        if name in ("prefill_ms", "ttft_ms", "decode_ms", "decode_tokens_per_second", "generated_tokens"):
             values = [v for v in values if v is not None]
         out[name] = _stat(values)
     return out
@@ -355,6 +361,7 @@ def _print_table(n_agents: int, samples: list[AgentSample], agg: dict[str, dict[
     print(f"\n=== agents={n_agents}  |  samples={len(samples)} ===")
     for s in sorted(samples, key=lambda s: s.agent_id):
         prefill = f"{s.prefill_ms:6.1f}" if s.prefill_ms is not None else "  n/a"
+        ttft = f"{s.ttft_ms:6.1f}" if s.ttft_ms is not None else "  n/a"
         decode = f"{s.decode_ms:6.1f}" if s.decode_ms is not None else "  n/a"
         dtps = f"{s.decode_tokens_per_second:6.1f}" if s.decode_tokens_per_second is not None else "   n/a"
         gen = s.generated_tokens if s.generated_tokens is not None else 0
@@ -362,6 +369,7 @@ def _print_table(n_agents: int, samples: list[AgentSample], agg: dict[str, dict[
             f"  agent {s.agent_id:>2}: "
             f"e2e={s.end_to_end_ms:7.1f}ms "
             f"prefill={prefill}ms "
+            f"ttft={ttft}ms "
             f"decode={decode}ms "
             f"tps={dtps} "
             f"queue={s.queue_wait_ms:6.1f}ms "
