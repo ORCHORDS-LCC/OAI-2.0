@@ -32,8 +32,23 @@ huggingface/
 build/
 dist/
 
-# Local benchmark scratch (full run JSONs go to evals/benchmarks/ and
-# ARE committed; transient artifacts do not).
+# Local benchmark scratch.
+# - Canonical summary_*.json files in evals/benchmarks/ ARE committed
+#   (each is the aggregated evidence for one model × configuration run).
+# - summary_smoke-*.json (smoke-test summaries) are transient.
+# - A small set of bench_*.json per-run JSONs is intentionally committed
+#   (currently: 299bb3ee67, 43f7ed8a27, 485d709342, 4b46029219,
+#   5ecb176f8b, 6ca39f1cf4, b3a2faef45) for example/reproducibility.
+#   All OTHER bench_*.json files are transient per-run scratch and ignored.
+evals/benchmarks/bench_*.json
+!evals/benchmarks/bench_299bb3ee67.json
+!evals/benchmarks/bench_43f7ed8a27.json
+!evals/benchmarks/bench_485d709342.json
+!evals/benchmarks/bench_4b46029219.json
+!evals/benchmarks/bench_5ecb176f8b.json
+!evals/benchmarks/bench_6ca39f1cf4.json
+!evals/benchmarks/bench_b3a2faef45.json
+evals/benchmarks/summary_smoke-*.json
 *.tmp
 *.swp
 .DS_Store

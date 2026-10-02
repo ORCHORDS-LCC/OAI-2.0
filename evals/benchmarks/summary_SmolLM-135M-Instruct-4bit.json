@@ -1,0 +1,428 @@
+{
+  "tag": "SmolLM-135M-Instruct-4bit",
+  "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+  "max_tokens": 4,
+  "repetitions": 1,
+  "warmup": true,
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "configs": [
+    {
+      "prompt_label": "~128tokens (98words)",
+      "prompt_tokens": 129,
+      "runs": [
+        {
+          "run_id": "bench_02eb7f3ce8",
+          "timestamp": 1790895149.339807,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~128tokens (98words)",
+          "prompt_tokens": 129,
+          "max_tokens": 4,
+          "load_seconds": 0.47411574999568984,
+          "compile_seconds": 0.14424024999607354,
+          "warm_run_seconds": 0.019944625033531338,
+          "prefill_seconds": 0.008941249980125576,
+          "prefill_tokens_per_second": 14427.51296370625,
+          "decode_seconds": 0.005037083989009261,
+          "decode_tokens_per_second": 887.1555810211654,
+          "end_to_end_seconds": 0.013978333969134837,
+          "generation_tokens": 4,
+          "peak_memory_gb": 0.128394508,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.006397478,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "on public functions,",
+          "output_excerpt": "on public functions,",
+          "notes": []
+        }
+      ],
+      "aggregate": {
+        "load_seconds": {
+          "count": 1,
+          "mean": 0.47411574999568984,
+          "median": 0.47411574999568984,
+          "min": 0.47411574999568984,
+          "max": 0.47411574999568984,
+          "stddev": 0.0
+        },
+        "compile_seconds": {
+          "count": 1,
+          "mean": 0.14424024999607354,
+          "median": 0.14424024999607354,
+          "min": 0.14424024999607354,
+          "max": 0.14424024999607354,
+          "stddev": 0.0
+        },
+        "warm_run_seconds": {
+          "count": 1,
+          "mean": 0.019944625033531338,
+          "median": 0.019944625033531338,
+          "min": 0.019944625033531338,
+          "max": 0.019944625033531338,
+          "stddev": 0.0
+        },
+        "prefill_seconds": {
+          "count": 1,
+          "mean": 0.008941249980125576,
+          "median": 0.008941249980125576,
+          "min": 0.008941249980125576,
+          "max": 0.008941249980125576,
+          "stddev": 0.0
+        },
+        "prefill_tokens_per_second": {
+          "count": 1,
+          "mean": 14427.51296370625,
+          "median": 14427.51296370625,
+          "min": 14427.51296370625,
+          "max": 14427.51296370625,
+          "stddev": 0.0
+        },
+        "decode_seconds": {
+          "count": 1,
+          "mean": 0.005037083989009261,
+          "median": 0.005037083989009261,
+          "min": 0.005037083989009261,
+          "max": 0.005037083989009261,
+          "stddev": 0.0
+        },
+        "decode_tokens_per_second": {
+          "count": 1,
+          "mean": 887.1555810211654,
+          "median": 887.1555810211654,
+          "min": 887.1555810211654,
+          "max": 887.1555810211654,
+          "stddev": 0.0
+        },
+        "end_to_end_seconds": {
+          "count": 1,
+          "mean": 0.013978333969134837,
+          "median": 0.013978333969134837,
+          "min": 0.013978333969134837,
+          "max": 0.013978333969134837,
+          "stddev": 0.0
+        },
+        "peak_memory_gb": {
+          "count": 1,
+          "mean": 0.128394508,
+          "median": 0.128394508,
+          "min": 0.128394508,
+          "max": 0.128394508,
+          "stddev": 0.0
+        },
+        "active_memory_gb": {
+          "count": 1,
+          "mean": 0.078307976,
+          "median": 0.078307976,
+          "min": 0.078307976,
+          "max": 0.078307976,
+          "stddev": 0.0
+        },
+        "cache_memory_gb": {
+          "count": 1,
+          "mean": 0.006397478,
+          "median": 0.006397478,
+          "min": 0.006397478,
+          "max": 0.006397478,
+          "stddev": 0.0
+        },
+        "generation_tokens": {
+          "count": 1,
+          "mean": 4.0,
+          "median": 4,
+          "min": 4,
+          "max": 4,
+          "stddev": 0.0
+        }
+      }
+    },
+    {
+      "prompt_label": "~1024tokens (787words)",
+      "prompt_tokens": 1028,
+      "runs": [
+        {
+          "run_id": "bench_4e375ce796",
+          "timestamp": 1790895149.8040519,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~1024tokens (787words)",
+          "prompt_tokens": 1028,
+          "max_tokens": 4,
+          "load_seconds": 0.3570464159711264,
+          "compile_seconds": 0.05499695800244808,
+          "warm_run_seconds": 0.02675199997611344,
+          "prefill_seconds": 0.015226459014229476,
+          "prefill_tokens_per_second": 67514.05556861975,
+          "decode_seconds": 0.005695457977708429,
+          "decode_tokens_per_second": 800.7206533296413,
+          "end_to_end_seconds": 0.020921916991937906,
+          "generation_tokens": 4,
+          "peak_memory_gb": 0.293679932,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.03123399,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": "Focus on public functions",
+          "output_excerpt": "Focus on public functions",
+          "notes": []
+        }
+      ],
+      "aggregate": {
+        "load_seconds": {
+          "count": 1,
+          "mean": 0.3570464159711264,
+          "median": 0.3570464159711264,
+          "min": 0.3570464159711264,
+          "max": 0.3570464159711264,
+          "stddev": 0.0
+        },
+        "compile_seconds": {
+          "count": 1,
+          "mean": 0.05499695800244808,
+          "median": 0.05499695800244808,
+          "min": 0.05499695800244808,
+          "max": 0.05499695800244808,
+          "stddev": 0.0
+        },
+        "warm_run_seconds": {
+          "count": 1,
+          "mean": 0.02675199997611344,
+          "median": 0.02675199997611344,
+          "min": 0.02675199997611344,
+          "max": 0.02675199997611344,
+          "stddev": 0.0
+        },
+        "prefill_seconds": {
+          "count": 1,
+          "mean": 0.015226459014229476,
+          "median": 0.015226459014229476,
+          "min": 0.015226459014229476,
+          "max": 0.015226459014229476,
+          "stddev": 0.0
+        },
+        "prefill_tokens_per_second": {
+          "count": 1,
+          "mean": 67514.05556861975,
+          "median": 67514.05556861975,
+          "min": 67514.05556861975,
+          "max": 67514.05556861975,
+          "stddev": 0.0
+        },
+        "decode_seconds": {
+          "count": 1,
+          "mean": 0.005695457977708429,
+          "median": 0.005695457977708429,
+          "min": 0.005695457977708429,
+          "max": 0.005695457977708429,
+          "stddev": 0.0
+        },
+        "decode_tokens_per_second": {
+          "count": 1,
+          "mean": 800.7206533296413,
+          "median": 800.7206533296413,
+          "min": 800.7206533296413,
+          "max": 800.7206533296413,
+          "stddev": 0.0
+        },
+        "end_to_end_seconds": {
+          "count": 1,
+          "mean": 0.020921916991937906,
+          "median": 0.020921916991937906,
+          "min": 0.020921916991937906,
+          "max": 0.020921916991937906,
+          "stddev": 0.0
+        },
+        "peak_memory_gb": {
+          "count": 1,
+          "mean": 0.293679932,
+          "median": 0.293679932,
+          "min": 0.293679932,
+          "max": 0.293679932,
+          "stddev": 0.0
+        },
+        "active_memory_gb": {
+          "count": 1,
+          "mean": 0.078307976,
+          "median": 0.078307976,
+          "min": 0.078307976,
+          "max": 0.078307976,
+          "stddev": 0.0
+        },
+        "cache_memory_gb": {
+          "count": 1,
+          "mean": 0.03123399,
+          "median": 0.03123399,
+          "min": 0.03123399,
+          "max": 0.03123399,
+          "stddev": 0.0
+        },
+        "generation_tokens": {
+          "count": 1,
+          "mean": 4.0,
+          "median": 4,
+          "min": 4,
+          "max": 4,
+          "stddev": 0.0
+        }
+      }
+    },
+    {
+      "prompt_label": "~4096tokens (3150words)",
+      "prompt_tokens": 4109,
+      "runs": [
+        {
+          "run_id": "bench_904c6ebabc",
+          "timestamp": 1790895150.3707242,
+          "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+          "quantization": "4bit",
+          "prompt_label": "~4096tokens (3150words)",
+          "prompt_tokens": 4109,
+          "max_tokens": 4,
+          "load_seconds": 0.3438934169826098,
+          "compile_seconds": 0.08277858304791152,
+          "warm_run_seconds": 0.0704117079731077,
+          "prefill_seconds": 0.05635091703152284,
+          "prefill_tokens_per_second": 72918.06800058667,
+          "decode_seconds": 0.006455332972109318,
+          "decode_tokens_per_second": 772.1138741807491,
+          "end_to_end_seconds": 0.06280625000363216,
+          "generation_tokens": 4,
+          "peak_memory_gb": 0.660988724,
+          "active_memory_gb": 0.078307976,
+          "cache_memory_gb": 0.102959858,
+          "device": "Device(gpu, 0)",
+          "sys_info": {
+            "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+            "machine": "arm64",
+            "python": "3.14.7",
+            "processor": "arm",
+            "mlx_default_device": "Device(gpu, 0)",
+            "mlx_lm_version": "0.32.0"
+          },
+          "output_text": ". The..",
+          "output_excerpt": ". The..",
+          "notes": []
+        }
+      ],
+      "aggregate": {
+        "load_seconds": {
+          "count": 1,
+          "mean": 0.3438934169826098,
+          "median": 0.3438934169826098,
+          "min": 0.3438934169826098,
+          "max": 0.3438934169826098,
+          "stddev": 0.0
+        },
+        "compile_seconds": {
+          "count": 1,
+          "mean": 0.08277858304791152,
+          "median": 0.08277858304791152,
+          "min": 0.08277858304791152,
+          "max": 0.08277858304791152,
+          "stddev": 0.0
+        },
+        "warm_run_seconds": {
+          "count": 1,
+          "mean": 0.0704117079731077,
+          "median": 0.0704117079731077,
+          "min": 0.0704117079731077,
+          "max": 0.0704117079731077,
+          "stddev": 0.0
+        },
+        "prefill_seconds": {
+          "count": 1,
+          "mean": 0.05635091703152284,
+          "median": 0.05635091703152284,
+          "min": 0.05635091703152284,
+          "max": 0.05635091703152284,
+          "stddev": 0.0
+        },
+        "prefill_tokens_per_second": {
+          "count": 1,
+          "mean": 72918.06800058667,
+          "median": 72918.06800058667,
+          "min": 72918.06800058667,
+          "max": 72918.06800058667,
+          "stddev": 0.0
+        },
+        "decode_seconds": {
+          "count": 1,
+          "mean": 0.006455332972109318,
+          "median": 0.006455332972109318,
+          "min": 0.006455332972109318,
+          "max": 0.006455332972109318,
+          "stddev": 0.0
+        },
+        "decode_tokens_per_second": {
+          "count": 1,
+          "mean": 772.1138741807491,
+          "median": 772.1138741807491,
+          "min": 772.1138741807491,
+          "max": 772.1138741807491,
+          "stddev": 0.0
+        },
+        "end_to_end_seconds": {
+          "count": 1,
+          "mean": 0.06280625000363216,
+          "median": 0.06280625000363216,
+          "min": 0.06280625000363216,
+          "max": 0.06280625000363216,
+          "stddev": 0.0
+        },
+        "peak_memory_gb": {
+          "count": 1,
+          "mean": 0.660988724,
+          "median": 0.660988724,
+          "min": 0.660988724,
+          "max": 0.660988724,
+          "stddev": 0.0
+        },
+        "active_memory_gb": {
+          "count": 1,
+          "mean": 0.078307976,
+          "median": 0.078307976,
+          "min": 0.078307976,
+          "max": 0.078307976,
+          "stddev": 0.0
+        },
+        "cache_memory_gb": {
+          "count": 1,
+          "mean": 0.102959858,
+          "median": 0.102959858,
+          "min": 0.102959858,
+          "max": 0.102959858,
+          "stddev": 0.0
+        },
+        "generation_tokens": {
+          "count": 1,
+          "mean": 4.0,
+          "median": 4,
+          "min": 4,
+          "max": 4,
+          "stddev": 0.0
+        }
+      }
+    }
+  ]
+}
