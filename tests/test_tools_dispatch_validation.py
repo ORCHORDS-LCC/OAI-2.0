@@ -443,13 +443,17 @@ def test_dispatch_policy_accepts_status_enum() -> None:
 
 
 def test_dispatch_policy_fields() -> None:
-    """``DispatchPolicy`` exposes exactly the 6 documented fields."""
+    """``DispatchPolicy`` exposes exactly the 7 documented fields."""
 
+    # ``allow_unscoped_capabilities`` was added when an unscoped tool was
+    # found to walk straight past the resource-scope gate: a capability that
+    # cannot be scoped must now be granted that reach explicitly.
     assert set(DispatchPolicy.model_fields.keys()) == {
         "allow_capabilities",
         "deny_capabilities",
         "high_impact_approved",
         "resource_scopes",
+        "allow_unscoped_capabilities",
         "budget_calls",
         "status",
     }
@@ -909,6 +913,9 @@ def test_all_gates_pass_returns_execute() -> None:
         policy=DispatchPolicy(
             allow_capabilities=frozenset({"fs.read"}),
             resource_scopes=frozenset({"/x"}),
+            # ``_read_def()`` is unscoped, so gate 4b needs the explicit grant
+            # before an unscoped tool may run under declared scopes.
+            allow_unscoped_capabilities=frozenset({"fs.read"}),
         ),
     )
     out = d.check(

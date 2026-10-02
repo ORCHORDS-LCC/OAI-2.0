@@ -66,8 +66,11 @@ def default_tool_definitions() -> tuple[ToolDefinition, ...]:
     """Return the canonical agent tool set.
 
     Six tools, mirroring the standard agent/IDE surface so the model
-    sees familiar names. ``Bash`` is high-impact; ``Edit`` and
-    ``Write`` are scoped; ``Read``, ``Glob``, ``Grep`` are not.
+    sees familiar names. ``Bash`` is high-impact; ``Edit``, ``Write``,
+    ``Read`` and ``Grep`` are scoped. ``Bash`` and ``Glob`` are not
+    scoped: ``Bash`` takes a command string and ``Glob`` takes only a
+    pattern, so neither has a path for gate 4 to constrain — both need
+    an explicit unscoped grant in the policy.
     """
     return (
         _function_tool(
@@ -146,6 +149,10 @@ def default_tool_definitions() -> tuple[ToolDefinition, ...]:
                 ToolArgument(name="include_glob", type="string"),
             ),
             capability="fs.read",
+            # Scoped: it takes a ``path``, so gate 4 can hold it inside the
+            # host's declared scopes. Leaving this unscoped made Grep a way
+            # to read anything Read was forbidden to read.
+            scoped=True,
         ),
     )
 

@@ -256,7 +256,15 @@ class QPipeRow:
 
         def _i_opt_default(key: str, default: int | None = None) -> int | None:
             val = d.get(key, default)
-            return int(val) if val is not None else default  # type: ignore[arg-type]
+            if val is None:
+                return default
+            # Narrow before converting: the row is untrusted JSON, so
+            # ``int()`` must be handed something it can actually parse. A
+            # malformed string still raises ValueError as before; a
+            # structurally wrong value gets a message naming the field.
+            if isinstance(val, str | bytes | bytearray | int | float):
+                return int(val)
+            raise TypeError(f"{key} must be numeric, got {type(val).__name__}")
 
         return cls(
             recipe_id=_i_or("id", 0),

@@ -3,8 +3,10 @@
   "issue": "#186",
   "measurement_kind": "tokenizer-only (no model forward pass)",
   "config": {
-    "turns": 6,
+    "turns": 3,
     "tokenizer": "real tokenizer + chat template via mlx-community/SmolLM-135M-Instruct-4bit",
+    "counter": "real_tokenizer",
+    "prefix_token_field": "prefix_tokens counts the stable prefix only, using the counter named above; it is NOT the full rendered request",
     "serving_template_applied": true,
     "session_id": "bench-session",
     "composer_version": "1.0",
@@ -18,10 +20,10 @@
     {
       "turn": 1,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 187,
+      "prefix_tokens": 67,
+      "prefix_tokens_counted": "real_tokenizer",
       "inline_tokens_real": 453,
       "compact_tokens_real": 187,
-      "prefix_tokens_synthetic_whitespace": 67,
       "effective_prompt_bytes": 857,
       "delta_applied": false,
       "rehydrated": true,
@@ -37,10 +39,10 @@
     {
       "turn": 2,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 220,
+      "prefix_tokens": 67,
+      "prefix_tokens_counted": "real_tokenizer",
       "inline_tokens_real": 486,
       "compact_tokens_real": 220,
-      "prefix_tokens_synthetic_whitespace": 67,
       "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
@@ -57,70 +59,10 @@
     {
       "turn": 3,
       "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 220,
+      "prefix_tokens": 67,
+      "prefix_tokens_counted": "real_tokenizer",
       "inline_tokens_real": 486,
       "compact_tokens_real": 220,
-      "prefix_tokens_synthetic_whitespace": 67,
-      "effective_prompt_bytes": 998,
-      "delta_applied": true,
-      "rehydrated": false,
-      "compact_ref_used": true,
-      "inline_ref_used": false,
-      "segment_chars": [
-        164,
-        125,
-        113,
-        69,
-        361
-      ]
-    },
-    {
-      "turn": 4,
-      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 220,
-      "inline_tokens_real": 486,
-      "compact_tokens_real": 220,
-      "prefix_tokens_synthetic_whitespace": 67,
-      "effective_prompt_bytes": 998,
-      "delta_applied": true,
-      "rehydrated": false,
-      "compact_ref_used": true,
-      "inline_ref_used": false,
-      "segment_chars": [
-        164,
-        125,
-        113,
-        69,
-        361
-      ]
-    },
-    {
-      "turn": 5,
-      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 220,
-      "inline_tokens_real": 486,
-      "compact_tokens_real": 220,
-      "prefix_tokens_synthetic_whitespace": 67,
-      "effective_prompt_bytes": 998,
-      "delta_applied": true,
-      "rehydrated": false,
-      "compact_ref_used": true,
-      "inline_ref_used": false,
-      "segment_chars": [
-        164,
-        125,
-        113,
-        69,
-        361
-      ]
-    },
-    {
-      "turn": 6,
-      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
-      "prefix_tokens_real": 220,
-      "inline_tokens_real": 486,
-      "compact_tokens_real": 220,
-      "prefix_tokens_synthetic_whitespace": 67,
       "effective_prompt_bytes": 998,
       "delta_applied": true,
       "rehydrated": false,
@@ -135,7 +77,7 @@
       ]
     }
   ],
-  "composition_overhead_ms": 7.456,
+  "composition_overhead_ms": 4.174,
   "compact_ref_token_saving": {
     "unit": "real tokenizer tokens of the rendered chat template",
     "min_percent": 54.733,

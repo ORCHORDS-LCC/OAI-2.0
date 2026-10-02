@@ -93,6 +93,11 @@ def test_prefix_cache_reuses_state_for_identical_prompt() -> None:
     request = InferenceRequest(
         prompt="Count: one two three four five. " * 4,
         max_tokens=8,
+        # Explicitly greedy. The runtime now honours the request's
+        # temperature instead of silently generating greedily, so "the same
+        # prompt gives the same answer" is a property of temperature=0, not
+        # of the prefix cache alone.
+        temperature=0.0,
         prefix_digest="test-digest",
     )
     first = runtime.generate(request)
@@ -107,7 +112,24 @@ def test_prefix_cache_reuses_state_for_identical_prompt() -> None:
     runtime.close()
 
 
-def test_real_model_shared_prefix_hits_across_different_suffixes() -> None:
+def test_real_model_shared_prefix_across_different_suffixes_is_a_miss() -> None:
+    """Config D now reports a miss, and that is the correct answer.
+
+    This test previously asserted a HIT when two different prompts shared a
+    leading token run. Measured against installed mlx_lm 0.32, restoring that
+    run and trimming the stored state back to it corrupts the model's state:
+    ``KVCache.trim`` decrements the offset without shrinking the key arrays,
+    so the next model call masks over a stale sequence length, and a request
+    following an unrelated one returns a continuation of the PREVIOUS prompt.
+
+    The runtime therefore reuses only a stored entry that is a strict prefix
+    of the query, which needs no trim. Config D's cross-sample reuse stays
+    BLOCKED until mlx_lm exposes a safe way to truncate cached state; see
+    tests/test_runtime_prefix_cache_correctness.py and #240.
+
+    The suffix sharing is still real, and the test still proves the misses
+    are counted honestly rather than being reported as reuse.
+    """
     model_id = _smoke_model_id()
     runtime = MLXHotRuntime(
         ModelSpec(name=model_id),
@@ -117,16 +139,25 @@ def test_real_model_shared_prefix_hits_across_different_suffixes() -> None:
     runtime.load()
     base = "You are a helpful counting assistant. " * 4
     first = runtime.generate(
-        InferenceRequest(prompt=base + "Alpha suffix.", max_tokens=8, prefix_digest="d1")
+        InferenceRequest(
+            prompt=base + "Alpha suffix.",
+            max_tokens=8,
+            temperature=0.0,
+            prefix_digest="d1",
+        )
     )
     second = runtime.generate(
-        InferenceRequest(prompt=base + "Beta suffix.", max_tokens=8, prefix_digest="d2")
+        InferenceRequest(
+            prompt=base + "Beta suffix.",
+            max_tokens=8,
+            temperature=0.0,
+            prefix_digest="d2",
+        )
     )
-    joined = "\n".join(second.notes)
-    assert "prefix_matched=0" not in joined
+    assert "prefix_matched=0" in "\n".join(second.notes)
     metrics = runtime.prefix_cache.metrics
-    assert metrics.misses == 1
-    assert metrics.hits == 1
+    assert metrics.misses == 2
+    assert metrics.hits == 0
     assert first.tokens > 0 and second.tokens > 0
     runtime.close()
 

@@ -88,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     # messages through the serving model's chat template, not a flat string.
     render = None
     counter = _whitespace_tokens
+    real_tokenizer = False
     tokenizer_note = "SYNTHETIC whitespace counter — not a token measurement"
     if not args.no_tokenizer:
         try:
@@ -106,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
                 return len(_tok.encode(text))  # type: ignore[attr-defined]
 
             tokenizer_note = f"real tokenizer + chat template via {args.tokenizer}"
+            real_tokenizer = True
         except Exception as exc:  # pragma: no cover - environment dependent
             print(f"note: tokenizer unavailable ({exc}); falling back to SYNTHETIC counting")
             render = None
@@ -165,10 +167,17 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "turn": turn,
                 "prefix_digest": compact.prefix_digest,
-                "prefix_tokens_real": _count(compact, render, counter),
+                # Tokens of the stable PREFIX alone, counted with whichever
+                # counter is actually in use. This is the quantity a prefix
+                # KV cache could reuse; the full rendered request below is a
+                # different number and must not be labelled as the prefix.
+                "prefix_tokens": counter(compact.prefix_text()),
+                # Counted with the REAL tokenizer when one is available, so
+                # this is "tokens" and not "tokens (real or synthetic)" — the
+                # counter in use is named in summary.config.counter.
+                "prefix_tokens_counted": "real_tokenizer" if real_tokenizer else "whitespace",
                 "inline_tokens_real": _count(inline, render, counter),
                 "compact_tokens_real": _count(compact, render, counter),
-                "prefix_tokens_synthetic_whitespace": counter(compact.prefix_text()),
                 "effective_prompt_bytes": len(_rendered(compact, render).encode("utf-8")),
                 "delta_applied": compact.provenance.delta_applied,
                 "rehydrated": compact.rehydrated,
@@ -191,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
         "config": {
             "turns": args.turns,
             "tokenizer": tokenizer_note,
+            "counter": "real_tokenizer" if real_tokenizer else "whitespace",
+            "prefix_token_field": (
+                "prefix_tokens counts the stable prefix only, using the counter "
+                "named above; it is NOT the full rendered request"
+            ),
             "serving_template_applied": render is not None,
             "session_id": args.session_id,
             "composer_version": COMPOSER_SCHEMA_VERSION,

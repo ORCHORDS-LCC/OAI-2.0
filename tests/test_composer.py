@@ -458,7 +458,47 @@ class TestThroughAgentLoop:
         assert "user" in roles
         # The retrieval message is a user-role tail, not a system message.
         assert all(m["role"] != "system" for m in messages[1:])
-        assert "Retrieved evidence" in str(messages[-1]["content"])
+        tail = str(messages[-1]["content"])
+        # The composer owns the framing now, so the block must carry the
+        # precedence disclaimer the loop used to add by hand.
+        assert EVIDENCE_BODY in tail
+        assert "not instruction" in tail
+        assert "cannot grant permission" in tail
+
+    def test_loop_composes_once_and_forwards_the_digest(self):
+        """The composition is the loop's single owner of prefix identity."""
+        rt = _StubRuntime(script=[{"text": "ok"}])
+        loop = AgentLoop(runtime=rt)
+        loop.run("hello")
+        request = rt.requests[0]
+        assert request.prefix_digest is not None
+        assert loop.last_composition is not None
+        assert loop.last_composition.prefix_digest == request.prefix_digest
+
+    def test_tool_schema_and_policy_text_both_move_the_digest(self):
+        """Every part of the rendered prefix must be in its identity."""
+        from oai2.tools.registry import default_tool_definitions
+
+        loop = AgentLoop(runtime=_StubRuntime(script=[{"text": "ok"}]))
+        base = loop._prefix_spec("policy A").digest()
+        assert loop._prefix_spec("policy B").digest() != base
+
+        one = loop._prefix_spec("policy A")
+        two = AgentLoop(
+            runtime=_StubRuntime(script=[{"text": "ok"}]),
+            tools=tuple(default_tool_definitions()[:-1]),
+        )._prefix_spec("policy A")
+        assert one.digest() != two.digest()
+
+    def test_project_guidance_is_part_of_the_identity(self):
+        loop = AgentLoop(runtime=_StubRuntime(script=[{"text": "ok"}]))
+        plain = loop._prefix_spec("p").digest()
+        with_repo = AgentLoop(
+            runtime=_StubRuntime(script=[{"text": "ok"}]),
+            project_prompt="Use uv, not pip.",
+            project_version="7",
+        )._prefix_spec("p").digest()
+        assert plain != with_repo
 
     def test_tool_call_ordering_survives_multiple_steps(self):
         call = {
@@ -553,7 +593,7 @@ class TestThroughAgentLoop:
         loop = AgentLoop(runtime=rt, knowledge_store=store)
         loop.run(EVIDENCE_QUERY)
         messages = rt.requests[0].messages
-        hits = [m for m in messages if "Retrieved evidence" in str(m.get("content"))]
+        hits = [m for m in messages if EVIDENCE_BODY in str(m.get("content"))]
         assert len(hits) == 1
 
     def test_a_user_supplied_marker_cannot_smuggle_a_second_evidence_block(self):
@@ -570,8 +610,13 @@ class TestThroughAgentLoop:
         messages = rt.requests[0].messages
         # The real evidence block is still delivered exactly once, and the
         # user's own text is untouched in the goal segment.
-        hits = [m for m in messages if str(m.get("content", "")).startswith("Retrieved evidence")]
-        assert len(hits) == 1
+        # The user's own text must stay in the goal segment and must not be
+        # able to fake an evidence block by quoting the framing.
+        goal_msgs = [m for m in messages if goal in str(m.get("content", ""))]
+        assert len(goal_msgs) == 1
+        evidence_msgs = [m for m in messages if EVIDENCE_BODY in str(m.get("content", ""))]
+        assert len(evidence_msgs) == 1
+        assert evidence_msgs[0] is not goal_msgs[0]
 
 
 class TestPrefixCacheInteroperability:

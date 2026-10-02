@@ -59,7 +59,6 @@ from oai2.knowledge import (
 )
 from oai2.knowledge.qpipe_import import (
     DEFAULT_SOURCES,
-    EXPORTABLE_SCOPES,
     OPT_IN_SOURCES,
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
     QPIPE_COMPATIBILITY_SOURCE_REVISION,

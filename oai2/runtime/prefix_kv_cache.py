@@ -8,9 +8,11 @@ per-layer cache state is snapshotted; later requests whose token sequence
 starts with that prefix get the state restored, so only the divergent
 suffix is prefilled.
 
-The caller owns compatibility gating (REQ-INF-012/013): key upstream by
-the request's compatibility digest so tool/world-state changes miss
-naturally; :meth:`invalidate_all` covers wholesale changes. This module
+The caller owns compatibility gating (REQ-INF-012/013): it supplies the
+request's compatibility digest and the store refuses to reuse an entry
+recorded under a different one, so tool/world-state changes miss naturally;
+:meth:`invalidate_all` covers wholesale changes. Passing no digest (the
+default) reproduces the original ungated behaviour exactly. This module
 never imports ``mlx`` directly — ``model.py`` stays the single sanctioned
 MLX importer in the runtime package.
 """
@@ -34,10 +36,19 @@ def _common_prefix_len(a: tuple[int, ...], b: tuple[int, ...]) -> int:
 
 @dataclass(slots=True, frozen=True)
 class PrefixCacheEntry:
-    """One stored prefix: the token identity and its per-layer KV states."""
+    """One stored prefix: the token identity and its per-layer KV states.
+
+    ``digest`` is the caller's compatibility digest (REQ-INF-012/013). It is
+    part of the *identity* of the entry, not a filter applied at lookup: two
+    requests may share a token prefix and still be mutually incompatible
+    because their tool schema or world state differs, and restoring KV state
+    across that boundary would silently answer with the other request's
+    context. ``None`` means "ungated" and only ever matches ``None``.
+    """
 
     token_ids: tuple[int, ...]
     states: tuple[Any, ...]
+    digest: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -59,27 +70,76 @@ class PrefixKVCache:
         if max_entries <= 0:
             raise ValueError("max_entries must be a positive integer")
         self._max_entries = max_entries
-        self._entries: OrderedDict[tuple[int, ...], PrefixCacheEntry] = OrderedDict()
+        self._entries: OrderedDict[tuple[str | None, tuple[int, ...]], PrefixCacheEntry] = (
+            OrderedDict()
+        )
         self._lookups = 0
         self._hits = 0
         self._misses = 0
         self._restores = 0
         self._invalidations = 0
 
-    def store(self, token_ids: Sequence[int], states: Sequence[Any]) -> int:
-        """Snapshot one prefix; returns the number of tokens stored."""
+    @staticmethod
+    def _key(digest: str | None, token_ids: tuple[int, ...]) -> tuple[str | None, tuple[int, ...]]:
+        return (digest, token_ids)
+
+    def _candidates(
+        self,
+        digest: str | None,
+        gate_digest: bool,
+    ) -> list[tuple[tuple[str | None, tuple[int, ...]], PrefixCacheEntry]]:
+        """Entries eligible for a lookup.
+
+        ``gate_digest=False`` (the default) keeps the original behaviour:
+        every stored entry is a candidate and ``digest`` is merely recorded
+        alongside it. That is the right default for the training-loop case,
+        where consecutive samples share a prompt prefix but are deliberately
+        distinct requests (WI-PERF-003 config D) and KV state for a shared
+        leading token run is valid regardless of which sample produced it.
+
+        ``gate_digest=True`` restricts candidates to entries stored under
+        the same digest. Serving paths should set it: there the digest
+        carries tool schema and world state, which token-prefix matching
+        cannot see, so an ungated hit could silently answer with context
+        belonging to a different schema or world.
+        """
+        if not gate_digest:
+            return list(self._entries.items())
+        return [(k, e) for k, e in self._entries.items() if e.digest == digest]
+
+    def store(
+        self,
+        token_ids: Sequence[int],
+        states: Sequence[Any],
+        *,
+        digest: str | None = None,
+    ) -> int:
+        """Snapshot one prefix; returns the number of tokens stored.
+
+        ``digest`` defaults to ``None``, which reproduces the pre-digest
+        behaviour exactly: every stored entry is ungated and every lookup
+        sees them all.
+        """
         key = tuple(token_ids)
         if not key:
             raise ValueError("token_ids must be non-empty")
-        entry = PrefixCacheEntry(token_ids=key, states=tuple(states))
-        self._entries[key] = entry
-        self._entries.move_to_end(key)
+        entry = PrefixCacheEntry(token_ids=key, states=tuple(states), digest=digest)
+        map_key = self._key(digest, key)
+        self._entries[map_key] = entry
+        self._entries.move_to_end(map_key)
         while len(self._entries) > self._max_entries:
             self._entries.popitem(last=False)
             self._invalidations += 1
         return len(key)
 
-    def lookup_and_apply(self, token_ids: Sequence[int], cache_layers: Sequence[Any]) -> int:
+    def lookup_and_apply(
+        self,
+        token_ids: Sequence[int],
+        cache_layers: Sequence[Any],
+        *,
+        digest: str | None = None,
+        gate_digest: bool = False,
+    ) -> int:
         """Restore the longest stored prefix of ``token_ids`` into the layers.
 
         Returns the number of matched prefix tokens (0 = miss). The caller
@@ -87,6 +147,9 @@ class PrefixKVCache:
         matched prefix must be shorter than the full sequence; a fully
         consumed sequence leaves nothing to prefill and the caller should
         handle that case before calling.
+
+        With ``gate_digest=True`` only entries stored under the same
+        ``digest`` are eligible.
         """
         self._lookups += 1
         key = tuple(token_ids)
@@ -94,15 +157,17 @@ class PrefixKVCache:
             self._misses += 1
             return 0
         best: PrefixCacheEntry | None = None
-        for stored in self._entries.values():
+        best_key: tuple[str | None, tuple[int, ...]] | None = None
+        for map_key, stored in self._candidates(digest, gate_digest):
             n = len(stored.token_ids)
             if n < len(key) and key[:n] == stored.token_ids:
                 if best is None or n > len(best.token_ids):
                     best = stored
-        if best is None:
+                    best_key = map_key
+        if best is None or best_key is None:
             self._misses += 1
             return 0
-        self._entries.move_to_end(best.token_ids)
+        self._entries.move_to_end(best_key)
         for layer, state in zip(cache_layers, best.states, strict=True):
             layer.state = state
         self._hits += 1
@@ -116,7 +181,14 @@ class PrefixKVCache:
         self._invalidations += count
         return count
 
-    def lookup_common_and_trim(self, token_ids: Sequence[int], cache_layers: Sequence[Any]) -> int:
+    def lookup_common_and_trim(
+        self,
+        token_ids: Sequence[int],
+        cache_layers: Sequence[Any],
+        *,
+        digest: str | None = None,
+        gate_digest: bool = False,
+    ) -> int:
         """Restore the longest common token prefix with any stored entry.
 
         Unlike :meth:`lookup_and_apply` — which requires a stored entry to
@@ -132,6 +204,10 @@ class PrefixKVCache:
         left for the caller to prefill. Partial matches require trimmable
         cache layers; if the layers cannot trim, the match is reported as
         a miss and the layers are left untouched.
+
+        Only entries stored under the same ``digest`` are eligible when
+        ``gate_digest=True``, so a changed tool schema or world state misses
+        instead of reusing state computed under the previous one.
         """
         self._lookups += 1
         key = tuple(token_ids)
@@ -139,14 +215,16 @@ class PrefixKVCache:
             self._misses += 1
             return 0
         best: PrefixCacheEntry | None = None
+        best_key: tuple[str | None, tuple[int, ...]] | None = None
         best_common = 0
-        for stored in self._entries.values():
+        for map_key, stored in self._candidates(digest, gate_digest):
             common = _common_prefix_len(stored.token_ids, key)
             if common > best_common:
                 best = stored
+                best_key = map_key
                 best_common = common
         matched = min(best_common, len(key) - 1)
-        if best is None or matched < 1:
+        if best is None or best_key is None or matched < 1:
             self._misses += 1
             return 0
         excess = len(best.token_ids) - matched
@@ -160,7 +238,7 @@ class PrefixKVCache:
         if excess:
             for layer in cache_layers:
                 layer.trim(excess)
-        self._entries.move_to_end(best.token_ids)
+        self._entries.move_to_end(best_key)
         self._hits += 1
         self._restores += 1
         return matched

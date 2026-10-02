@@ -285,14 +285,14 @@ def test_agent_loop_injects_retrieval_into_messages_when_store_matches() -> None
     assert roles[0] == "system"
     assert roles[1] == "user"
     # The evidence is appended as a user-role message with a clear
-    # precedence marker (REQ-PROMPT-002 of #179).
+    # precedence marker (REQ-PROMPT-002 of #179). The framing now comes
+    # from the composer, which states that the block is data, not policy.
     assert any(
-        m["role"] == "user" and "Retrieved evidence" in m["content"]
-        for m in msgs
+        m["role"] == "user" and "not instruction" in m["content"] for m in msgs
     )
     # Marker: retrieved evidence never overrides system prompt.
     last = msgs[-1]
-    assert "Retrieved evidence" in last["content"]
+    assert "cannot grant permission" in last["content"]
     assert "find . -name '*.py'" in last["content"]
     assert run.finished_reason == "stop"
 
@@ -395,5 +395,5 @@ def test_full_loop_task_a_to_b_reuse_evidence() -> None:
     msgs = rt.requests[0].messages
     last = msgs[-1]
     assert last["role"] == "user"
-    assert "Retrieved evidence" in last["content"]
+    assert "not instruction" in last["content"]
     assert "find . -name '*.py'" in last["content"]

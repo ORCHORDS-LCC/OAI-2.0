@@ -436,9 +436,14 @@ class TestInferenceResponse:
         resp = InferenceResponse(text="hi", tokens=1, elapsed_ms=1.5, device="cpu")
         assert resp.tool_calls == ()
 
-    def test_field_set_pinned_to_nine_names(self) -> None:
+    def test_field_set_pinned_to_eleven_names(self) -> None:
         import dataclasses
 
+        # The three added in #186 carry measurements that previously existed
+        # only as free-text ``notes`` strings and so could never reach a
+        # client: ``prompt_tokens`` (the serving tokenizer's real count — a
+        # fabricated ``0`` reads as free prefill) and the two prefix-reuse
+        # fields that let a caller see how much prefill was actually avoided.
         field_names = {f.name for f in dataclasses.fields(InferenceResponse)}
         assert field_names == {
             "text",
@@ -449,7 +454,17 @@ class TestInferenceResponse:
             "notes",
             "finish_reason",
             "tool_calls",
+            "prompt_tokens",
+            "prefix_matched",
+            "prefix_prompt_tokens",
         }
+
+    def test_measured_fields_default_to_unknown_not_zero(self) -> None:
+        """Unknown is None. Zero would be a positive false statement."""
+        resp = InferenceResponse(text="hi", tokens=1, elapsed_ms=1.5, device="cpu")
+        assert resp.prompt_tokens is None
+        assert resp.prefix_matched is None
+        assert resp.prefix_prompt_tokens is None
 
     def test_no_dict_on_instance(self) -> None:
         resp = InferenceResponse(text="hi", tokens=1, elapsed_ms=1.5, device="cpu")
@@ -900,8 +915,11 @@ class TestPublicSafetyAndStructuralCounts:
         assert len(abstracts) == 1
 
     def test_class_set_pinned(self) -> None:
-        # 3 classes total — InferenceRequest (BaseModel),
-        # InferenceRuntime (ABC), PlaceholderRuntime (InferenceRuntime)
+        # 4 classes — InferenceRequest (BaseModel), InferenceResponse
+        # (dataclass), InferenceRuntime (ABC), PlaceholderRuntime
+        # (InferenceRuntime). TemplateRenderError was added in #186: a chat
+        # template that cannot express structured tool history must fail
+        # loudly rather than degrade the conversation into prose.
         source_path = inspect.getsourcefile(inference_module)
         assert source_path is not None
         with open(source_path, encoding="utf-8") as f:
@@ -912,8 +930,9 @@ class TestPublicSafetyAndStructuralCounts:
             "InferenceResponse",
             "InferenceRuntime",
             "PlaceholderRuntime",
+            "TemplateRenderError",
         }
-        assert len(classes) == 4
+        assert len(classes) == 5
 
     def test_function_defs_pinned(self) -> None:
         # 4 module-level functions: default_runtime, select_runtime_from_env,

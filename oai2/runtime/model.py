@@ -111,4 +111,34 @@ def smoke_check() -> tuple[bool, str]:
     return True, device
 
 
+def _seed_random(seed: int) -> None:
+    """Seed MLX's global RNG; no-op when MLX is unavailable.
+
+    Package-internal helper so sibling runtime modules that must not
+    import ``mlx`` directly can honour ``InferenceRequest.seed``;
+    ``model.py`` stays the single sanctioned MLX importer in the runtime
+    package.
+    """
+    try:
+        import mlx.core as mx  # local import: keep this module dependency-free at parse time.
+    except Exception:  # pragma: no cover - depends on install
+        return
+    mx.random.seed(seed)
+
+
+def _sampler(temp: float, top_p: float) -> Any:
+    """Build an mlx_lm sampler honouring the request's sampling settings.
+
+    Package-internal helper so sibling runtime modules that must not
+    import ``mlx_lm`` directly can still reach the backend's sampler.
+    ``temp=0`` is greedy, which is what a caller asking for deterministic
+    output actually means.
+    """
+    try:
+        from mlx_lm.sample_utils import make_sampler  # local import: keep parse time cheap.
+    except Exception:  # pragma: no cover - depends on install
+        return None
+    return make_sampler(temp=temp, top_p=top_p)
+
+
 __all__ = ["ModelSpec", "discover_default_device", "smoke_check"]

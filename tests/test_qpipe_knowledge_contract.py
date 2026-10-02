@@ -16,20 +16,19 @@ import json
 
 import pytest
 
+from oai2.core import Status
 from oai2.knowledge.qpipe_import import (
     DEFAULT_SOURCES,
     EXPORTABLE_SCOPES,
     OPT_IN_SOURCES,
     ImportPolicy,
     import_qpipe_rows,
-    row_to_knowledge_object,
 )
 from oai2.knowledge.transport import (
     D1KnowledgeIndexRecord,
     R2BodyDescriptor,
     VectorizeMetadata,
 )
-from oai2.core import Status
 
 
 def _row(
@@ -110,7 +109,7 @@ class TestSupersessionIsLinkedNotRetired:
         by_ext = {o.source_uri.rsplit("/", 1)[-1]: o for o in rep.imported}
         old, new = by_ext["old"], by_ext["new"]
 
-        assert old.superseded_by == f"qpipe:recipe_candidates:new"
+        assert old.superseded_by == "qpipe:recipe_candidates:new"
         assert old.superseded_at == 1_700_009_000
         # REQ-TEMP-004/013: the loser is retained, linked, and identifiable as
         # historical rather than silently removed.

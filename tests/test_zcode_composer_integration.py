@@ -31,6 +31,22 @@ class _StubHotRuntime:
     model_id: str = "stub-model"
     _loaded: bool = False
 
+    def __post_init__(self) -> None:
+        # The endpoint reports reuse telemetry from these two, so the stub
+        # must carry the same surface the real runtime exposes.
+        from oai2.runtime.prefix_kv_cache import PrefixKVCache
+
+        self._prefix_cache: Any = PrefixKVCache(max_entries=8)
+        self._gate_digest: bool = False
+
+    @property
+    def prefix_cache(self) -> Any:
+        return self._prefix_cache
+
+    @property
+    def gate_digest(self) -> bool:
+        return self._gate_digest
+
     def load(self) -> None:
         self._loaded = True
 
@@ -48,6 +64,9 @@ class _StubHotRuntime:
             finish_reason=step.get("finish_reason", "stop"),
             tool_calls=tuple(step.get("tool_calls", ())),
             notes=list(step.get("notes", ())),
+            prompt_tokens=step.get("prompt_tokens"),
+            prefix_matched=step.get("prefix_matched"),
+            prefix_prompt_tokens=step.get("prompt_tokens"),
         )
 
     def close(self) -> None:
@@ -61,9 +80,20 @@ def _client(runtime: _StubHotRuntime) -> TestClient:
     real_hot = mod.MLXHotRuntime
 
     class _Patched(_StubHotRuntime):
-        def __init__(self, spec: Any, *, model_id: str = "", **_: Any) -> None:
+        def __init__(
+            self,
+            spec: Any,
+            *,
+            model_id: str = "",
+            prefix_cache: Any = None,
+            gate_digest: bool = False,
+            **_: Any,
+        ) -> None:
             super().__init__(model_id=model_id or "stub-model")
             self._shared = runtime
+            if prefix_cache is not None:
+                self._prefix_cache = prefix_cache
+            self._gate_digest = gate_digest
 
         def generate(self, request: Any) -> Any:
             # Delegate to the outer stub so its script and recording are used.

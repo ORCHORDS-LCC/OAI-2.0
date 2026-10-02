@@ -53,6 +53,16 @@ class InferenceRequest(BaseModel):
     prefix_digest: str | None = None
 
 
+class TemplateRenderError(ValueError):
+    """The chat template refused a request and flattening would lose meaning.
+
+    Raised instead of silently degrading structured tool history into
+    prose. A ``tool`` message whose ``tool_call_id`` no longer resolves is
+    dropped by clients rather than repaired, so flattening it is worse than
+    returning an actionable error.
+    """
+
+
 @dataclass(slots=True)
 class InferenceResponse:
     text: str
@@ -64,6 +74,13 @@ class InferenceResponse:
     # None means the upstream runtime did not supply a completion reason.
     finish_reason: str | None = None
     tool_calls: tuple[dict[str, Any], ...] = ()
+    # Real count of prompt tokens the serving tokenizer produced for the
+    # rendered request. None means "the runtime did not measure it" — which
+    # is not the same as zero, and callers must not report it as 0.
+    prompt_tokens: int | None = None
+    # Prefix KV reuse telemetry, when the runtime has a prefix cache.
+    prefix_matched: int | None = None
+    prefix_prompt_tokens: int | None = None
 
 
 class InferenceRuntime(ABC):
@@ -149,6 +166,7 @@ __all__ = [
     "InferenceResponse",
     "InferenceRuntime",
     "PlaceholderRuntime",
+    "TemplateRenderError",
     "default_runtime",
     "estimate_tokens",
     "select_runtime_from_env",

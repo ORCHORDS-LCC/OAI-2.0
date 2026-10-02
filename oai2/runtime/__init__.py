@@ -57,6 +57,7 @@ from .inference import (
     InferenceResponse,
     InferenceRuntime,
     PlaceholderRuntime,
+    TemplateRenderError,
     default_runtime,
     select_runtime_from_env,
 )
@@ -86,6 +87,13 @@ from .service_binding import (
     create_batch_inference_app,
 )
 from .service_security import AccessPolicy, IsolatedSessionRegistry, SessionRecord
+from .tool_calls import (
+    ToolCallParseError,
+    normalise_tool_choice,
+    parse_tool_calls,
+    render_tool_result,
+    validate_tool_calls,
+)
 
 __all__ = [
     "AdmissionBatchController",
@@ -129,6 +137,8 @@ __all__ = [
     "ServiceLifecycle",
     "ServiceState",
     "SessionRecord",
+    "TemplateRenderError",
+    "ToolCallParseError",
     "create_local_service_app",
     "KNOWN_CLOUD_MODELS",
     "STRICT_CLOUD_MODEL_ID",
@@ -146,6 +156,10 @@ __all__ = [
     "PrefixKVCache",
     "discover_default_device",
     "smoke_check",
+    "normalise_tool_choice",
+    "parse_tool_calls",
+    "render_tool_result",
+    "validate_tool_calls",
     "SessionCompatibilityKey",
     "ScheduledRequest",
     "SchedulerMetrics",
