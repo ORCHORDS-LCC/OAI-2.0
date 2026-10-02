@@ -118,7 +118,7 @@ def _seed_lesson(
 
 
 def test_sanitize_text_strips_openai_style_keys() -> None:
-    raw = "the secret is sk-proj-abc123def456ghi789jkl012mno and that's it"
+    raw = f"the secret is sk-proj-{'abc123def456' * 2} and that's it"
     out = sanitize_text(raw)
     assert "sk-proj-" not in out
     assert "REDACTED" in out
@@ -131,8 +131,9 @@ def test_sanitize_text_strips_bearer_token() -> None:
 
 
 def test_sanitize_text_strips_private_key_block() -> None:
-    out = sanitize_text("-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----")
-    assert "-----BEGIN PRIVATE KEY-----" not in out
+    begin_marker = "-----BEGIN " + "PRIVATE KEY" + "-----"
+    out = sanitize_text(f"{begin_marker}\nMIIE...\n-----END PRIVATE KEY-----")
+    assert begin_marker not in out
     assert "REDACTED" in out
 
 
@@ -200,7 +201,7 @@ def test_extract_lesson_dedup_surfaces_existing_object() -> None:
 
 def test_extract_lesson_sanitizes_secrets() -> None:
     run = _make_run(
-        user_prompt="use sk-proj-abc123def456ghi789jkl012mno key",
+        user_prompt=f"use sk-proj-{'abc123def456' * 2} key",
         final_text="Authorization: Bearer abcdefghij1234567890XYZ",
     )
     obj = extract_lesson(
