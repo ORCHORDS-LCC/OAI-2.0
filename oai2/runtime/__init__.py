@@ -77,6 +77,12 @@ from .scheduler import (
     SessionCompatibilityKey,
 )
 from .service import ServiceCompatibility, ServiceHealth, ServiceLifecycle, ServiceState
+from .service_binding import (
+    BatchExecutionResult,
+    BatchInferenceSurface,
+    BatchSurfaceMetrics,
+    create_batch_inference_app,
+)
 from .service_security import AccessPolicy, IsolatedSessionRegistry, SessionRecord
 
 __all__ = [
@@ -139,6 +145,10 @@ __all__ = [
     "SchedulerMetrics",
     "BatchPlan",
     "SafeBatchScheduler",
+    "BatchExecutionResult",
+    "BatchInferenceSurface",
+    "BatchSurfaceMetrics",
+    "create_batch_inference_app",
     "UnknownModelError",
     "WorkingModelResolution",
 ]
