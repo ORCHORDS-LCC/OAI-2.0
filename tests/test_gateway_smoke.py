@@ -364,7 +364,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="runpy-token-xyz",
-        model="orchordsai-m3",
+        model="oai-2.0",
         timeout_seconds=5.0,
     )
     client = httpx.Client(
@@ -391,7 +391,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     monkeypatch.setattr("oai2.runtime.GatewayRuntime", lambda config: runtime)
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "runpy-token-xyz")
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "orchordsai-m3")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
 
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -429,7 +429,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     # Assert on the same shape the existing Path-1 happy-path test pins:
     # model line, base_url line, status_code: 200, text: pong.
     assert "model:" in captured
-    assert "orchordsai-m3" in captured
+    assert "oai-2.0" in captured
     assert "status_code:  200" in captured
     assert "text:         pong" in captured
     assert "runpy-token-xyz" not in captured
