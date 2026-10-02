@@ -1,0 +1,125 @@
+{
+  "benchmark": "wi-perf-003-config-C-prompt-cache",
+  "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "python": "3.14.7",
+  "load_seconds": 0.3721,
+  "prefix_tokens": 1024,
+  "suffix_tokens": 128,
+  "max_tokens": 64,
+  "repetitions": 5,
+  "prefix_only_prefill_seconds": 0.001762,
+  "miss_runs": [
+    {
+      "prompt_tokens": 1152,
+      "prefill_seconds": 0.02249,
+      "decode_seconds": 0.113426,
+      "total_seconds": 0.135916,
+      "generation_tokens": 64,
+      "rep": 1
+    },
+    {
+      "prompt_tokens": 1152,
+      "prefill_seconds": 0.016346,
+      "decode_seconds": 0.116004,
+      "total_seconds": 0.13235,
+      "generation_tokens": 64,
+      "rep": 2
+    },
+    {
+      "prompt_tokens": 1152,
+      "prefill_seconds": 0.016084,
+      "decode_seconds": 0.121447,
+      "total_seconds": 0.137531,
+      "generation_tokens": 64,
+      "rep": 3
+    },
+    {
+      "prompt_tokens": 1152,
+      "prefill_seconds": 0.016286,
+      "decode_seconds": 0.114961,
+      "total_seconds": 0.131246,
+      "generation_tokens": 64,
+      "rep": 4
+    },
+    {
+      "prompt_tokens": 1152,
+      "prefill_seconds": 0.017861,
+      "decode_seconds": 0.118024,
+      "total_seconds": 0.135885,
+      "generation_tokens": 64,
+      "rep": 5
+    }
+  ],
+  "miss_prefill_aggregate": {
+    "count": 5,
+    "mean": 0.017813,
+    "median": 0.016346,
+    "min": 0.016084,
+    "max": 0.02249,
+    "stddev": 0.002423
+  },
+  "hit_runs": [
+    {
+      "prompt_tokens": 128,
+      "prefill_seconds": 0.023944,
+      "decode_seconds": 0.113016,
+      "total_seconds": 0.136959,
+      "generation_tokens": 64,
+      "rep": 1
+    },
+    {
+      "prompt_tokens": 128,
+      "prefill_seconds": 0.013211,
+      "decode_seconds": 0.11834,
+      "total_seconds": 0.131551,
+      "generation_tokens": 64,
+      "rep": 2
+    },
+    {
+      "prompt_tokens": 128,
+      "prefill_seconds": 0.01235,
+      "decode_seconds": 0.118188,
+      "total_seconds": 0.130539,
+      "generation_tokens": 64,
+      "rep": 3
+    },
+    {
+      "prompt_tokens": 128,
+      "prefill_seconds": 0.011876,
+      "decode_seconds": 0.118903,
+      "total_seconds": 0.130778,
+      "generation_tokens": 64,
+      "rep": 4
+    },
+    {
+      "prompt_tokens": 128,
+      "prefill_seconds": 0.013006,
+      "decode_seconds": 0.121706,
+      "total_seconds": 0.134711,
+      "generation_tokens": 64,
+      "rep": 5
+    }
+  ],
+  "hit_prefill_aggregate": {
+    "count": 5,
+    "mean": 0.014877,
+    "median": 0.013006,
+    "min": 0.011876,
+    "max": 0.023944,
+    "stddev": 0.004558
+  },
+  "hit_prefill_aggregate_excluding_first": {
+    "count": 4,
+    "mean": 0.012611,
+    "median": 0.012678,
+    "min": 0.011876,
+    "max": 0.013211,
+    "stddev": 0.00053
+  },
+  "prefill_saving_seconds": 0.002936,
+  "prefill_saving_percent": 16.48,
+  "prefill_saving_seconds_excluding_first": 0.005203,
+  "prefill_saving_percent_excluding_first": 29.21,
+  "note": "mlx_lm 0.32.0 generate_step prefills the full prompt every call; the hit phase restores snapshotted prefix state explicitly, emulating what a matching prompt-cache layer would deliver."
+}
