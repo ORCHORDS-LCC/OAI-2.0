@@ -56,6 +56,8 @@ from .scheduler import (
     SchedulerMetrics,
     SessionCompatibilityKey,
 )
+from .service import ServiceCompatibility, ServiceHealth, ServiceLifecycle, ServiceState
+from .service_security import AccessPolicy, IsolatedSessionRegistry, SessionRecord
 
 __all__ = [
     "AdmissionBatchController",
@@ -70,6 +72,7 @@ __all__ = [
     "AdmissionReason",
     "AdmissionRequest",
     "CapacitySnapshot",
+    "AccessPolicy",
     "ChatReply",
     "DEFAULT_GATEWAY_BASE_URL",
     "DEFAULT_GATEWAY_MODEL",
@@ -84,7 +87,13 @@ __all__ = [
     "InferenceRequest",
     "InferenceResponse",
     "InferenceRuntime",
+    "IsolatedSessionRegistry",
     "PlaceholderRuntime",
+    "ServiceCompatibility",
+    "ServiceHealth",
+    "ServiceLifecycle",
+    "ServiceState",
+    "SessionRecord",
     "default_runtime",
     "load_gateway_config_from_env",
     "select_runtime_from_env",
