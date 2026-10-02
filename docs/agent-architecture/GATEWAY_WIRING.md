@@ -9,7 +9,7 @@ the path. No credentials or live tokens appear in this file.
 
 ```
 +------------------+      HTTP (HTTPS)      +-------------------+      +--------+
-| OAI-2.0 runtime  |  ───────────────────▶  | api.orchords.com  |  ──▶ | oai-1.2 |
+| OAI-2.0 runtime  |  ───────────────────▶  | api.orchords.com  |  ──▶ | oai-2.0 |
 | GatewayRuntime   |  POST /v1/chat/        | ORCHORDS gateway  |      +--------+
 | (InferenceRuntime|       completions       | (q-pipe)          |
 |  subclass)       |  Authorization: Bearer |                   |
@@ -35,7 +35,7 @@ required; the others have documented defaults.
 |-------------------------------|----------|------------------------------|--------------------------------------------------|
 | `OAI2_GATEWAY_API_KEY`        | yes      | (empty)                      | Bearer token sent on every request.             |
 | `OAI2_GATEWAY_BASE_URL`       | no       | `https://api.orchords.com`   | Base URL of the gateway.                        |
-| `OAI2_GATEWAY_MODEL`          | no       | `oai-1.2`                    | Default model id sent in the request body.      |
+| `OAI2_GATEWAY_MODEL`          | no       | `oai-2.0`                    | Default model id sent in the request body.      |
 | `OAI2_GATEWAY_TIMEOUT_SECONDS`| no       | `60`                         | Per-request HTTP timeout.                       |
 
 The populated values must live in a gitignored `.env`. `.env.example`
@@ -81,7 +81,7 @@ exits cleanly (SKIP) otherwise. When it runs, it sends one
 `OAI2_GATEWAY_MODEL` is in the response.
 
 ```
-PASS gateway-reach: https://api.orchords.com exposes oai-1.2 (of 1 models)
+PASS gateway-reach: https://api.orchords.com exposes oai-2.0 (of 1 models)
 ```
 
 The check is intentionally live (no `MockTransport`) — it is the
@@ -154,7 +154,7 @@ is unreachable.
 ## Status of the related q-pipe cloud
 
 The local q-pipe checkout (`../q-pipe`) restricts `models_payload()`
-to the single public model id `oai-1.2`. The deployed
+to the single public model id `oai-2.0`. The deployed
 `api.orchords.com` instance still exposes four models — that change
 must be re-applied on the cloud deployment. Tracking is in the
 issue tracker.
@@ -194,7 +194,7 @@ reason; it is not silently discarded or represented as a completed answer.
 | (slice 18)  | Negative-path coverage for `oai2/knowledge/evidence_package.py` outer guard rails. 49 parametrized tests in `tests/test_evidence_package_validation.py` pin every `ValueError` raise site not already covered by `test_evidence_package.py`: `token_budget` (zero / negative / non-int / bool), `max_entries` (zero / negative / non-int / bool / callable shape), `token_counter` callability, empty-package feasibility (`token_budget cannot fit the empty package encoding`), `raw_source_tokens` (zero / negative / non-int / bool), empty `relevant_knowledge_ids`, and `_rate` out-of-range / non-numeric (parametrized over 8 edge values × 2 rate arguments). |
 | (slice 19)  | Cross-repo seam test: drive the actual `scripts/backend_smoke.py` `__main__` block via `runpy.run_module(...)` (1 success-path test + 1 source-pin test for `except Exception` + `raise SystemExit(2) from exc`). The failure-path runpy test was dropped because `runpy.run_module` reloads the module from disk (the warning `found in sys.modules after import of package 'scripts'` confirms it); that path is already pinned end-to-end by `test_backend_smoke_prints_fail_when_runtime_init_raises` (subprocess wrapper) + `test_backend_smoke_prints_fail_when_selector_returns_wrong_runtime` (in-process `main()`) + `test_backend_smoke_prints_fail_when_scores_mismatch_n_cases` (in-process `main()`). |
 | (slice 21)  | Drive the actual `scripts/gateway_smoke.py` `__main__` block via `runpy.run_module(...)` (1 success-path test + 1 source-pin test for `raise SystemExit(main())`). Unlike `scripts/backend_smoke.py`, this boundary has no exception translation — `main()` catches all expected exceptions and returns 0/1/2 ints — so the source-pin test pins the literal `raise SystemExit(main())` form. The patch chain is `oai2.runtime.GatewayRuntime` (the re-exported attribute on `__init__.py`); patching `oai2.runtime.gateway_runtime.GatewayRuntime` (the source class) does not work because the `__init__` re-export already holds the original class reference and the re-executed `from oai2.runtime import GatewayRuntime` resolves through it. |
-| (slice 22)  | Drive the actual `scripts/bench.py` `__main__` block via `runpy.run_module(...)` (1 success-path test + 1 source-pin test for `raise SystemExit(main())`). Uses `--out-dir=tmp_path` so per-run + summary JSON artifacts stay hermetic. The success-path test asserts (a) `exit_code == 0`, (b) stderr banner `benchmark: backend=gateway model=oai-1.2` + `wrote summary:` marker, (c) one `bench_*.json` run file + one `summary_runpy-boundary.json` summary file written, (d) summary fields `{backend: gateway, model: oai-1.2, repetitions: 1, tag: runpy-boundary}`, and (e) the test's redacted token is absent from every artifact. Patches `oai2.runtime.GatewayRuntime` so the re-executed `from oai2.runtime import GatewayRuntime` resolves to a MockTransport-backed runtime (same root cause as slice 21). Completes runpy-driven `__main__` boundary coverage for all 3 CLI entry points (`backend_smoke`, `gateway_smoke`, `bench`). |
+| (slice 22)  | Drive the actual `scripts/bench.py` `__main__` block via `runpy.run_module(...)` (1 success-path test + 1 source-pin test for `raise SystemExit(main())`). Uses `--out-dir=tmp_path` so per-run + summary JSON artifacts stay hermetic. The success-path test asserts (a) `exit_code == 0`, (b) stderr banner `benchmark: backend=gateway model=oai-2.0` + `wrote summary:` marker, (c) one `bench_*.json` run file + one `summary_runpy-boundary.json` summary file written, (d) summary fields `{backend: gateway, model: oai-2.0, repetitions: 1, tag: runpy-boundary}`, and (e) the test's redacted token is absent from every artifact. Patches `oai2.runtime.GatewayRuntime` so the re-executed `from oai2.runtime import GatewayRuntime` resolves to a MockTransport-backed runtime (same root cause as slice 21). Completes runpy-driven `__main__` boundary coverage for all 3 CLI entry points (`backend_smoke`, `gateway_smoke`, `bench`). |
 | `6a4fb5f`   | Smoke-CLI test coverage (9 tests on `scripts/gateway_smoke.py`).               |
 | `2f29287`   | Mypy clean-up on `scripts/bench.py` (silences 2 long-standing errors).         |
 | `53b546a`   | `bench.py --backend=gateway` integration + 7 dedicated tests.                   |
