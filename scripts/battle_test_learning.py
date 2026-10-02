@@ -1781,6 +1781,219 @@ def session_real_write_read_roundtrip(store: InMemoryKnowledgeStore) -> bool:
     )
 
 
+def session_real_deny_to_negative_loop(store: InMemoryKnowledgeStore) -> bool:
+    """Round 33 (FULL #88 LOOP ON A REAL FAILURE): the REAL gate-6
+    denial from Session 27 is recorded via record_failure, and the
+    NEXT task retrieves the diagnostic — real execution -> verified
+    failure -> negative memory -> live model context, all in one
+    round.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 33: FULL LOOP — real denial -> negative memory -> next task's context")
+    print("=" * 70)
+    # Step 1: REAL execution produces the denial (same shape as 27).
+    from oai2.tools import DispatchPolicy
+
+    rt = _StubRuntime(
+        script=[
+            {
+                "text": "",
+                "tool_calls": (
+                    {
+                        "id": "c33",
+                        "type": "function",
+                        "function": {
+                            "name": "Bash",
+                            "arguments": json.dumps({"command": "echo denied"}),
+                        },
+                    },
+                ),
+                "finish_reason": "tool_calls",
+            },
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    policy = DispatchPolicy(
+        allow_capabilities=frozenset({"fs.read", "fs.write", "fs.list", "shell.exec"}),
+        deny_capabilities=frozenset(),
+        resource_scopes=frozenset({"/tmp"}),
+        budget_calls=8,
+        high_impact_approved=False,
+    )
+    loop = AgentLoop(runtime=rt, cwd=Path("/tmp"), policy=policy, max_steps=4)
+    run = loop.run("battle 33 real denial")
+    tool_msgs = [
+        m for m in rt.requests[1].messages if m.get("role") == "tool"
+    ]
+    real_denial = tool_msgs[0].get("content", "")
+    if "dispatch:deny" not in real_denial:
+        print(f"  [SESSION 33] FAIL: expected real denial, got {real_denial!r}")
+        return False
+    print(f"  [SESSION 33] REAL denial captured: {real_denial.strip()!r}")
+
+    # Step 2: record the verified failure as negative memory.
+    neg = record_failure(
+        _make_run(
+            user_prompt="battle 33 real denial",
+            final_text=real_denial,
+            finished_reason="tool_calls",
+            total_tool_calls=1,
+        ),
+        task_id="bt-033-fail",
+        failure_class="high_impact_denial",
+        evidence_ref="verifier://battle/033",
+        source_version="19c1735",
+        runtime_version="oai2/0.1+battle",
+    )
+    topic33 = "battle 33 real denial"
+    store.put(neg.model_copy(update={
+        "topic": f"oai2:negative:high_impact_denial:{topic33}",
+        "knowledge_id": KnowledgeId(sha256_hex("neg|" + topic33)[:32]),
+    }))
+    print(f"  [SESSION 33] negative memory stored (kid={neg.knowledge_id})")
+
+    # Step 3: the NEXT task on the same topic retrieves the diagnostic.
+    rt2 = _StubRuntime(
+        script=[{"text": "I will request high-impact approval before running Bash."}]
+    )
+    loop2 = AgentLoop(
+        runtime=rt2,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop2.run("battle 33 real denial")
+    _print_messages("SESSION 33 / next task", rt2.requests[0].messages)
+    content = rt2.requests[0].messages[-1].get("content", "")
+    if "diagnostic:" not in content:
+        print("  [SESSION 33] FAIL: diagnostic marker missing in next task's context")
+        return False
+    if "high_impact_denial" not in content:
+        print("  [SESSION 33] FAIL: failure_class missing in next task's context")
+        return False
+    if "high-impact tool not approved" not in content:
+        print("  [SESSION 33] FAIL: the REAL denial text did not survive into context")
+        return False
+    print("  [SESSION 33] PASS: real execution -> verified failure -> negative "
+          "memory -> next task sees the diagnostic")
+    return True
+
+
+def session_evidence_budget_enforced(store: InMemoryKnowledgeStore) -> bool:
+    """Round 34 (REQ-RET-022): a huge lesson is truncated to fit the
+    evidence budget — the rendered evidence message stays bounded.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 34: BUDGET — huge lesson truncated inside evidence_budget_tokens")
+    print("=" * 70)
+    big = " ".join(f"fact{i}" for i in range(4000))  # ~4000 tokens
+    run_a = _make_run(
+        user_prompt="produce a giant transcript about OAI-2.0 facts",
+        final_text=big,
+        finished_reason="stop",
+        total_tool_calls=0,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-034-A",
+        verification_ref="verifier://battle/034",
+        source_version="19c1735",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(lesson.model_copy(update={
+        "topic": "produce a giant transcript about OAI-2.0 facts",
+    }))
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=128,
+    )
+    loop.run("produce a giant transcript about OAI-2.0 facts")
+    evidence = next(
+        (m for m in rt.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 34] FAIL: no evidence message")
+        return False
+    content = evidence["content"]
+    words = len(content.split())
+    print(f"  [SESSION 34] evidence message: {len(content)} bytes, ~{words} words")
+    if words > 512:
+        print(f"  [SESSION 34] FAIL: evidence message {words} words exceeds a 128-token "
+              f"budget by an implausible margin — budget not enforced")
+        return False
+    if "fact3999" in content:
+        print("  [SESSION 34] FAIL: the full 4000-fact transcript was dumped verbatim")
+        return False
+    print("  [SESSION 34] PASS: budget enforced; giant transcript did not dump verbatim")
+    return True
+
+
+def session_mixed_positive_negative(store: InMemoryKnowledgeStore) -> bool:
+    """Round 35: one retrieval returns BOTH a positive lesson and a
+    negative memory; each keeps its own marker in the rendered
+    package — positives say 'verified lesson', negatives say
+    'diagnostic: verified failure'.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 35: MIXED — positive lesson + negative memory in one evidence package")
+    print("=" * 70)
+    topic = "battle 35 mixed retrieval"
+    pos = extract_lesson(
+        _make_run(
+            user_prompt=topic,
+            final_text="positive: use uv run for all project commands",
+            finished_reason="stop",
+            total_tool_calls=1,
+        ),
+        task_id="bt-035-pos",
+        verification_ref="verifier://battle/035-pos",
+        source_version="19c1735",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(pos.model_copy(update={
+        "topic": topic,
+        "knowledge_id": KnowledgeId(sha256_hex(topic + "pos")[:32]),
+    }))
+    neg = record_failure(
+        _make_run(
+            user_prompt=topic,
+            final_text="diagnostic: plain python3 cannot import mlx_lm",
+            finished_reason="error",
+            total_tool_calls=1,
+        ),
+        task_id="bt-035-neg",
+        failure_class="import_error",
+        evidence_ref="verifier://battle/035-neg",
+        source_version="19c1735",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(neg.model_copy(update={
+        "topic": topic,
+        "knowledge_id": KnowledgeId(sha256_hex(topic + "neg")[:32]),
+    }))
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=1024)
+    loop.run(topic)
+    evidence = next(
+        (m for m in rt.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 35] FAIL: no evidence message")
+        return False
+    content = evidence["content"]
+    has_pos = "verified lesson from task_id=bt-035-pos" in content
+    has_neg = "diagnostic: verified failure" in content and "import_error" in content
+    print(f"  [SESSION 35] package carries: positive={has_pos} negative={has_neg}")
+    if not (has_pos and has_neg):
+        print("  [SESSION 35] FAIL: package must carry BOTH markers")
+        return False
+    print("  [SESSION 35] PASS: both markers present, distinguishable in one package")
+    return True
+
+
 def session_retention_round3(store: InMemoryKnowledgeStore) -> bool:
     """Round 32 (RETENTION 3): re-ask Session 6's shell lesson after
     the store now holds ~12+ lessons including several negative
@@ -1845,6 +2058,9 @@ def main() -> int:
         session_real_bash_subprocess,
         session_real_write_read_roundtrip,
         session_retention_round3,
+        session_real_deny_to_negative_loop,
+        session_evidence_budget_enforced,
+        session_mixed_positive_negative,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
