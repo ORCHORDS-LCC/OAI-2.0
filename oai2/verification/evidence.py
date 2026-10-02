@@ -6,9 +6,10 @@ support or refute a claim. References ``VERIFICATION_AND_EVIDENCE.md``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from enum import StrEnum
-from typing import Any, Mapping, Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -91,9 +92,7 @@ class EvidenceNode(BaseModel):
             object.__setattr__(self, "status", derived)
         return self
 
-    def model_copy(
-        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
-    ) -> Self:
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
         """Copy through validation so derived status stays consistent."""
         if update is None:
             return super().model_copy(update=None, deep=deep)
@@ -112,9 +111,7 @@ class EvidenceNode(BaseModel):
         if other.claim_id != self.claim_id:
             raise ValueError("cannot merge nodes with different claim_id")
         seen = {e.id for e in self.supporting}
-        supporting = list(self.supporting) + [
-            e for e in other.supporting if e.id not in seen
-        ]
+        supporting = list(self.supporting) + [e for e in other.supporting if e.id not in seen]
         seen = {e.id for e in self.refuting}
         refuting = list(self.refuting) + [e for e in other.refuting if e.id not in seen]
         return EvidenceNode(
