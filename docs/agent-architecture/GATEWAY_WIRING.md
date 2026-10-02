@@ -165,7 +165,7 @@ HTTP status code is preserved on `exc.status_code`.
 | `oai2.evals.run_eval_harness()` + `HarnessReport`    | IMPLEMENTED | Drives the builtin capability suites via `select_runtime_from_env()`; aggregates per-suite pass-rate; 12 dedicated tests in `tests/test_eval_harness.py` covering both placeholder and gateway (with MockTransport) paths plus `continue_on_error` fault isolation (`SuiteReport.error` carries `f"{ExcType}: {msg}"` for failing suites while surviving suites still complete). |
 | `scripts/verify.py backend-smoke`                    | IMPLEMENTED | Hermetic cross-repo seam smoke: `scripts/backend_smoke.py` exercises `run_eval_harness()` end-to-end through `select_runtime_from_env()` + mocked `GatewayRuntime` (no live token); 10 dedicated tests in `tests/test_backend_smoke.py` pin the `PASS/FAIL` stdout contract and exit codes 0/1/2 (forced-failure paths via patched selector / patched harness / boundary-routed subprocess wrapper + the `_owns_runtime()` guard regression test for `runtime.close()`). |
 | End-to-end from P50                                  | OPEN        | Not yet exercised — pending operator-supplied token.                                |
-| api.orchords.com `oai-2.0` deployment                | OPEN        | Cloud currently exposes 4 historical ids; client is now pinned to `oai-2.0` only (Refs #237). |
+| api.orchords.com `oai-2.0` deployment                | RESOLVED    | Cloud exposes exactly one model id, `oai-2.0` — verified live 2026-10-02; `scripts/verify.py gateway-reach` passes (Refs #237). |
 | Knowledge transport worker                           | PROPOSED    | Cloudflare Worker entrypoint in design phase.                                      |
 
 ## Test surface (cloud-touching layers)
@@ -200,11 +200,15 @@ is unreachable.
 
 ## Status of the related q-pipe cloud
 
-The local q-pipe checkout (`../q-pipe`) restricts `models_payload()`
-to the single public model id `oai-1.2`. The deployed
-`api.orchords.com` instance still exposes four models — that change
-must be re-applied on the cloud deployment. Tracking is in the
-issue tracker.
+The local q-pipe checkout (`../q-pipe`) serves a single public model
+id from `models_payload()`, driven by the `public_model_id` setting in
+`qpipe/config.py` (default `oai-1.2`, overridable via the
+`QPIPE_PUBLIC_MODEL_ID` environment variable). The deployed
+`api.orchords.com` instance now exposes exactly one model id, `oai-2.0`
+— verified live on 2026-10-02 and confirmed by
+`scripts/verify.py gateway-reach` (Refs #237). The repo-side strict
+allowlist (`KNOWN_CLOUD_MODELS` / `STRICT_CLOUD_MODEL_ID` in
+`oai2/runtime/gateway_models.py`) pins the same id.
 
 ## Completion outcome contract (#238)
 

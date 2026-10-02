@@ -188,4 +188,8 @@ cloud-side 4-model exposure (`['oai-1.0', 'orchordsai-gpt', 'orchordsai-m3']`
 vs. expected `oai-1.2` only) and is out of source-side scope. Once the
 q-pipe deployment restricts the model list to one, the local verifier
 chain becomes the canonical acceptance gate without any token-based
-workaround.
+workaround. Update 2026-10-02 (Refs #237): the deployment now exposes
+exactly one model id, `oai-2.0`; `scripts/verify.py gateway-reach`
+passes against the default configuration and the verifier chain is the
+canonical acceptance gate as described. The probe table above is
+retained as the historical record of the pre-fix wire state.
