@@ -105,6 +105,99 @@ def test_lookup_refreshes_recency_for_eviction() -> None:
     assert cache.lookup_and_apply([2, 9], [_FakeLayer()]) == 0
 
 
+class _TrimmableLayer:
+    def __init__(self) -> None:
+        self._state: tuple[str, int] = ("", 0)
+        self.trims: list[int] = []
+
+    @property
+    def state(self) -> tuple[str, int]:
+        return self._state
+
+    @state.setter
+    def state(self, value: tuple[str, int]) -> None:
+        self._state = value
+
+    def is_trimmable(self) -> bool:
+        return True
+
+    def trim(self, n: int) -> int:
+        label, length = self._state
+        n = min(n, length)
+        self._state = (label, length - n)
+        self.trims.append(n)
+        return n
+
+
+class _SolidLayer:
+    """A layer whose cache cannot be trimmed (state restore only)."""
+
+    def __init__(self) -> None:
+        self._state: object = None
+
+    @property
+    def state(self) -> object:
+        return self._state
+
+    @state.setter
+    def state(self, value: object) -> None:
+        self._state = value
+
+    def is_trimmable(self) -> bool:
+        return False
+
+
+def test_common_prefix_matches_divergent_suffix() -> None:
+    cache = PrefixKVCache()
+    layer = _TrimmableLayer()
+    cache.store([1, 2, 3, 4], [("p1", 4)])
+    matched = cache.lookup_common_and_trim([1, 2, 9, 9], [layer])
+    assert matched == 2
+    assert layer.state == ("p1", 2)
+    assert layer.trims == [2]
+    metrics = cache.metrics
+    assert (metrics.hits, metrics.misses, metrics.restores) == (1, 0, 1)
+
+
+def test_common_prefix_caps_at_one_token_to_prefill() -> None:
+    cache = PrefixKVCache()
+    layer = _TrimmableLayer()
+    cache.store([1, 2, 3, 4], [("p1", 4)])
+    # Query is shorter than the entry: common run 3, but one token must
+    # remain for the caller to prefill.
+    matched = cache.lookup_common_and_trim([1, 2, 3], [layer])
+    assert matched == 2
+    assert layer.state == ("p1", 2)
+
+
+def test_common_prefix_full_match_leaves_final_token() -> None:
+    cache = PrefixKVCache()
+    layer = _TrimmableLayer()
+    cache.store([1, 2, 3], [("p1", 3)])
+    matched = cache.lookup_common_and_trim([1, 2, 3, 7], [layer])
+    assert matched == 3
+    assert layer.trims == []
+
+
+def test_common_prefix_requires_trimmable_layers_for_partial() -> None:
+    cache = PrefixKVCache()
+    layer = _SolidLayer()
+    cache.store([1, 2, 3, 4], [("p1", 4)])
+    # Partial match needs a trim; a solid layer turns the match into a miss
+    # and must be left untouched.
+    assert cache.lookup_common_and_trim([1, 2, 9], [layer]) == 0
+    assert layer.state is None
+
+
+def test_common_prefix_no_match_is_miss() -> None:
+    cache = PrefixKVCache()
+    layer = _TrimmableLayer()
+    cache.store([1, 2, 3, 4], [("p1", 4)])
+    assert cache.lookup_common_and_trim([8, 9], [layer]) == 0
+    assert layer.state == ("", 0)
+
+
+
 def test_real_model_prefix_restore_skips_prefix_prefill() -> None:
     pytest.importorskip("mlx")
     pytest.importorskip("mlx_lm")

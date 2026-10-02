@@ -122,7 +122,7 @@ class MLXHotRuntime(InferenceRuntime):
             and request.prefix_digest is not None
         ):
             ids = tokenizer.encode(prompt_str)
-            prefix_matched = self._prefix_cache.lookup_and_apply(ids, self._kv_layers)
+            prefix_matched = self._prefix_cache.lookup_common_and_trim(ids, self._kv_layers)
             remainder = ids[prefix_matched:]
             if len(remainder) > 1:
                 _prefill_tokens(model, self._kv_layers, remainder[:-1])

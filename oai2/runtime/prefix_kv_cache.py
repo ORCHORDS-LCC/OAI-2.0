@@ -23,6 +23,15 @@ from dataclasses import dataclass
 from typing import Any
 
 
+def _common_prefix_len(a: tuple[int, ...], b: tuple[int, ...]) -> int:
+    """Length of the longest common leading token run of ``a`` and ``b``."""
+    n = min(len(a), len(b))
+    i = 0
+    while i < n and a[i] == b[i]:
+        i += 1
+    return i
+
+
 @dataclass(slots=True, frozen=True)
 class PrefixCacheEntry:
     """One stored prefix: the token identity and its per-layer KV states."""
@@ -106,6 +115,55 @@ class PrefixKVCache:
         self._entries.clear()
         self._invalidations += count
         return count
+
+    def lookup_common_and_trim(self, token_ids: Sequence[int], cache_layers: Sequence[Any]) -> int:
+        """Restore the longest common token prefix with any stored entry.
+
+        Unlike :meth:`lookup_and_apply` — which requires a stored entry to
+        be a strict prefix of the query — this matches the longest common
+        leading token run between the query and a stored entry and trims
+        the restored layers back to the shared length, so a stable prefix
+        followed by a divergent suffix still hits (the training-loop case).
+        KV state depends only on preceding tokens, so the shared run's
+        state is valid for the query.
+
+        Returns the number of matched tokens (0 = miss); the caller
+        prefills ``token_ids[matched:]``. At least one token is always
+        left for the caller to prefill. Partial matches require trimmable
+        cache layers; if the layers cannot trim, the match is reported as
+        a miss and the layers are left untouched.
+        """
+        self._lookups += 1
+        key = tuple(token_ids)
+        if not key:
+            self._misses += 1
+            return 0
+        best: PrefixCacheEntry | None = None
+        best_common = 0
+        for stored in self._entries.values():
+            common = _common_prefix_len(stored.token_ids, key)
+            if common > best_common:
+                best = stored
+                best_common = common
+        matched = min(best_common, len(key) - 1)
+        if best is None or matched < 1:
+            self._misses += 1
+            return 0
+        excess = len(best.token_ids) - matched
+        if excess:
+            for layer in cache_layers:
+                if not layer.is_trimmable():
+                    self._misses += 1
+                    return 0
+        for layer, state in zip(cache_layers, best.states, strict=True):
+            layer.state = state
+        if excess:
+            for layer in cache_layers:
+                layer.trim(excess)
+        self._entries.move_to_end(best.token_ids)
+        self._hits += 1
+        self._restores += 1
+        return matched
 
     @property
     def metrics(self) -> PrefixCacheMetrics:

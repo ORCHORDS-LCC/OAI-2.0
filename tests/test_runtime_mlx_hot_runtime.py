@@ -105,3 +105,27 @@ def test_prefix_cache_reuses_state_for_identical_prompt() -> None:
     assert metrics.misses == 1
     assert metrics.hits == 1
     runtime.close()
+
+
+def test_real_model_shared_prefix_hits_across_different_suffixes() -> None:
+    model_id = _smoke_model_id()
+    runtime = MLXHotRuntime(
+        ModelSpec(name=model_id),
+        model_id=model_id,
+        prefix_cache=PrefixKVCache(max_entries=8),
+    )
+    runtime.load()
+    base = "You are a helpful counting assistant. " * 4
+    first = runtime.generate(
+        InferenceRequest(prompt=base + "Alpha suffix.", max_tokens=8, prefix_digest="d1")
+    )
+    second = runtime.generate(
+        InferenceRequest(prompt=base + "Beta suffix.", max_tokens=8, prefix_digest="d2")
+    )
+    joined = "\n".join(second.notes)
+    assert "prefix_matched=0" not in joined
+    metrics = runtime.prefix_cache.metrics
+    assert metrics.misses == 1
+    assert metrics.hits == 1
+    assert first.tokens > 0 and second.tokens > 0
+    runtime.close()
