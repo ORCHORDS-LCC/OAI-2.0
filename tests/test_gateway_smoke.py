@@ -47,7 +47,7 @@ def _runtime_with(handler) -> GatewayRuntime:
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="smoke-token-xyz",
-        model="oai-2.0",
+        model="oai-1.2",
         timeout_seconds=5.0,
     )
     client = httpx.Client(
@@ -92,7 +92,7 @@ def _patch_runtime(monkeypatch: pytest.MonkeyPatch, runtime: GatewayRuntime) -> 
     monkeypatch.setattr(smoke_pkg, "GatewayRuntime", factory)
 
 
-def _chat_completion(text: str, model: str = "oai-2.0") -> httpx.Response:
+def _chat_completion(text: str, model: str = "oai-1.2") -> httpx.Response:
     body = {
         "id": "chatcmpl-smoke-test",
         "object": "chat.completion",
@@ -156,7 +156,7 @@ def test_main_success_json_path_does_not_leak_api_key(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return _chat_completion("pong", model="oai-2.0")
+        return _chat_completion("pong", model="oai-1.2")
 
     runtime = _runtime_with(handler)
     _patch_runtime(monkeypatch, runtime)
@@ -170,7 +170,7 @@ def test_main_success_json_path_does_not_leak_api_key(
     payload = json.loads(captured.out.strip())
     assert payload["ok"] is True
     assert payload["text"] == "pong"
-    assert payload["model"] == "oai-2.0"
+    assert payload["model"] == "oai-1.2"
     assert "smoke-token-xyz" not in captured.out
     assert "smoke-token-xyz" not in captured.err
 
@@ -180,7 +180,7 @@ def test_main_success_human_path_does_not_leak_api_key(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return _chat_completion("pong", model="oai-2.0")
+        return _chat_completion("pong", model="oai-1.2")
 
     runtime = _runtime_with(handler)
     _patch_runtime(monkeypatch, runtime)
@@ -191,7 +191,7 @@ def test_main_success_human_path_does_not_leak_api_key(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "model:        oai-2.0" in captured.out
+    assert "model:        oai-1.2" in captured.out
     assert "text:         pong" in captured.out
     assert "smoke-token-xyz" not in captured.out
     assert "smoke-token-xyz" not in captured.err
@@ -364,7 +364,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="runpy-token-xyz",
-        model="oai-2.0",
+        model="oai-1.2",
         timeout_seconds=5.0,
     )
     client = httpx.Client(
@@ -391,7 +391,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     monkeypatch.setattr("oai2.runtime.GatewayRuntime", lambda config: runtime)
     monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "runpy-token-xyz")
     monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
-    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-2.0")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "oai-1.2")
 
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -429,7 +429,7 @@ def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
     # Assert on the same shape the existing Path-1 happy-path test pins:
     # model line, base_url line, status_code: 200, text: pong.
     assert "model:" in captured
-    assert "oai-2.0" in captured
+    assert "oai-1.2" in captured
     assert "status_code:  200" in captured
     assert "text:         pong" in captured
     assert "runpy-token-xyz" not in captured
