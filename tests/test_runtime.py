@@ -72,6 +72,9 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
     from oai2.runtime import AdmissionSchedulerMetrics as ExportedAdmissionSchedulerMetrics
     from oai2.runtime import BatchPlan as ExportedBatchPlan
     from oai2.runtime import CapacitySnapshot as ExportedCapacitySnapshot
+    from oai2.runtime import (
+        CapacityTrendPoint as ExportedCapacityTrendPoint,
+    )
     from oai2.runtime import ChatReply as ExportedChatReply
     from oai2.runtime import GatewayConfig as ExportedGatewayConfig
     from oai2.runtime import GatewayConfigError as ExportedGatewayConfigError
@@ -83,6 +86,18 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
     from oai2.runtime import InferenceRuntime as ExportedInferenceRuntime
     from oai2.runtime import ModelSpec as ExportedModelSpec
     from oai2.runtime import PlaceholderRuntime as ExportedPlaceholderRuntime
+    from oai2.runtime import (
+        ResidencyAccountant as ExportedResidencyAccountant,
+    )
+    from oai2.runtime import (
+        ResidencyOutcome as ExportedResidencyOutcome,
+    )
+    from oai2.runtime import (
+        ResidencyRecord as ExportedResidencyRecord,
+    )
+    from oai2.runtime import (
+        ResidencySummary as ExportedResidencySummary,
+    )
     from oai2.runtime import SafeBatchScheduler as ExportedSafeBatchScheduler
     from oai2.runtime import ScheduledRequest as ExportedScheduledRequest
     from oai2.runtime import SchedulerMetrics as ExportedSchedulerMetrics
@@ -139,13 +154,6 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
         discover_default_device,
         smoke_check,
     )
-    from oai2.runtime.scheduler import (
-        BatchPlan,
-        SafeBatchScheduler,
-        ScheduledRequest,
-        SchedulerMetrics,
-        SessionCompatibilityKey,
-    )
     from oai2.runtime.residency import (
         CapacityTrendPoint,
         ResidencyAccountant,
@@ -153,12 +161,12 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
         ResidencyRecord,
         ResidencySummary,
     )
-    from oai2.runtime import (
-        CapacityTrendPoint as ExportedCapacityTrendPoint,
-        ResidencyAccountant as ExportedResidencyAccountant,
-        ResidencyOutcome as ExportedResidencyOutcome,
-        ResidencyRecord as ExportedResidencyRecord,
-        ResidencySummary as ExportedResidencySummary,
+    from oai2.runtime.scheduler import (
+        BatchPlan,
+        SafeBatchScheduler,
+        ScheduledRequest,
+        SchedulerMetrics,
+        SessionCompatibilityKey,
     )
 
     assert ExportedInferenceRequest is InferenceRequest
