@@ -13,8 +13,12 @@ through :func:`gateway_smoke.main` without touching the live cloud:
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import runpy
 import sys
+import warnings
 from pathlib import Path
 
 import httpx
@@ -35,6 +39,7 @@ from oai2.runtime import (
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+SCRIPT = ROOT / "scripts" / "gateway_smoke.py"
 
 
 def _runtime_with(handler) -> GatewayRuntime:
@@ -313,3 +318,132 @@ def test_gateway_runtime_error_inherits_runtime_error() -> None:
     """
     err = GatewayRuntimeError(500, "boom")
     assert isinstance(err, RuntimeError)
+
+
+# ---------------------------------------------------------------------------
+# Path 6: __main__ boundary (runpy-driven)
+# ---------------------------------------------------------------------------
+#
+# Same pattern as the slice-19 boundary test in tests/test_backend_smoke.py:
+# drive the actual ``if __name__ == "__main__":`` block of the script via
+# ``runpy.run_module(...)`` so a refactor that turns the boundary into a
+# no-op cannot silently regress. Unlike backend_smoke.py, gateway_smoke.py's
+# boundary is just ``raise SystemExit(main())`` — all exception translation
+# is handled inside main(), so this test only needs to verify the success
+# path (exit 0) plus a source-pin for the literal boundary string.
+
+
+def test_gateway_smoke_main_boundary_exits_zero_via_runpy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drive the actual ``__main__`` block via runpy and assert exit 0.
+
+    The happy-path ``main()`` returns 0 (see Path 1 in this file), and the
+    ``__main__`` boundary is ``raise SystemExit(main())`` — so a successful
+    runpy execution should propagate ``SystemExit(0)`` and emit the
+    human-path renderer output on stdout (since no ``--json`` flag is passed
+    to the re-executed script).
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "pong"},
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+
+    cfg = GatewayConfig(
+        base_url="https://gateway.example.test",
+        api_key="runpy-token-xyz",
+        model="orchordsai-m3",
+        timeout_seconds=5.0,
+    )
+    client = httpx.Client(
+        base_url=cfg.base_url,
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": f"Bearer {cfg.api_key}"},
+    )
+    runtime = GatewayRuntime(cfg, client=client)
+
+    # The script's ``main()`` does ``with GatewayRuntime(config) as runtime_ctx:``.
+    # The GatewayRuntime identifier in main()'s frame resolves through
+    # ``oai2.runtime.GatewayRuntime`` (re-exported from ``oai2.runtime.__init__``).
+    # Patching smoke_pkg.GatewayRuntime is NOT enough: ``runpy.run_module``
+    # reloads the script module from disk and re-executes
+    # ``from oai2.runtime import GatewayRuntime``, which re-binds to the
+    # original class via ``oai2.runtime.__init__.py``. Patching the source
+    # class directly (``oai2.runtime.gateway_runtime.GatewayRuntime``) is
+    # also not enough — the ``__init__`` re-export already holds the
+    # original class reference. The patch MUST hit the attribute on the
+    # re-exporting package (``oai2.runtime.GatewayRuntime``) so the
+    # re-executed ``from oai2.runtime import GatewayRuntime`` resolves to
+    # our lambda. This is the same cache limitation documented in slice 19
+    # for the backend_smoke failure-path runpy test.
+    monkeypatch.setattr("oai2.runtime.GatewayRuntime", lambda config: runtime)
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "runpy-token-xyz")
+    monkeypatch.setenv("OAI2_GATEWAY_BASE_URL", "https://gateway.example.test")
+    monkeypatch.setenv("OAI2_GATEWAY_MODEL", "orchordsai-m3")
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    exit_code: int | None = None
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"'scripts\.gateway_smoke' found in sys\.modules",
+                category=RuntimeWarning,
+            )
+            prior_argv = sys.argv
+            sys.argv = ["gateway_smoke"]
+            try:
+                runpy.run_module(
+                    "scripts.gateway_smoke",
+                    run_name="__main__",
+                    alter_sys=True,
+                )
+            except SystemExit as exc:
+                exit_code = exc.code if isinstance(exc.code, int) else (
+                    int(exc.code) if exc.code is not None else 0
+                )
+            else:
+                exit_code = 0
+            finally:
+                sys.argv = prior_argv
+
+    assert exit_code == 0, (
+        f"expected exit 0 from runpy-driven __main__ boundary, got {exit_code!r}\n"
+        f"stdout={stdout.getvalue()!r}\nstderr={stderr.getvalue()!r}"
+    )
+    captured = stdout.getvalue()
+    # No --json flag, so the human-path renderer is used (see _render_human).
+    # Assert on the same shape the existing Path-1 happy-path test pins:
+    # model line, base_url line, status_code: 200, text: pong.
+    assert "model:" in captured
+    assert "orchordsai-m3" in captured
+    assert "status_code:  200" in captured
+    assert "text:         pong" in captured
+    assert "runpy-token-xyz" not in captured
+
+
+def test_gateway_smoke_main_boundary_pins_exit_translation_source() -> None:
+    """Source-pin the ``__main__`` block to ``raise SystemExit(main())``.
+
+    Unlike ``scripts/backend_smoke.py``, this script has no exception
+    translation in its boundary — ``main()`` catches all expected
+    exceptions and returns 0/1/2 ints. The literal
+    ``raise SystemExit(main())`` form must remain so the boundary keeps
+    propagating main()'s int return as the process exit code.
+    """
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'if __name__ == "__main__":' in source
+    assert "raise SystemExit(main())" in source
