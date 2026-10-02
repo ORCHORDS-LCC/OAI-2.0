@@ -1,5 +1,7 @@
 # Changelog
 
+- Corrected model-architecture reconciliation: OAI-2.0 FURIOUS/NORMAL/DEEP/SWARM are active-compute profiles (~500M–1B / ~1–2B / ~2–4B / multiple ~1–2B+ lanes), not a single giant q-pipe model. The current q-pipe gateway wire identity remains separate from OAI-2.0's internal architecture. Small MLX artifacts in the repository remain benchmark/probe evidence unless separately promoted.
+
 _Reconciliation baseline: `8520cdb5d8d3e49bc9e12dfd79ccf59e7422e44d` (source state before this documentation commit)._
 
 All notable public changes to OAI-2.0 are recorded here.
