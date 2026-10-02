@@ -284,6 +284,92 @@ def run_suite(
     return report
 
 
+# --- Eval harness ------------------------------------------------------------
+
+
+@dataclass(slots=True, frozen=True)
+class HarnessReport:
+    """Aggregate result of :func:`run_eval_harness`.
+
+    Captures the runtime name actually used (so callers can tell whether
+    they ran against the live gateway or the offline placeholder) plus a
+    :class:`SuiteReport` per builtin suite that was executed. Pass-rate
+    is aggregated across all suites.
+    """
+
+    runtime: str
+    reports: tuple[SuiteReport, ...] = ()
+
+    @property
+    def n_cases(self) -> int:
+        return sum(r.n_cases for r in self.reports)
+
+    @property
+    def n_passed(self) -> int:
+        return sum(r.n_passed for r in self.reports)
+
+    @property
+    def pass_rate(self) -> float:
+        return 0.0 if self.n_cases == 0 else self.n_passed / self.n_cases
+
+
+def run_eval_harness(
+    suite_names: Iterable[str] | None = None,
+    *,
+    max_tokens: int = 256,
+) -> HarnessReport:
+    """Run the eval harness against the env-aware selected runtime.
+
+    This is the public entry point that drives the builtin capability
+    suites using :func:`oai2.runtime.select_runtime_from_env`. When
+    ``OAI2_GATEWAY_API_KEY`` is set it runs against the live gateway
+    runtime; otherwise against :class:`PlaceholderRuntime`.
+
+    The function owns the lifetime of the selected runtime: a
+    :class:`GatewayRuntime` is closed on exit, even when a per-suite
+    runtime error is raised. Callers that want full lifetime control
+    should pass an explicit :class:`InferenceRuntime` to
+    :func:`run_suite` instead.
+
+    Parameters
+    ----------
+    suite_names
+        Optional iterable of builtin suite names to run. ``None`` runs
+        every builtin suite. Unknown names raise ``KeyError`` (mirrors
+        :func:`builtin_suite`).
+    max_tokens
+        Forwarded to each :class:`InferenceRequest` so the harness
+        bounds per-case token cost.
+    """
+    # Local import: ``select_runtime_from_env`` lives in
+    # ``oai2.runtime.inference`` which imports ``gateway_runtime``
+    # lazily. We resolve here so this module stays import-graph-light.
+    from ..runtime.inference import select_runtime_from_env
+
+    runtime = select_runtime_from_env()
+    try:
+        if suite_names is None:
+            suites = list(builtin_suites())
+        else:
+            suites = [builtin_suite(name) for name in suite_names]
+        sub_reports = [
+            run_suite(s, runtime, max_tokens=max_tokens) for s in suites
+        ]
+        return HarnessReport(
+            runtime=type(runtime).__name__,
+            reports=tuple(sub_reports),
+        )
+    finally:
+        # Re-import + isinstance narrowing — matches the pattern in
+        # ``tests/test_runtime.py`` and avoids a hard dependency on
+        # the concrete :class:`GatewayRuntime` type for callers that
+        # never run against a live gateway.
+        from ..runtime import GatewayRuntime
+
+        if isinstance(runtime, GatewayRuntime):
+            runtime.close()
+
+
 # --- Built-in suites ---------------------------------------------------------
 
 
@@ -646,10 +732,12 @@ __all__ = [
     "CapabilityCase",
     "CapabilityScore",
     "CapabilitySuite",
+    "HarnessReport",
     "SCORERS",
     "SuiteReport",
     "builtin_suite",
     "builtin_suites",
+    "run_eval_harness",
     "run_suite",
     "TruthCaseClass",
     "TruthOutcome",
