@@ -24,6 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Authenticated framework-neutral Worker transport handler, bound Cloudflare component factory, public-safe Python Worker entrypoint, and deployment template for WP-02 source integration.
 - Versioned claim-evidence policy primitives for WP-75 claim taxonomy/evidence binding work.
 - Admission-to-safe-batching scheduler bridge for WP-76/WP-25 integration.
+- Request-surface binding for the safe session-batching scheduler: `oai2.runtime.service_binding` composes the WP-39 health slice with session/inference protocol routes, client-owned session isolation, exact-compatibility batching, cancellation, and batch/queue/latency metrics (Refs #76).
 
 - `AsyncCloudflareKnowledgeRuntime` source core combining async D1 reader/writer, R2 content bodies, Vectorize semantic retrieval, and best-effort KV caching with integrity/revision checks.
 - Focused async runtime tests covering source-level put/get/retrieve behavior for the composed Cloudflare knowledge path.
