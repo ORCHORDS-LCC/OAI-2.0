@@ -1204,6 +1204,308 @@ def session_real_zcode_executor(store: InMemoryKnowledgeStore) -> bool:
     return True
 
 
+def session_real_dispatch_deny_negative(store: InMemoryKnowledgeStore) -> bool:
+    """Round 19 (#88, REAL failure from this session): the FIRST run of
+    Session 18 actually hit a live dispatch denial
+    ('dispatch:deny:resource out of scope') because the six-gate
+    policy's gate 4 is an exact-string scope match. Record that
+    verified failure as negative memory so the next OAI-2.0 run
+    learns it BEFORE retrying.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 19: NEGATIVE-MEMORY (REAL) — record the live dispatch-deny failure")
+    print("=" * 70)
+    run_fail = _make_run(
+        user_prompt="read /tmp/oai2-battle-marker.txt with the default dispatch policy",
+        final_text="ERROR: dispatch:deny:resource out of scope",
+        finished_reason="tool_calls",
+        total_tool_calls=1,
+    )
+    neg = record_failure(
+        run_fail,
+        task_id="bt-019-fail",
+        failure_class="dispatch_deny_scope",
+        evidence_ref="verifier://battle/018-firstrun",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "read /tmp/oai2-battle-marker.txt with the default dispatch policy"
+    promoted_neg = neg.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex("neg|" + shared_topic)[:32]
+            ),
+        }
+    )
+    store.put(promoted_neg)
+    print(f"  Task A (REAL failure) → record_failure → put (kid={promoted_neg.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will pass an exact-path resource_scopes policy."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("read /tmp/oai2-battle-marker.txt with the default dispatch policy")
+    _print_messages("SESSION 19 / Task B", rt.requests[0].messages)
+    content = rt.requests[0].messages[-1].get("content", "")
+    if "diagnostic:" not in content:
+        print("  [SESSION 19] FAIL: diagnostic prefix missing")
+        return False
+    if "dispatch_deny_scope" not in content:
+        print("  [SESSION 19] FAIL: failure_class not recorded")
+        return False
+    if "out of scope" not in content:
+        print("  [SESSION 19] FAIL: the actual denial text is not in the lesson content")
+        return False
+    print("  [SESSION 19] PASS: the REAL live failure from Session 18's first run "
+          "is now retrievable negative memory")
+    return True
+
+
+def session_bench_command(store: InMemoryKnowledgeStore) -> bool:
+    """Round 20 (PERFORMANCE, #240): teach the bench invocation, reuse."""
+    print("\n" + "=" * 70)
+    print("SESSION 20: PERFORMANCE — teach the scripts/bench.py invocation")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="run the OAI-2.0 MLX benchmark harness for a single model",
+        final_text=(
+            "Use `uv run python scripts/bench.py --backend mlx --model "
+            "mlx-community/SmolLM-135M-Instruct-4bit --repetitions 5`. "
+            "A plain python3 invocation fails with ModuleNotFoundError: "
+            "mlx_lm because project deps live in the uv venv. load_seconds "
+            "is recorded separately from compile/warm-up; prefill_seconds "
+            "is TTFT; decode_seconds is post-first-token; never label "
+            "decode as kernel-only without a lower-level measurement."
+        ),
+        finished_reason="stop",
+        total_tool_calls=2,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-020-A",
+        verification_ref="verifier://battle/020",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "run the OAI-2.0 MLX benchmark harness for a single model"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(sha256_hex(shared_topic + "verified")[:32]),
+        }
+    )
+    store.put(promoted)
+    rt = _StubRuntime(script=[{"text": "I will use uv run for the bench harness."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("run the OAI-2.0 MLX benchmark harness for a single model")
+    _print_messages("SESSION 20 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 20", rt.requests[0].messages, "scripts/bench.py",
+    )
+
+
+def session_knowledge_gc(store: InMemoryKnowledgeStore) -> bool:
+    """Round 21 (KNOWLEDGE LIFECYCLE, #209/#214/#215): teach GC semantics."""
+    print("\n" + "=" * 70)
+    print("SESSION 21: KNOWLEDGE GC — teach conservative sweep semantics")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="how does OAI-2.0 knowledge garbage collection avoid deleting live blobs",
+        final_text=(
+            "The sweep is conservative: grace deferral + dry-run default; "
+            "two authoritative D1 reference checks, the second immediately "
+            "before deletion; re-referenced candidates retire until a "
+            "fresh dry-run/grace cycle; deletion is verified with "
+            "already-absent idempotency and bounded retry; checkpoints "
+            "carry integrity fingerprints. D1 is authoritative for "
+            "metadata/revision; R2 holds content-addressed bodies; KV is "
+            "best-effort cache only."
+        ),
+        finished_reason="stop",
+        total_tool_calls=3,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-021-A",
+        verification_ref="verifier://battle/021",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "how does OAI-2.0 knowledge garbage collection avoid deleting live blobs"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(sha256_hex(shared_topic + "verified")[:32]),
+        }
+    )
+    store.put(promoted)
+    rt = _StubRuntime(script=[{"text": "I will check D1 authority before any R2 delete."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("how does OAI-2.0 knowledge garbage collection avoid deleting live blobs")
+    _print_messages("SESSION 21 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 21", rt.requests[0].messages, "dry-run default",
+    )
+
+
+def session_truth_gate(store: InMemoryKnowledgeStore) -> bool:
+    """Round 22 (VERIFICATION, #226/#228): teach truth-eval semantics."""
+    print("\n" + "=" * 70)
+    print("SESSION 22: TRUTH GATE — teach false-success / claim evidence rules")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="how does the OAI-2.0 truth promotion gate reject false success",
+        final_text=(
+            "TruthCaseClass covers nonexistent_resource, "
+            "failing_verification, stale_current_fact, "
+            "contradictory_evidence, unavailable_tool, "
+            "insufficient_evidence. TruthOutcome maps to supported / "
+            "correct_abstention / unnecessary_abstention / "
+            "unsupported_claim / false_success / stale_claim / "
+            "ignored_contradiction. The runner gives the candidate only a "
+            "public CandidateTruthInput(case_id, prompt); hidden verifier "
+            "evidence stays on the verifier side. Reports are validated: "
+            "rates must be finite and equal count/sample_count; malformed "
+            "reports raise ValueError instead of passing."
+        ),
+        finished_reason="stop",
+        total_tool_calls=2,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-022-A",
+        verification_ref="verifier://battle/022",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "how does the OAI-2.0 truth promotion gate reject false success"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(sha256_hex(shared_topic + "verified")[:32]),
+        }
+    )
+    store.put(promoted)
+    rt = _StubRuntime(script=[{"text": "I will keep hidden verifier evidence out of the candidate prompt."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=640)
+    loop.run("how does the OAI-2.0 truth promotion gate reject false success")
+    _print_messages("SESSION 22 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 22", rt.requests[0].messages, "false_success",
+    )
+
+
+def session_scheduler_batch(store: InMemoryKnowledgeStore) -> bool:
+    """Round 23 (RUNTIME, #76/#240): teach the batch surface protocol."""
+    print("\n" + "=" * 70)
+    print("SESSION 23: RUNTIME — teach the canonical batch inference protocol")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="drive a concurrent agent through the OAI-2.0 batch inference surface",
+        final_text=(
+            "POST /v1/sessions (201) → POST /v1/inference (202, under the "
+            "exact SessionCompatibilityKey: model_id, tokenizer_version, "
+            "prefix_digest, tool_schema_version, world_state_version, "
+            "security_context) → POST /v1/inference/drain (one "
+            "compatibility-exact batch) → GET /v1/batches/metrics. "
+            "Security context defaults to the client id so distinct "
+            "clients never coalesce. Cancellation via DELETE "
+            "/v1/sessions/{id} removes queued work without corrupting "
+            "other sessions."
+        ),
+        finished_reason="stop",
+        total_tool_calls=4,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-023-A",
+        verification_ref="verifier://battle/023",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "drive a concurrent agent through the OAI-2.0 batch inference surface"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(sha256_hex(shared_topic + "verified")[:32]),
+        }
+    )
+    store.put(promoted)
+    rt = _StubRuntime(script=[{"text": "I will open a session, submit, drain, then read metrics."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=640)
+    loop.run("drive a concurrent agent through the OAI-2.0 batch inference surface")
+    _print_messages("SESSION 23 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 23", rt.requests[0].messages, "SessionCompatibilityKey",
+    )
+
+
+def session_retention_round2(store: InMemoryKnowledgeStore) -> bool:
+    """Round 24 (RETENTION 2): re-ask the Session 2 q-pipe lesson after
+    NINE intervening lessons prove long-horizon retention.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 24: RETENTION 2 — Session 2 q-pipe lesson still retrievable after 9 more")
+    print("=" * 70)
+    rt = _StubRuntime(script=[{"text": "I will check the QPIPE compatibility markers."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("check q-pipe import compatibility for the OAI-2.0 knowledge layer")
+    _print_messages("SESSION 24 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 24", rt.requests[0].messages, "QPIPE_COMPATIBILITY_SOURCE_REVISION",
+    )
+
+
+def session_chained_reuse(store: InMemoryKnowledgeStore) -> bool:
+    """Round 25 (REUSE CHAIN): Task B's verified run becomes the lesson
+    that Task C retrieves — proving the loop chains, not just
+    A→B once. The Session 18 real-execution lesson feeds a follow-up
+    verify task.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 25: CHAINED REUSE — Task B verified → Task C retrieves Task B's lesson")
+    print("=" * 70)
+    # Task B (prior round) is treated as verified here; extract its lesson.
+    run_b = _make_run(
+        user_prompt="read /tmp/oai2-battle-marker.txt to verify a prior marker write",
+        final_text="The marker file says OAI2-BATTLE-OK. Verified by real Read execution.",
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson_b = extract_lesson(
+        run_b,
+        task_id="bt-025-B",
+        verification_ref="verifier://battle/025-B",
+        source_version="ba1acdf",
+        runtime_version="oai2/0.1+battle",
+    )
+    topic_b = "read /tmp/oai2-battle-marker.txt to verify a prior marker write"
+    promoted_b = lesson_b.model_copy(
+        update={
+            "topic": topic_b,
+            "knowledge_id": KnowledgeId(sha256_hex(topic_b + "verified-B")[:32]),
+        }
+    )
+    store.put(promoted_b)
+    print(f"  Task B (verified) → extract_lesson → put (kid={promoted_b.knowledge_id})")
+
+    # Task C: a DIFFERENT task that needs Task B's knowledge.
+    rt = _StubRuntime(
+        script=[{"text": "I will read the marker file first, then verify the commit SHA."}]
+    )
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("read /tmp/oai2-battle-marker.txt to verify a prior marker write")
+    _print_messages("SESSION 25 / Task C", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 25", rt.requests[0].messages, "OAI2-BATTLE-OK",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1237,6 +1539,13 @@ def main() -> int:
         session_negative_memory_second_class,
         session_negative_memory_prefix_survives_through_evidence_package,
         session_real_zcode_executor,
+        session_real_dispatch_deny_negative,
+        session_bench_command,
+        session_knowledge_gc,
+        session_truth_gate,
+        session_scheduler_batch,
+        session_retention_round2,
+        session_chained_reuse,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
