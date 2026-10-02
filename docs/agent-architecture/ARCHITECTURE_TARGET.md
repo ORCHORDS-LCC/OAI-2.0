@@ -40,6 +40,21 @@ The repository currently contains small MLX probe/benchmark artifacts used to va
 
 The q-pipe/public gateway wire model ID is an **integration identity** and must not be interpreted as the internal OAI-2.0 lane architecture. Likewise, historical q-pipe 27B/30B models must not be promoted into OAI-2.0's architecture merely because they existed in a previous pipeline.
 
+### Engine-study candidate registry (GGUF references, not yet promoted)
+
+The following exact GGUF artifacts are the current engine-study candidates selected to fit the active-compute bands. They are documented with provenance so benchmark results can be compared without confusing a file name with a promoted OAI-2.0 lane:
+
+| Profile | Preferred study candidate | Exact GGUF artifact | Why it fits | Status |
+| --- | --- | --- | --- | --- |
+| FURIOUS | [Qwen3-0.6B-GGUF](https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF) | `Qwen3-0.6B-Q4_0.gguf` | 0.6B; lowest-latency reasoning probe in the target band | study candidate |
+| NORMAL | [Qwen3-1.7B-GGUF](https://huggingface.co/Qwen/Qwen3-1.7B-GGUF) | `Qwen3-1.7B-Q4_K_M.gguf` | 1.7B; routine coding/reasoning profile | study candidate |
+| DEEP | [Qwen3-4B-Thinking-2507-GGUF](https://huggingface.co/bartowski/Qwen_Qwen3-4B-Thinking-2507-GGUF) | `Qwen3-4B-Thinking-2507-Q4_K_M.gguf` | 4.0B; reasoning-first candidate at the upper DEEP boundary | study candidate |
+| SWARM | Qwen3-1.7B + Gemma 3 1B + SmolLM2 1.7B | `Qwen3-1.7B-Q4_K_M.gguf`, `gemma-3-1b-it-Q4_K_M.gguf`, `SmolLM2-1.7B-Instruct-Q4_K_M.gguf` | independent 1–2B lanes enable role diversity and bounded aggregate compute | orchestration candidate |
+
+Reference alternatives retained for controlled comparison are [Qwen2.5-Coder-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF) (`qwen2.5-coder-0.5b-instruct-q4_k_m.gguf`) for coding-heavy FURIOUS probes, [ibm-granite/granite-3.3-2b-instruct-GGUF](https://huggingface.co/ibm-granite/granite-3.3-2b-instruct-GGUF) for structured 2B DEEP comparisons, and [ggml-org/gemma-3-4b-it-GGUF](https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF) (`gemma-3-4b-it-Q4_K_M.gguf`) for multimodal DEEP comparisons.
+
+These are GGUF engine-study references. The current Mac/MLX probe artifacts remain the existing source-of-truth for the committed smoke harness until each candidate has an equivalent tokenizer/runtime, capability, numerical, throughput and memory record. No row above is a production lane promotion, and no download or runtime default should change from this table alone.
+
 ## Dynamic expert routing
 
 Candidate expert families:
