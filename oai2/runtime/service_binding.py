@@ -36,6 +36,39 @@ def _wall_clock_ms() -> float:
     return time.time() * 1000.0
 
 
+def _parse_note_ms(notes: list[str], key: str) -> float | None:
+    prefix = f"{key}="
+    for note in notes:
+        if note.startswith(prefix):
+            try:
+                return float(note[len(prefix):]) * 1000.0
+            except ValueError:
+                return None
+    return None
+
+
+def _parse_note_float(notes: list[str], key: str) -> float | None:
+    prefix = f"{key}="
+    for note in notes:
+        if note.startswith(prefix):
+            try:
+                return float(note[len(prefix):])
+            except ValueError:
+                return None
+    return None
+
+
+def _parse_note_int(notes: list[str], key: str) -> int | None:
+    prefix = f"{key}="
+    for note in notes:
+        if note.startswith(prefix):
+            try:
+                return int(note[len(prefix):])
+            except ValueError:
+                return None
+    return None
+
+
 @dataclass(slots=True, frozen=True)
 class BatchSurfaceMetrics:
     """Batch, queue, and latency telemetry for the bound request surface."""
@@ -62,6 +95,15 @@ class BatchExecutionResult:
     text: str
     queue_wait_ms: float
     status: Status = Status.IMPLEMENTED
+    # Per-request timing fields populated when the runtime records them
+    # in ``InferenceResponse.notes`` (the MLX hot runtime writes
+    # ``prefill_seconds=...`` / ``decode_seconds=...`` / ``decode_tps=...``).
+    # ``None`` means the runtime did not report them.
+    prefill_ms: float | None = None
+    decode_ms: float | None = None
+    decode_tokens_per_second: float | None = None
+    generated_tokens: int | None = None
+    prompt_tokens: int | None = None
 
 
 class BatchInferenceSurface:
@@ -165,6 +207,7 @@ class BatchInferenceSurface:
         for scheduled in plan.requests:
             prompt = self._prompts.pop(scheduled.request_id, "")
             response = self._runtime.generate(InferenceRequest(prompt=prompt))
+            notes = list(response.notes)
             results.append(
                 BatchExecutionResult(
                     request_id=scheduled.request_id,
@@ -172,6 +215,11 @@ class BatchInferenceSurface:
                     text=response.text,
                     queue_wait_ms=now_ms - scheduled.enqueued_at_ms,
                     status=Status.IMPLEMENTED,
+                    prefill_ms=_parse_note_ms(notes, "prefill_seconds"),
+                    decode_ms=_parse_note_ms(notes, "decode_seconds"),
+                    decode_tokens_per_second=_parse_note_float(notes, "decode_tps"),
+                    generated_tokens=response.tokens or None,
+                    prompt_tokens=_parse_note_int(notes, "prompt_tokens"),
                 )
             )
             if self._session_requests.get(scheduled.session_id) == scheduled.request_id:
@@ -307,7 +355,7 @@ def create_batch_inference_app(
         return {"request_id": body.request_id, "session_id": body.session_id}
 
     @app.post("/v1/inference/drain")
-    def drain_batch() -> dict[str, list[dict[str, str | float]]]:
+    def drain_batch() -> dict[str, list[dict[str, str | float | int | None]]]:
         results = surface.drain()
         return {
             "results": [
@@ -317,6 +365,11 @@ def create_batch_inference_app(
                     "text": result.text,
                     "queue_wait_ms": result.queue_wait_ms,
                     "status": result.status.value,
+                    "prefill_ms": result.prefill_ms,
+                    "decode_ms": result.decode_ms,
+                    "decode_tokens_per_second": result.decode_tokens_per_second,
+                    "generated_tokens": result.generated_tokens,
+                    "prompt_tokens": result.prompt_tokens,
                 }
                 for result in results
             ]

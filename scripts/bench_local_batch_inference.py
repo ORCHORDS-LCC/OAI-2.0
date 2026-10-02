@@ -39,11 +39,11 @@ class AgentSample:
     session_id: str
     request_id: str
     prompt_label: str
-    prompt_tokens: int
-    generated_tokens: int
+    prompt_tokens: int | None
+    generated_tokens: int | None
     queue_wait_ms: float
-    prefill_ms: float
-    decode_ms: float
+    prefill_ms: float | None
+    decode_ms: float | None
     decode_tokens_per_second: float | None
     text_excerpt: str
     end_to_end_ms: float
@@ -70,15 +70,35 @@ def _build_prompt(target_tokens: int) -> tuple[str, int]:
 def _stat(values: Iterable[float | None]) -> dict[str, float | int | None]:
     nums = [v for v in values if isinstance(v, (int, float)) and not math.isnan(float(v))]
     if not nums:
-        return {"count": 0, "mean": None, "median": None, "min": None, "max": None, "stddev": None}
+        return {
+            "count": 0, "mean": None, "median": None, "min": None, "max": None,
+            "stddev": None, "p50": None, "p95": None, "p99": None,
+        }
     n = len(nums)
+    sorted_nums = sorted(nums)
+    p50 = statistics.median(sorted_nums)
+
+    def _pct(p: float) -> float:
+        # Linear-interpolation percentile on the sorted sample.
+        if n == 1:
+            return float(sorted_nums[0])
+        rank = (p / 100.0) * (n - 1)
+        lo = int(math.floor(rank))
+        hi = int(math.ceil(rank))
+        if lo == hi:
+            return float(sorted_nums[lo])
+        return float(sorted_nums[lo] + (sorted_nums[hi] - sorted_nums[lo]) * (rank - lo))
+
     return {
         "count": n,
         "mean": statistics.fmean(nums),
-        "median": statistics.median(nums),
+        "median": p50,
         "min": min(nums),
         "max": max(nums),
         "stddev": statistics.pstdev(nums) if n > 1 else 0.0,
+        "p50": p50,
+        "p95": _pct(95.0),
+        "p99": _pct(99.0),
     }
 
 
@@ -112,9 +132,14 @@ async def _submit_one(
     prompt: str,
     model_id: str,
     unique_prompts: bool,
+    shared_client: bool,
+    shared_security_context: str | None,
 ) -> tuple[str, str, str, str, int, float]:
     """Open session + submit one request; return identifiers for later matching."""
-    client_id = f"bench-client-{agent_id}-{uuid.uuid4().hex[:6]}"
+    if shared_client:
+        client_id = "bench-shared-client"
+    else:
+        client_id = f"bench-client-{agent_id}-{uuid.uuid4().hex[:6]}"
     session_id = f"bench-sess-{agent_id}-{uuid.uuid4().hex[:6]}"
     request_id = f"bench-req-{agent_id}-{uuid.uuid4().hex[:6]}"
     effective_prompt = (
@@ -130,19 +155,22 @@ async def _submit_one(
     )
     if r.status_code != 201:
         raise RuntimeError(f"open_session failed: {r.status_code} {r.text}")
+    body = {
+        "client_id": client_id,
+        "session_id": session_id,
+        "request_id": request_id,
+        "prompt": effective_prompt,
+        "model_id": model_id,
+        "tokenizer_version": model_id,
+        "prefix_digest": prefix_digest,
+        "tool_schema_version": "default",
+        "world_state_version": "default",
+    }
+    if shared_security_context is not None:
+        body["security_context"] = shared_security_context
     r = await client.post(
         f"{base_url}/v1/inference",
-        json={
-            "client_id": client_id,
-            "session_id": session_id,
-            "request_id": request_id,
-            "prompt": effective_prompt,
-            "model_id": model_id,
-            "tokenizer_version": model_id,
-            "prefix_digest": prefix_digest,
-            "tool_schema_version": "default",
-            "world_state_version": "default",
-        },
+        json=body,
         timeout=300.0,
     )
     if r.status_code != 202:
@@ -196,6 +224,8 @@ async def _concurrent_agents(
     model_id: str,
     max_tokens: int,
     unique_prompts: bool,
+    shared_client: bool,
+    shared_security_context: str | None,
 ) -> list[AgentSample]:
     async with httpx.AsyncClient() as client:
         # Phase 1: open + submit all agents in parallel.
@@ -208,80 +238,8 @@ async def _concurrent_agents(
                     prompt=prompt,
                     model_id=model_id,
                     unique_prompts=unique_prompts,
-                )
-                for agent_id in range(n_agents)
-            ]
-        )
-        request_ids = {sub[0] for sub in submissions}
-        # Phase 2: drain until every expected request has a result.
-        collected = await _drain_all(
-            client=client,
-            base_url=base_url,
-            expected_request_ids=request_ids,
-        )
-
-    # Phase 3: assemble per-agent samples from collected results.
-    samples: list[AgentSample] = []
-    for sub in submissions:
-        (
-            request_id,
-            client_id,
-            session_id,
-            effective_prompt,
-            prompt_tokens,
-            submitted_at_ms,
-        ) = sub
-        agent_id = int(request_id.split("-")[2])
-        result = collected.get(request_id)
-        completed_at_ms = time.time() * 1000.0
-        if result is None:
-            raise RuntimeError(f"no drain result for {request_id} after collecting {len(collected)}/{len(request_ids)}")
-        text = str(result.get("text", ""))
-        queue_wait_ms = float(result.get("queue_wait_ms", 0.0))
-        samples.append(
-            AgentSample(
-                agent_id=agent_id,
-                client_id=client_id,
-                session_id=session_id,
-                request_id=request_id,
-                prompt_label=prompt_label,
-                prompt_tokens=prompt_tokens,
-                generated_tokens=len(text.split()),
-                queue_wait_ms=queue_wait_ms,
-                prefill_ms=0.0,
-                decode_ms=0.0,
-                decode_tokens_per_second=None,
-                text_excerpt=text[:120],
-                end_to_end_ms=completed_at_ms - submitted_at_ms,
-                submitted_at_ms=submitted_at_ms,
-                completed_at_ms=completed_at_ms,
-                notes=[],
-            )
-        )
-    return samples
-
-
-async def _concurrent_agents(
-    *,
-    base_url: str,
-    n_agents: int,
-    prompt: str,
-    prompt_label: str,
-    model_id: str,
-    max_tokens: int,
-    unique_prompts: bool,
-) -> list[AgentSample]:
-    async with httpx.AsyncClient() as client:
-        # Phase 1: open + submit all agents in parallel.
-        submissions = await asyncio.gather(
-            *[
-                _submit_one(
-                    client=client,
-                    base_url=base_url,
-                    agent_id=agent_id,
-                    prompt=prompt,
-                    model_id=model_id,
-                    unique_prompts=unique_prompts,
+                    shared_client=shared_client,
+                    shared_security_context=shared_security_context,
                 )
                 for agent_id in range(n_agents)
             ]
@@ -322,12 +280,12 @@ async def _concurrent_agents(
                 session_id=session_id,
                 request_id=request_id,
                 prompt_label=prompt_label,
-                prompt_tokens=prompt_tokens,
-                generated_tokens=len(text.split()),
+                prompt_tokens=result.get("prompt_tokens") or prompt_tokens,
+                generated_tokens=result.get("generated_tokens"),
                 queue_wait_ms=queue_wait_ms,
-                prefill_ms=0.0,
-                decode_ms=0.0,
-                decode_tokens_per_second=None,
+                prefill_ms=result.get("prefill_ms"),
+                decode_ms=result.get("decode_ms"),
+                decode_tokens_per_second=result.get("decode_tokens_per_second"),
                 text_excerpt=text[:120],
                 end_to_end_ms=completed_at_ms - submitted_at_ms,
                 submitted_at_ms=submitted_at_ms,
@@ -342,11 +300,17 @@ def _aggregate(samples: list[AgentSample]) -> dict[str, dict[str, float | int | 
     metric_names = [
         "end_to_end_ms",
         "queue_wait_ms",
+        "prefill_ms",
+        "decode_ms",
+        "decode_tokens_per_second",
         "generated_tokens",
     ]
     out: dict[str, dict[str, float | int | None]] = {}
     for name in metric_names:
         values = [getattr(s, name) for s in samples]
+        # Drop None values for stats (we want % over real samples, not None-padding).
+        if name in ("prefill_ms", "decode_ms", "decode_tokens_per_second", "generated_tokens"):
+            values = [v for v in values if v is not None]
         out[name] = _stat(values)
     return out
 
@@ -354,11 +318,18 @@ def _aggregate(samples: list[AgentSample]) -> dict[str, dict[str, float | int | 
 def _print_table(n_agents: int, samples: list[AgentSample], agg: dict[str, dict[str, float | int | None]]) -> None:
     print(f"\n=== agents={n_agents}  |  samples={len(samples)} ===")
     for s in sorted(samples, key=lambda s: s.agent_id):
+        prefill = f"{s.prefill_ms:6.1f}" if s.prefill_ms is not None else "  n/a"
+        decode = f"{s.decode_ms:6.1f}" if s.decode_ms is not None else "  n/a"
+        dtps = f"{s.decode_tokens_per_second:6.1f}" if s.decode_tokens_per_second is not None else "   n/a"
+        gen = s.generated_tokens if s.generated_tokens is not None else 0
         print(
             f"  agent {s.agent_id:>2}: "
             f"e2e={s.end_to_end_ms:7.1f}ms "
-            f"queue_wait={s.queue_wait_ms:6.1f}ms "
-            f"gen={s.generated_tokens:4d}tok"
+            f"prefill={prefill}ms "
+            f"decode={decode}ms "
+            f"tps={dtps} "
+            f"queue={s.queue_wait_ms:6.1f}ms "
+            f"gen={gen:4d}tok"
         )
     print(f"  AGG: {agg}")
 
@@ -396,6 +367,16 @@ def main(argv: list[str] | None = None) -> int:
         "--unique-prompts",
         action="store_true",
         help="Suffix each agent's prompt with its agent id so the prefix digest differs.",
+    )
+    parser.add_argument(
+        "--shared-client",
+        action="store_true",
+        help="Use a single client_id for all agents (and thus a single SessionCompatibilityKey security_context). Required to actually demonstrate same-key batching.",
+    )
+    parser.add_argument(
+        "--shared-security-context",
+        default=None,
+        help="Force the security_context field on the SessionCompatibilityKey (e.g. 'shared-tenant').",
     )
     parser.add_argument("--tag", default="after-hot-canonical")
     parser.add_argument(
@@ -437,6 +418,8 @@ def main(argv: list[str] | None = None) -> int:
                         model_id=args.model,
                         max_tokens=args.max_tokens,
                         unique_prompts=args.unique_prompts,
+                        shared_client=args.shared_client,
+                        shared_security_context=args.shared_security_context,
                     )
                 )
                 cell_samples.extend(samples)
