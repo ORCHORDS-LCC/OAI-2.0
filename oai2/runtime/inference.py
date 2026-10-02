@@ -47,6 +47,10 @@ class InferenceRequest(BaseModel):
     # ``"auto"`` lets the model decide; ``"none"`` forbids tool calls;
     # ``"any"`` requires at least one; or a specific ``{"name": "..."}``.
     tool_choice: str | dict[str, Any] | None = None
+    # Digest of the prompt's stable prefix, carried from the session
+    # compatibility key so cache-aware runtimes can key prefix KV-state
+    # reuse without re-deriving identity. Never forwarded to the gateway.
+    prefix_digest: str | None = None
 
 
 @dataclass(slots=True)

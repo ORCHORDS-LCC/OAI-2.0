@@ -84,6 +84,7 @@ def test_submission_max_tokens_flows_to_runtime() -> None:
     )
     surface.drain()
     assert runtime.requests[0].max_tokens == 5
+    assert runtime.requests[0].prefix_digest == "prefix-v1"
 
 
 def test_cross_client_access_is_rejected() -> None:

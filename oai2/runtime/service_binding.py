@@ -212,11 +212,17 @@ class BatchInferenceSurface:
         for scheduled in plan.requests:
             prompt = self._prompts.pop(scheduled.request_id, "")
             max_tokens = self._request_max_tokens.pop(scheduled.request_id, None)
-            request = (
-                InferenceRequest(prompt=prompt)
-                if max_tokens is None
-                else InferenceRequest(prompt=prompt, max_tokens=max_tokens)
-            )
+            if max_tokens is None:
+                request = InferenceRequest(
+                    prompt=prompt,
+                    prefix_digest=scheduled.compatibility.prefix_digest,
+                )
+            else:
+                request = InferenceRequest(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    prefix_digest=scheduled.compatibility.prefix_digest,
+                )
             response = self._runtime.generate(request)
             notes = list(response.notes)
             results.append(
