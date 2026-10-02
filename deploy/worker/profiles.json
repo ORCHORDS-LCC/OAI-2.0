@@ -1,0 +1,25 @@
+{
+  "_comment": "Bounded allow-list of commands the fleet worker may execute for a verification-role job. This is the scoped tool surface (#255): node enrollment alone grants no tool capability. Each profile is a fixed argv - no shell interpolation, no user-controlled command string. cwd is relative to the job-scoped workspace the worker materialises on its own node.",
+  "profiles": {
+    "smoke": {
+      "argv": ["git", "rev-parse", "--short", "HEAD"],
+      "timeout_sec": 60,
+      "cwd": "."
+    },
+    "pass-probe": {
+      "argv": ["python3", "-c", "print('QPIPE-WORKER-VERIFY-OK')"],
+      "timeout_sec": 60,
+      "cwd": "."
+    },
+    "fail-probe": {
+      "argv": ["python3", "-c", "import sys; print('QPIPE-WORKER-DELIBERATE-FAIL'); sys.exit(3)"],
+      "timeout_sec": 60,
+      "cwd": "."
+    },
+    "python-unittest": {
+      "argv": ["python3", "-m", "unittest", "-v", "test_app"],
+      "timeout_sec": 300,
+      "cwd": "."
+    }
+  }
+}
