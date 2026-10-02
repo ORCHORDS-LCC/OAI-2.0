@@ -19,66 +19,30 @@ from __future__ import annotations
 
 import pytest
 
-from oai2.core import KnowledgeId, Status
-from oai2.knowledge import (
-    EvidencePackage,
-    KnowledgeObject,
-    RetrievalCandidate,
-    RetrievalResult,
-    evaluate_retrieval_package,
-    sha256_hex,
-)
+from oai2.knowledge import evaluate_retrieval_package
 from oai2.knowledge.evidence_package import build_evidence_package
+from tests._evidence_fixtures import (
+    make_evidence_package,
+)
+from tests._evidence_fixtures import (
+    make_knowledge_object as _obj,
+)
+from tests._evidence_fixtures import (
+    make_retrieval_result as _result,
+)
+from tests._evidence_fixtures import (
+    tokens as _tokens,
+)
 
 
-def _tokens(text: str) -> int:
-    """Deterministic fixture tokenizer (same as sibling tests)."""
-    return len(text.split())
+def _package(*objects):
+    """A minimal valid package used by the ``evaluate_*`` tests.
 
-
-def _obj(
-    knowledge_id: str,
-    content: str,
-    *,
-    authority: float = 0.9,
-    source_uri: str | None = "https://example.test/source",
-) -> KnowledgeObject:
-    return KnowledgeObject(
-        knowledge_id=KnowledgeId(knowledge_id),
-        topic="retrieval",
-        content=content,
-        content_hash=sha256_hex(content),
-        source_uri=source_uri,
-        retrieved_at=123.0,
-        authority=authority,
-        status=Status.EXPERIMENTAL,
-        artifact_ref="r2://fallback",
-    )
-
-
-def _result(*objects: KnowledgeObject) -> RetrievalResult:
-    return RetrievalResult(
-        topic="retrieval",
-        objects=list(objects),
-        candidates=[
-            RetrievalCandidate(
-                knowledge_id=obj.knowledge_id,
-                content_hash=obj.content_hash,
-                source_uri=obj.source_uri,
-                score=0.9 - (i * 0.1),
-            )
-            for i, obj in enumerate(objects)
-        ],
-    )
-
-
-def _package(*objects: KnowledgeObject) -> EvidencePackage:
-    """A minimal valid package used by the ``evaluate_*`` tests."""
-    return build_evidence_package(
-        _result(*objects),
-        token_budget=1000,
-        token_counter=_tokens,
-    )
+    Thin wrapper over ``make_evidence_package`` so the body of each test
+    reads as ``_package(obj)`` (clear "make me a package from this obj")
+    rather than ``make_evidence_package(obj, token_budget=1000)``.
+    """
+    return make_evidence_package(*objects)
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +96,7 @@ def test_build_evidence_package_rejects_non_positive_max_entries(
     bad_max_entries: int,
 ) -> None:
     obj = _obj("ko_1", "claim")
-    with pytest.raises(
-        ValueError, match="max_entries must be a positive integer when provided"
-    ):
+    with pytest.raises(ValueError, match="max_entries must be a positive integer when provided"):
         build_evidence_package(
             _result(obj),
             token_budget=100,
@@ -148,9 +110,7 @@ def test_build_evidence_package_rejects_non_integer_max_entries(
     bad_max_entries: object,
 ) -> None:
     obj = _obj("ko_1", "claim")
-    with pytest.raises(
-        ValueError, match="max_entries must be a positive integer when provided"
-    ):
+    with pytest.raises(ValueError, match="max_entries must be a positive integer when provided"):
         build_evidence_package(
             _result(obj),
             token_budget=100,
@@ -161,9 +121,7 @@ def test_build_evidence_package_rejects_non_integer_max_entries(
 
 def test_build_evidence_package_rejects_bool_max_entries() -> None:
     obj = _obj("ko_1", "claim")
-    with pytest.raises(
-        ValueError, match="max_entries must be a positive integer when provided"
-    ):
+    with pytest.raises(ValueError, match="max_entries must be a positive integer when provided"):
         build_evidence_package(
             _result(obj),
             token_budget=100,
@@ -231,9 +189,7 @@ def test_build_evidence_package_rejects_budget_too_small_for_empty_encoding() ->
     def overhead_counter(text: str) -> int:
         return len(text) + 50  # empty string already costs 50
 
-    with pytest.raises(
-        ValueError, match="token_budget cannot fit the empty package encoding"
-    ):
+    with pytest.raises(ValueError, match="token_budget cannot fit the empty package encoding"):
         build_evidence_package(
             _result(),
             token_budget=10,
@@ -251,9 +207,7 @@ def test_evaluate_retrieval_package_rejects_non_positive_raw_source_tokens(
     bad_raw: int,
 ) -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="raw_source_tokens must be a positive integer"
-    ):
+    with pytest.raises(ValueError, match="raw_source_tokens must be a positive integer"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=["ko_1"],
@@ -268,9 +222,7 @@ def test_evaluate_retrieval_package_rejects_non_integer_raw_source_tokens(
     bad_raw: object,
 ) -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="raw_source_tokens must be a positive integer"
-    ):
+    with pytest.raises(ValueError, match="raw_source_tokens must be a positive integer"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=["ko_1"],
@@ -282,9 +234,7 @@ def test_evaluate_retrieval_package_rejects_non_integer_raw_source_tokens(
 
 def test_evaluate_retrieval_package_rejects_bool_raw_source_tokens() -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="raw_source_tokens must be a positive integer"
-    ):
+    with pytest.raises(ValueError, match="raw_source_tokens must be a positive integer"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=["ko_1"],
@@ -296,9 +246,7 @@ def test_evaluate_retrieval_package_rejects_bool_raw_source_tokens() -> None:
 
 def test_evaluate_retrieval_package_rejects_empty_relevant_knowledge_ids() -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="relevant_knowledge_ids must not be empty"
-    ):
+    with pytest.raises(ValueError, match="relevant_knowledge_ids must not be empty"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=[],
@@ -321,9 +269,7 @@ def test_evaluate_retrieval_package_rejects_out_of_range_task_success_with_retri
     bad_rate: float,
 ) -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="task_success_with_retrieval must be between 0 and 1"
-    ):
+    with pytest.raises(ValueError, match="task_success_with_retrieval must be between 0 and 1"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=["ko_1"],
@@ -341,9 +287,7 @@ def test_evaluate_retrieval_package_rejects_out_of_range_task_success_without_re
     bad_rate: float,
 ) -> None:
     package = _package(_obj("ko_1", "claim"))
-    with pytest.raises(
-        ValueError, match="task_success_without_retrieval must be between 0 and 1"
-    ):
+    with pytest.raises(ValueError, match="task_success_without_retrieval must be between 0 and 1"):
         evaluate_retrieval_package(
             package,
             relevant_knowledge_ids=["ko_1"],

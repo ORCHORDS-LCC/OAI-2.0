@@ -36,30 +36,7 @@ from oai2.knowledge import (
     RetrievalResult,
     sha256_hex,
 )
-
-
-def _obj(
-    knowledge_id: str = "ko_1",
-    *,
-    content: str = "claim text",
-    topic: str = "retrieval",
-    authority: float = 0.9,
-    status: Status = Status.EXPERIMENTAL,
-    content_hash: str | None = None,
-    source_uri: str | None = "https://example.test/source",
-    retrieved_at: float = 0.0,
-) -> KnowledgeObject:
-    return KnowledgeObject(
-        knowledge_id=KnowledgeId(knowledge_id),  # type: ignore[arg-type]
-        topic=topic,
-        content=content,
-        content_hash=content_hash if content_hash is not None else sha256_hex(content),
-        source_uri=source_uri,
-        authority=authority,
-        status=status,
-        retrieved_at=retrieved_at,
-    )
-
+from tests._evidence_fixtures import make_knowledge_object as _obj
 
 # ---------------------------------------------------------------------------
 # KnowledgeObject Pydantic field validation (negative + boundary positive)
@@ -128,7 +105,7 @@ def test_knowledge_object_rejects_unknown_field_due_to_extra_forbid() -> None:
     silently widen the input domain."""
     with pytest.raises(ValidationError):
         KnowledgeObject(
-            knowledge_id=KnowledgeId("ko_1"),  # type: ignore[arg-type]
+            knowledge_id=KnowledgeId("ko_1"),
             topic="retrieval",
             content="claim",
             content_hash=sha256_hex("claim"),
@@ -198,9 +175,7 @@ def test_retrieve_respects_explicit_include_status_filter() -> None:
     store = InMemoryKnowledgeStore()
     store.put(_obj("ko_impl", status=Status.IMPLEMENTED))
     store.put(_obj("ko_prop", status=Status.PROPOSED))
-    result = store.retrieve(
-        RetrievalRequest(topic="retrieval", include_status=(Status.PROPOSED,))
-    )
+    result = store.retrieve(RetrievalRequest(topic="retrieval", include_status=(Status.PROPOSED,)))
     ids = {obj.knowledge_id for obj in result.objects}
     assert ids == {KnowledgeId("ko_prop")}
 

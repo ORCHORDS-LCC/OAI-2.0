@@ -2,61 +2,25 @@ from __future__ import annotations
 
 import pytest
 
-from oai2.core import KnowledgeId, Status
-from oai2.knowledge import KnowledgeObject, RetrievalCandidate, RetrievalResult, sha256_hex
+from oai2.knowledge import RetrievalCandidate, sha256_hex
 from oai2.knowledge.evidence_package import (
     EVIDENCE_PACKAGE_VERSION,
     build_evidence_package,
     evaluate_retrieval_package,
 )
-
-
-def _tokens(text: str) -> int:
-    # Deterministic fixture tokenizer. Production callers supply their real
-    # target tokenizer counter.
-    return len(text.split())
-
-
-def _obj(
-    knowledge_id: str,
-    content: str,
-    *,
-    authority: float = 0.9,
-    source_uri: str | None = "https://example.test/source",
-) -> KnowledgeObject:
-    return KnowledgeObject(
-        knowledge_id=KnowledgeId(knowledge_id),
-        topic="retrieval",
-        content=content,
-        content_hash=sha256_hex(content),
-        source_uri=source_uri,
-        retrieved_at=123.0,
-        authority=authority,
-        status=Status.EXPERIMENTAL,
-        artifact_ref="r2://fallback",
-    )
-
-
-def _result(*objects: KnowledgeObject) -> RetrievalResult:
-    return RetrievalResult(
-        topic="retrieval",
-        objects=list(objects),
-        candidates=[
-            RetrievalCandidate(
-                knowledge_id=obj.knowledge_id,
-                content_hash=obj.content_hash,
-                source_uri=obj.source_uri,
-                score=0.9 - (i * 0.1),
-            )
-            for i, obj in enumerate(objects)
-        ],
-    )
+from tests._evidence_fixtures import (
+    make_knowledge_object,
+    make_retrieval_result,
+)
+from tests._evidence_fixtures import (
+    tokens as _tokens,
+)
 
 
 def test_package_preserves_provenance_hash_authority_timestamp_and_score() -> None:
-    obj = _obj("ko_1", "important verified claim")
+    obj = make_knowledge_object("ko_1", content="important verified claim")
     package = build_evidence_package(
-        _result(obj),
+        make_retrieval_result(obj),
         token_budget=100,
         token_counter=_tokens,
     )
@@ -77,16 +41,16 @@ def test_package_preserves_provenance_hash_authority_timestamp_and_score() -> No
 
 def test_package_truncates_snippet_but_never_drops_provenance_to_fit_budget() -> None:
     content = " ".join(f"token{i}" for i in range(40))
-    obj = _obj("ko_long", content)
+    obj = make_knowledge_object("ko_long", content=content)
     full = build_evidence_package(
-        _result(obj),
+        make_retrieval_result(obj),
         token_budget=200,
         token_counter=_tokens,
     )
     assert full.entries[0].snippet == content
 
     metadata_only = build_evidence_package(
-        _result(obj),
+        make_retrieval_result(obj),
         token_budget=20,
         token_counter=_tokens,
     )
@@ -100,10 +64,10 @@ def test_package_truncates_snippet_but_never_drops_provenance_to_fit_budget() ->
 
 
 def test_package_stops_at_budget_and_reports_insufficient_when_nothing_fits() -> None:
-    first = _obj("ko_1", "first compact claim")
-    second = _obj("ko_2", "second compact claim")
+    first = make_knowledge_object("ko_1", content="first compact claim")
+    second = make_knowledge_object("ko_2", content="second compact claim")
     package = build_evidence_package(
-        _result(first, second),
+        make_retrieval_result(first, second),
         token_budget=12,
         token_counter=_tokens,
     )
@@ -111,7 +75,7 @@ def test_package_stops_at_budget_and_reports_insufficient_when_nothing_fits() ->
     assert len(package.entries) <= 1
 
     empty = build_evidence_package(
-        _result(first),
+        make_retrieval_result(first),
         token_budget=1,
         token_counter=_tokens,
     )
@@ -121,7 +85,9 @@ def test_package_stops_at_budget_and_reports_insufficient_when_nothing_fits() ->
 
 
 def test_packaging_rejects_missing_candidate_evidence_or_hash_mismatch() -> None:
-    obj = _obj("ko_1", "claim")
+    obj = make_knowledge_object("ko_1", content="claim")
+    from oai2.knowledge import RetrievalResult
+
     missing = RetrievalResult(topic="retrieval", objects=[obj], candidates=[])
     with pytest.raises(ValueError, match="no candidate evidence"):
         build_evidence_package(missing, token_budget=100, token_counter=_tokens)
@@ -143,8 +109,9 @@ def test_packaging_rejects_missing_candidate_evidence_or_hash_mismatch() -> None
 
 
 def test_packaging_requires_a_provenance_source() -> None:
-    obj = _obj("ko_1", "claim", source_uri=None)
-    obj.artifact_ref = None
+    obj = make_knowledge_object("ko_1", content="claim", source_uri=None, artifact_ref=None)
+    from oai2.knowledge import RetrievalResult
+
     result = RetrievalResult(
         topic="retrieval",
         objects=[obj],
@@ -162,10 +129,10 @@ def test_packaging_requires_a_provenance_source() -> None:
 
 
 def test_retrieval_metrics_cover_precision_recall_irrelevant_tokens_and_task_delta() -> None:
-    relevant = _obj("ko_relevant", "relevant claim")
-    irrelevant = _obj("ko_irrelevant", "irrelevant claim")
+    relevant = make_knowledge_object("ko_relevant", content="relevant claim")
+    irrelevant = make_knowledge_object("ko_irrelevant", content="irrelevant claim")
     package = build_evidence_package(
-        _result(relevant, irrelevant),
+        make_retrieval_result(relevant, irrelevant),
         token_budget=100,
         token_counter=_tokens,
     )
@@ -189,7 +156,7 @@ def test_retrieval_metrics_cover_precision_recall_irrelevant_tokens_and_task_del
 
 def test_empty_package_metrics_are_explicit_not_padded() -> None:
     package = build_evidence_package(
-        _result(_obj("ko_1", "claim")),
+        make_retrieval_result(make_knowledge_object("ko_1", content="claim")),
         token_budget=1,
         token_counter=_tokens,
     )
@@ -208,18 +175,17 @@ def test_empty_package_metrics_are_explicit_not_padded() -> None:
 
 
 def test_invalid_token_counter_fails_closed() -> None:
-    obj = _obj("ko_1", "claim")
+    obj = make_knowledge_object("ko_1", content="claim")
 
     def bad_counter(text: str) -> int:
         return -1
 
     with pytest.raises(ValueError, match="non-negative integer"):
         build_evidence_package(
-            _result(obj),
+            make_retrieval_result(obj),
             token_budget=100,
             token_counter=bad_counter,
         )
-
 
 
 def test_evidence_package_exports_from_knowledge_package() -> None:
