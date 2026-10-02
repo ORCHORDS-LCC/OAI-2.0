@@ -17,6 +17,10 @@ Public surface
 - :func:`oai2.agents.learning.extract_lesson` / :func:`record_failure` —
   verified-lesson (#87) and negative-memory (#88) bridges into the
   canonical :class:`KnowledgeStore` abstraction.
+- :func:`oai2.agents.instructions.resolve` / :class:`Instruction` /
+  :class:`Precedence` — instruction precedence, trust classes and conflict
+  resolution (#185 / ``WI-PROMPT-001``). Pure and deterministic; not yet
+  wired into :class:`AgentLoop` (#186).
 """
 
 from __future__ import annotations
@@ -35,6 +39,17 @@ from .agent_loop import (
     default_dispatch_policy,
     default_system_prompt,
 )
+from .instructions import (
+    INSTRUCTION_SCHEMA_VERSION,
+    Conflict,
+    Instruction,
+    Precedence,
+    Rejection,
+    RejectionReason,
+    ResolutionTrace,
+    ResolvedInstructions,
+    resolve,
+)
 from .learning import extract_lesson, record_failure, sanitize_text
 from .orchestration import AgentSpec, Orchestrator, OrchestratorContext
 
@@ -43,8 +58,16 @@ __all__ = [
     "AgentRun",
     "AgentStep",
     "AgentSpec",
+    "Conflict",
+    "INSTRUCTION_SCHEMA_VERSION",
+    "Instruction",
     "Orchestrator",
     "OrchestratorContext",
+    "Precedence",
+    "Rejection",
+    "RejectionReason",
+    "ResolvedInstructions",
+    "ResolutionTrace",
     "build_default_gateway",
     "build_default_runtime",
     "default_dispatch_policy",
@@ -53,6 +76,7 @@ __all__ = [
     "execute_tool",
     "extract_lesson",
     "record_failure",
+    "resolve",
     "sanitize_text",
     "to_openai_wire",
 ]
