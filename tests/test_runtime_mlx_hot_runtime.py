@@ -129,3 +129,27 @@ def test_real_model_shared_prefix_hits_across_different_suffixes() -> None:
     assert metrics.hits == 1
     assert first.tokens > 0 and second.tokens > 0
     runtime.close()
+
+
+def test_real_model_unrelated_prompts_miss() -> None:
+    """Changed project state = changed tokens: an unrelated prompt must miss."""
+    model_id = _smoke_model_id()
+    runtime = MLXHotRuntime(
+        ModelSpec(name=model_id),
+        model_id=model_id,
+        prefix_cache=PrefixKVCache(max_entries=8),
+    )
+    runtime.load()
+    first = runtime.generate(
+        InferenceRequest(prompt="Zebra herds migrate across the savannah. " * 4, max_tokens=8, prefix_digest="zebra")
+    )
+    second = runtime.generate(
+        InferenceRequest(prompt="Apple orchards bloom in early spring. " * 4, max_tokens=8, prefix_digest="apple")
+    )
+    joined = "\n".join(second.notes)
+    assert "prefix_matched=0" in joined
+    metrics = runtime.prefix_cache.metrics
+    assert metrics.misses == 2
+    assert metrics.hits == 0
+    assert first.tokens > 0 and second.tokens > 0
+    runtime.close()
