@@ -18,6 +18,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .service import ServiceCompatibility, ServiceLifecycle
 from .service_security import AccessPolicy
 
+# Module-level singleton: the stringified annotation below (PEP 563) is
+# re-evaluated by FastAPI against module globals only, so the scheme the
+# dependency closure references must live where that evaluation can see it.
+bearer = HTTPBearer(auto_error=False)
+
 
 def create_local_service_app(
     *,
@@ -26,8 +31,6 @@ def create_local_service_app(
     access_policy: AccessPolicy,
 ) -> FastAPI:
     """Build the local service health/readiness surface."""
-
-    bearer = HTTPBearer(auto_error=False)
 
     async def require_access(
         credentials: Annotated[
