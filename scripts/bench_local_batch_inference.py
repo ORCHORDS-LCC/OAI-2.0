@@ -187,6 +187,30 @@ async def _submit_one(
     )
 
 
+async def _close_sessions(
+    *,
+    client: httpx.AsyncClient,
+    base_url: str,
+    sessions: list[tuple[str, str]],
+) -> int:
+    """DELETE every opened session; returns the count the server confirmed.
+
+    Without this teardown each repetition cell leaks server-side session
+    state; the launcher's ``max_sessions_per_client=256`` previously masked
+    the accumulation across long campaigns.
+    """
+    closed = 0
+    for client_id, session_id in sessions:
+        r = await client.delete(
+            f"{base_url}/v1/sessions/{session_id}",
+            params={"client_id": client_id},
+            timeout=60.0,
+        )
+        if r.status_code == 200:
+            closed += 1
+    return closed
+
+
 async def _drain_all(
     *,
     client: httpx.AsyncClient,
@@ -254,6 +278,15 @@ async def _concurrent_agents(
             base_url=base_url,
             expected_request_ids=request_ids,
         )
+
+        # Phase 3 (client still open): close every opened session so
+        # repeated cells do not leak server-side session state.
+        closed = await _close_sessions(
+            client=client,
+            base_url=base_url,
+            sessions=[(sub[1], sub[2]) for sub in submissions],
+        )
+        print(f"teardown: closed {closed}/{len(submissions)} sessions", file=sys.stderr)
 
     # Phase 3: assemble per-agent samples from collected results.
     samples: list[AgentSample] = []
