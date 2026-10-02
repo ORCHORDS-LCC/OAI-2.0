@@ -25,11 +25,14 @@ import pytest
 
 from oai2.evals import (
     BUILTIN_SUITES_NAMES,
+    SCORERS,
     CapabilityCase,
+    CapabilityScore,
     CapabilitySuite,
     HarnessReport,
     SuiteReport,
     builtin_suite,
+    builtin_suites,
     run_eval_harness,
     run_suite,
 )
@@ -384,3 +387,172 @@ def test_run_eval_harness_default_propagates_runtime_error_unchanged(
 
     with pytest.raises(BoomError, match="specific subclass"):
         run_eval_harness()
+
+
+# ---------------------------------------------------------------------------
+# Pass 9 — pin identity for every entry of ``oai2.evals.__all__``
+# ---------------------------------------------------------------------------
+
+
+def test_evals_full_package_identity() -> None:
+    """Pin ``is`` identity for every entry of ``oai2.evals.__all__``.
+
+    The same coverage-gap pattern that Pass 8 closed in ``oai2.model``
+    (commit ``985d357`` for #216) was open here: only 8 of the 35
+    entries were exercised via header imports, leaving
+    :mod:`oai2.evals.regression`, :mod:`oai2.evals.truth`, and
+    :mod:`oai2.evals.truth_runner` un-pinned. This test asserts ``is``
+    identity for every entry of the package surface against its
+    defining source module so a future drop or rename in either side
+    trips the test.
+    """
+    from oai2.evals import BUILTIN_SUITES_NAMES as ExportedBUILTIN_SUITES_NAMES
+    from oai2.evals import SCORERS as ExportedSCORERS
+    from oai2.evals import CandidateRunner as ExportedCandidateRunner
+    from oai2.evals import CandidateTruthInput as ExportedCandidateTruthInput
+    from oai2.evals import CandidateTruthResponse as ExportedCandidateTruthResponse
+    from oai2.evals import CapabilityCase as ExportedCapabilityCase
+    from oai2.evals import CapabilityRegression as ExportedCapabilityRegression
+    from oai2.evals import (
+        CapabilityRegressionThreshold as ExportedCapabilityRegressionThreshold,
+    )
+    from oai2.evals import CapabilityScore as ExportedCapabilityScore
+    from oai2.evals import CapabilitySuite as ExportedCapabilitySuite
+    from oai2.evals import HarnessReport as ExportedHarnessReport
+    from oai2.evals import (
+        HeldOutPromotionBudget as ExportedHeldOutPromotionBudget,
+    )
+    from oai2.evals import (
+        HeldOutPromotionEvaluation as ExportedHeldOutPromotionEvaluation,
+    )
+    from oai2.evals import HiddenVerifier as ExportedHiddenVerifier
+    from oai2.evals import SuiteReport as ExportedSuiteReport
+    from oai2.evals import (
+        TruthCandidatePromotionEvaluation as ExportedTruthCandidatePromotionEvaluation,
+    )
+    from oai2.evals import TruthCase as ExportedTruthCase
+    from oai2.evals import TruthCaseClass as ExportedTruthCaseClass
+    from oai2.evals import TruthOutcome as ExportedTruthOutcome
+    from oai2.evals import (
+        TruthPromotionBudget as ExportedTruthPromotionBudget,
+    )
+    from oai2.evals import (
+        TruthPromotionEvaluation as ExportedTruthPromotionEvaluation,
+    )
+    from oai2.evals import TruthReport as ExportedTruthReport
+    from oai2.evals import TruthRunResult as ExportedTruthRunResult
+    from oai2.evals import TruthSample as ExportedTruthSample
+    from oai2.evals import TruthVerifierVerdict as ExportedTruthVerifierVerdict
+    from oai2.evals import builtin_suite as ExportedBuiltinSuite
+    from oai2.evals import builtin_suites as ExportedBuiltinSuites
+    from oai2.evals import (
+        classify_truth_outcome as ExportedClassifyTruthOutcome,
+    )
+    from oai2.evals import (
+        evaluate_held_out_promotion as ExportedEvaluateHeldOutPromotion,
+    )
+    from oai2.evals import (
+        evaluate_truth_candidate_promotion as ExportedEvaluateTruthCandidatePromotion,
+    )
+    from oai2.evals import (
+        evaluate_truth_promotion as ExportedEvaluateTruthPromotion,
+    )
+    from oai2.evals import run_eval_harness as ExportedRunEvalHarness
+    from oai2.evals import (
+        run_held_out_truth_cases as ExportedRunHeldOutTruthCases,
+    )
+    from oai2.evals import run_suite as ExportedRunSuite
+    from oai2.evals import summarize_truth as ExportedSummarizeTruth
+    from oai2.evals.regression import (
+        CapabilityRegression,
+        CapabilityRegressionThreshold,
+    )
+    from oai2.evals.regression import (
+        HeldOutPromotionBudget as _HeldOutPromotionBudget,
+    )
+    from oai2.evals.regression import (
+        HeldOutPromotionEvaluation as _HeldOutPromotionEvaluation,
+    )
+    from oai2.evals.regression import (
+        evaluate_held_out_promotion as _EvaluateHeldOutPromotion,
+    )
+    from oai2.evals.truth import (
+        TruthCandidatePromotionEvaluation as _TruthCandidatePromotionEvaluation,
+    )
+    from oai2.evals.truth import TruthCaseClass as _TruthCaseClass
+    from oai2.evals.truth import TruthOutcome as _TruthOutcome
+    from oai2.evals.truth import TruthPromotionBudget as _TruthPromotionBudget
+    from oai2.evals.truth import TruthPromotionEvaluation as _TruthPromotionEvaluation
+    from oai2.evals.truth import TruthReport as _TruthReport
+    from oai2.evals.truth import TruthSample as _TruthSample
+    from oai2.evals.truth import (
+        evaluate_truth_candidate_promotion as _EvaluateTruthCandidatePromotion,
+    )
+    from oai2.evals.truth import (
+        evaluate_truth_promotion as _EvaluateTruthPromotion,
+    )
+    from oai2.evals.truth import summarize_truth as _SummarizeTruth
+    from oai2.evals.truth_runner import (
+        CandidateRunner as _CandidateRunner,
+    )
+    from oai2.evals.truth_runner import (
+        CandidateTruthInput as _CandidateTruthInput,
+    )
+    from oai2.evals.truth_runner import (
+        CandidateTruthResponse as _CandidateTruthResponse,
+    )
+    from oai2.evals.truth_runner import HiddenVerifier as _HiddenVerifier
+    from oai2.evals.truth_runner import TruthCase as _TruthCase
+    from oai2.evals.truth_runner import TruthRunResult as _TruthRunResult
+    from oai2.evals.truth_runner import (
+        TruthVerifierVerdict as _TruthVerifierVerdict,
+    )
+    from oai2.evals.truth_runner import (
+        classify_truth_outcome as _ClassifyTruthOutcome,
+    )
+    from oai2.evals.truth_runner import (
+        run_held_out_truth_cases as _RunHeldOutTruthCases,
+    )
+
+    # init-defined (11)
+    assert ExportedBUILTIN_SUITES_NAMES is BUILTIN_SUITES_NAMES
+    assert ExportedCapabilityCase is CapabilityCase
+    assert ExportedCapabilityScore is CapabilityScore
+    assert ExportedCapabilitySuite is CapabilitySuite
+    assert ExportedHarnessReport is HarnessReport
+    assert ExportedSCORERS is SCORERS
+    assert ExportedSuiteReport is SuiteReport
+    assert ExportedBuiltinSuite is builtin_suite
+    assert ExportedBuiltinSuites is builtin_suites
+    assert ExportedRunEvalHarness is run_eval_harness
+    assert ExportedRunSuite is run_suite
+    # regression slice (5)
+    assert ExportedCapabilityRegression is CapabilityRegression
+    assert ExportedCapabilityRegressionThreshold is CapabilityRegressionThreshold
+    assert ExportedHeldOutPromotionBudget is _HeldOutPromotionBudget
+    assert ExportedHeldOutPromotionEvaluation is _HeldOutPromotionEvaluation
+    assert ExportedEvaluateHeldOutPromotion is _EvaluateHeldOutPromotion
+    # truth slice (10) — TruthCase lives in truth_runner, not truth
+    assert ExportedTruthCaseClass is _TruthCaseClass
+    assert ExportedTruthOutcome is _TruthOutcome
+    assert ExportedTruthPromotionBudget is _TruthPromotionBudget
+    assert ExportedTruthPromotionEvaluation is _TruthPromotionEvaluation
+    assert (
+        ExportedTruthCandidatePromotionEvaluation
+        is _TruthCandidatePromotionEvaluation
+    )
+    assert ExportedTruthReport is _TruthReport
+    assert ExportedTruthSample is _TruthSample
+    assert ExportedEvaluateTruthCandidatePromotion is _EvaluateTruthCandidatePromotion
+    assert ExportedEvaluateTruthPromotion is _EvaluateTruthPromotion
+    assert ExportedSummarizeTruth is _SummarizeTruth
+    # truth_runner slice (8)
+    assert ExportedCandidateRunner is _CandidateRunner
+    assert ExportedCandidateTruthInput is _CandidateTruthInput
+    assert ExportedCandidateTruthResponse is _CandidateTruthResponse
+    assert ExportedHiddenVerifier is _HiddenVerifier
+    assert ExportedTruthCase is _TruthCase
+    assert ExportedTruthRunResult is _TruthRunResult
+    assert ExportedTruthVerifierVerdict is _TruthVerifierVerdict
+    assert ExportedClassifyTruthOutcome is _ClassifyTruthOutcome
+    assert ExportedRunHeldOutTruthCases is _RunHeldOutTruthCases

@@ -48,45 +48,91 @@ def test_mlx_smoke_check() -> None:
 
 
 def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> None:
+    # Pass 9 — pin identity for every entry of ``oai2.runtime.__all__``.
+    # The original 13-entry sibling test covered only the inference /
+    # model / scheduler slices; the same coverage-gap pattern that Pass 8
+    # closed in ``oai2.model`` (commit ``985d357`` for #216) was open
+    # here for admission, admission_scheduler, gateway_runtime and
+    # gateway_model_client. This test asserts ``is`` identity for all
+    # 36 package-surface entries against their source modules so a
+    # future drop or rename in either side trips the test.
+    from oai2.runtime import DEFAULT_GATEWAY_BASE_URL as ExportedDEFAULT_GATEWAY_BASE_URL
+    from oai2.runtime import DEFAULT_GATEWAY_MODEL as ExportedDEFAULT_GATEWAY_MODEL
+    from oai2.runtime import DEFAULT_MAX_TOKENS as ExportedDEFAULT_MAX_TOKENS
+    from oai2.runtime import DEFAULT_TEMPERATURE as ExportedDEFAULT_TEMPERATURE
+    from oai2.runtime import DEFAULT_TIMEOUT_SECONDS as ExportedDEFAULT_TIMEOUT_SECONDS
+    from oai2.runtime import AdmissionAction as ExportedAdmissionAction
+    from oai2.runtime import AdmissionBatchController as ExportedAdmissionBatchController
+    from oai2.runtime import AdmissionDecision as ExportedAdmissionDecision
+    from oai2.runtime import AdmissionPolicy as ExportedAdmissionPolicy
+    from oai2.runtime import AdmissionQueue as ExportedAdmissionQueue
+    from oai2.runtime import AdmissionReason as ExportedAdmissionReason
+    from oai2.runtime import AdmissionRequest as ExportedAdmissionRequest
+    from oai2.runtime import AdmissionScheduledRequest as ExportedAdmissionScheduledRequest
+    from oai2.runtime import AdmissionSchedulerMetrics as ExportedAdmissionSchedulerMetrics
     from oai2.runtime import BatchPlan as ExportedBatchPlan
-    from oai2.runtime import (
-        InferenceRequest as ExportedInferenceRequest,
-    )
-    from oai2.runtime import (
-        InferenceResponse as ExportedInferenceResponse,
-    )
-    from oai2.runtime import (
-        InferenceRuntime as ExportedInferenceRuntime,
-    )
+    from oai2.runtime import CapacitySnapshot as ExportedCapacitySnapshot
+    from oai2.runtime import ChatReply as ExportedChatReply
+    from oai2.runtime import GatewayConfig as ExportedGatewayConfig
+    from oai2.runtime import GatewayConfigError as ExportedGatewayConfigError
+    from oai2.runtime import GatewayModelClient as ExportedGatewayModelClient
+    from oai2.runtime import GatewayRuntime as ExportedGatewayRuntime
+    from oai2.runtime import GatewayRuntimeError as ExportedGatewayRuntimeError
+    from oai2.runtime import InferenceRequest as ExportedInferenceRequest
+    from oai2.runtime import InferenceResponse as ExportedInferenceResponse
+    from oai2.runtime import InferenceRuntime as ExportedInferenceRuntime
     from oai2.runtime import ModelSpec as ExportedModelSpec
+    from oai2.runtime import PlaceholderRuntime as ExportedPlaceholderRuntime
+    from oai2.runtime import SafeBatchScheduler as ExportedSafeBatchScheduler
+    from oai2.runtime import ScheduledRequest as ExportedScheduledRequest
+    from oai2.runtime import SchedulerMetrics as ExportedSchedulerMetrics
+    from oai2.runtime import SessionCompatibilityKey as ExportedSessionCompatibilityKey
+    from oai2.runtime import default_runtime as ExportedDefaultRuntime
+    from oai2.runtime import discover_default_device as ExportedDiscoverDevice
     from oai2.runtime import (
-        PlaceholderRuntime as ExportedPlaceholderRuntime,
+        load_gateway_config_from_env as ExportedLoadGatewayConfigFromEnv,
     )
     from oai2.runtime import (
-        SafeBatchScheduler as ExportedSafeBatchScheduler,
-    )
-    from oai2.runtime import (
-        ScheduledRequest as ExportedScheduledRequest,
-    )
-    from oai2.runtime import (
-        SchedulerMetrics as ExportedSchedulerMetrics,
-    )
-    from oai2.runtime import (
-        SessionCompatibilityKey as ExportedSessionCompatibilityKey,
-    )
-    from oai2.runtime import (
-        default_runtime as ExportedDefaultRuntime,
-    )
-    from oai2.runtime import (
-        discover_default_device as ExportedDiscoverDevice,
+        select_runtime_from_env as ExportedSelectRuntimeFromEnv,
     )
     from oai2.runtime import smoke_check as ExportedSmokeCheck
+    from oai2.runtime.admission import (
+        AdmissionAction,
+        AdmissionDecision,
+        AdmissionPolicy,
+        AdmissionQueue,
+        AdmissionReason,
+        AdmissionRequest,
+        CapacitySnapshot,
+    )
+    from oai2.runtime.admission_scheduler import (
+        AdmissionBatchController,
+        AdmissionScheduledRequest,
+        AdmissionSchedulerMetrics,
+    )
+    from oai2.runtime.gateway_model_client import (
+        DEFAULT_MAX_TOKENS,
+        DEFAULT_TEMPERATURE,
+        ChatReply,
+        GatewayModelClient,
+    )
+    from oai2.runtime.gateway_runtime import (
+        DEFAULT_GATEWAY_BASE_URL,
+        DEFAULT_GATEWAY_MODEL,
+        DEFAULT_TIMEOUT_SECONDS,
+        GatewayConfig,
+        GatewayConfigError,
+        GatewayRuntime,
+        GatewayRuntimeError,
+        load_gateway_config_from_env,
+    )
     from oai2.runtime.inference import (
         InferenceRequest,
         InferenceResponse,
         InferenceRuntime,
         PlaceholderRuntime,
         default_runtime,
+        select_runtime_from_env,
     )
     from oai2.runtime.model import (
         ModelSpec,
@@ -114,6 +160,34 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
     assert ExportedSchedulerMetrics is SchedulerMetrics
     assert ExportedBatchPlan is BatchPlan
     assert ExportedSafeBatchScheduler is SafeBatchScheduler
+    # admission slice (7)
+    assert ExportedAdmissionAction is AdmissionAction
+    assert ExportedAdmissionDecision is AdmissionDecision
+    assert ExportedAdmissionPolicy is AdmissionPolicy
+    assert ExportedAdmissionQueue is AdmissionQueue
+    assert ExportedAdmissionReason is AdmissionReason
+    assert ExportedAdmissionRequest is AdmissionRequest
+    assert ExportedCapacitySnapshot is CapacitySnapshot
+    # admission_scheduler slice (3)
+    assert ExportedAdmissionBatchController is AdmissionBatchController
+    assert ExportedAdmissionScheduledRequest is AdmissionScheduledRequest
+    assert ExportedAdmissionSchedulerMetrics is AdmissionSchedulerMetrics
+    # gateway_runtime slice (8)
+    assert ExportedDEFAULT_GATEWAY_BASE_URL is DEFAULT_GATEWAY_BASE_URL
+    assert ExportedDEFAULT_GATEWAY_MODEL is DEFAULT_GATEWAY_MODEL
+    assert ExportedDEFAULT_TIMEOUT_SECONDS is DEFAULT_TIMEOUT_SECONDS
+    assert ExportedGatewayConfig is GatewayConfig
+    assert ExportedGatewayConfigError is GatewayConfigError
+    assert ExportedGatewayRuntime is GatewayRuntime
+    assert ExportedGatewayRuntimeError is GatewayRuntimeError
+    assert ExportedLoadGatewayConfigFromEnv is load_gateway_config_from_env
+    # gateway_model_client slice (4)
+    assert ExportedChatReply is ChatReply
+    assert ExportedDEFAULT_MAX_TOKENS is DEFAULT_MAX_TOKENS
+    assert ExportedDEFAULT_TEMPERATURE is DEFAULT_TEMPERATURE
+    assert ExportedGatewayModelClient is GatewayModelClient
+    # inference selector (newly exported at #238 slice chain)
+    assert ExportedSelectRuntimeFromEnv is select_runtime_from_env
 
 
 # ---------------------------------------------------------------------------
