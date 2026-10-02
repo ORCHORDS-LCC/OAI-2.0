@@ -415,6 +415,415 @@ def session_unrelated_query_no_injection(store: InMemoryKnowledgeStore) -> bool:
     return True
 
 
+def session_shell_command(store: InMemoryKnowledgeStore) -> bool:
+    """Round 6 (SHELL skill): teach a shell command, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 6: SHELL — teach a uv run command, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="run the OAI-2.0 unit tests excluding the two pre-existing starlette files",
+        final_text=(
+            "Use `uv run pytest -W error -q "
+            "--ignore=tests/test_local_service.py "
+            "--ignore=tests/test_service_binding.py`. "
+            "The current 4370-test pass count was recorded at commit 3250049."
+        ),
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-006-A",
+        verification_ref="verifier://battle/006",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "run the OAI-2.0 unit tests excluding the two pre-existing starlette files"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will run the same pytest invocation."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("run the OAI-2.0 unit tests excluding the two pre-existing starlette files")
+    _print_messages("SESSION 6 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 6",
+        rt.requests[0].messages,
+        "uv run pytest -W error -q",
+    )
+
+
+def session_git_workflow(store: InMemoryKnowledgeStore) -> bool:
+    """Round 7 (GIT skill): teach a git workflow, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 7: GIT — teach the direct-push workflow, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="commit and push OAI-2.0 directly to main, preserve concurrent work",
+        final_text=(
+            "1) `git fetch origin`. 2) If concurrent changes, "
+            "`git stash push -m <scope> -- <files>`. "
+            "3) `git pull --rebase`. 4) `git stash pop`. "
+            "5) `git -c commit.gpgsign=false push origin main`. "
+            "6) Verify `git rev-parse origin/main` matches local HEAD."
+        ),
+        finished_reason="stop",
+        total_tool_calls=4,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-007-A",
+        verification_ref="verifier://battle/007",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "commit and push OAI-2.0 directly to main, preserve concurrent work"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will fetch, rebase, push, verify."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("commit and push OAI-2.0 directly to main, preserve concurrent work")
+    _print_messages("SESSION 7 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 7",
+        rt.requests[0].messages,
+        "git fetch origin",
+    )
+
+
+def session_github_evidence_comment(store: InMemoryKnowledgeStore) -> bool:
+    """Round 8 (GITHUB skill): teach the issue-evidence comment shape, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 8: GITHUB — teach the issue-evidence comment format, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="post an evidence comment to a GitHub issue with BEFORE/AFTER and limitations",
+        final_text=(
+            "Use mcp__github__add_issue_comment with: "
+            "(1) issue number, (2) owner, (3) repo, (4) body. "
+            "Body must contain: source commit SHA, base SHA, "
+            "scope, files changed, verification gates run, "
+            "what is NOT yet implemented (honest scope), and a "
+            "no-claim of closure if acceptance isn't proven."
+        ),
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-008-A",
+        verification_ref="verifier://battle/008",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "post an evidence comment to a GitHub issue with BEFORE/AFTER and limitations"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will post the evidence comment with all required sections."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("post an evidence comment to a GitHub issue with BEFORE/AFTER and limitations")
+    _print_messages("SESSION 8 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 8",
+        rt.requests[0].messages,
+        "verification gates run",
+    )
+
+
+def session_zcode_tool_invocation(store: InMemoryKnowledgeStore) -> bool:
+    """Round 9 (ZCODE TOOLS): teach tool-invocation discipline, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 9: ZCODE — teach tool-invocation discipline, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="invoke a ZCode tool, read the result, react correctly, and verify the final state",
+        final_text=(
+            "PASS = the tool was actually invoked (not 'I would run...'), "
+            "the result was actually read, the reaction was correct, and the "
+            "final state was verified. A real execution leaves a verifiable "
+            "trail (commit SHA, file change, network response, test output). "
+            "If the tool was not actually invoked, the exercise is a FAIL."
+        ),
+        finished_reason="stop",
+        total_tool_calls=0,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-009-A",
+        verification_ref="verifier://battle/009",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "invoke a ZCode tool, read the result, react correctly, and verify the final state"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will actually invoke the tool, read the output, and verify."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("invoke a ZCode tool, read the result, react correctly, and verify the final state")
+    _print_messages("SESSION 9 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 9",
+        rt.requests[0].messages,
+        "verifiable trail",
+    )
+
+
+def session_mcp_tool_discovery(store: InMemoryKnowledgeStore) -> bool:
+    """Round 10 (MCP): teach the mcp discovery pattern, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 10: MCP — teach mcp__<server>__<tool> discovery, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="discover an MCP server's tools by enumerating mcp__<server>__<tool> in a ZCode session",
+        final_text=(
+            "Available MCPs in this Mac session: mcp__github__* (issues, PRs, "
+            "repos, code search, gists), mcp__cloudflare-*{api,bindings,builds,"
+            "observability,ai-gateway,docs} (D1, R2, KV, Vectorize, Workers, "
+            "AI Gateway), mcp__firebase__* (auth, Firestore, Storage, RTDB, "
+            "Remote Config, Messaging, AI Logic, Hosting), "
+            "mcp__google-play-developer__* (Play Console, tracks, reviews), "
+            "mcp__node_repl__js (Node kernel for browser/computer-use skills). "
+            "Use mcp__<server>__<tool> names directly. No env keys required "
+            "for MCPs (they carry their own auth)."
+        ),
+        finished_reason="stop",
+        total_tool_calls=0,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-010-A",
+        verification_ref="verifier://battle/010",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "discover an MCP server's tools by enumerating mcp__<server>__<tool> in a ZCode session"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will enumerate the MCP servers via the mcp__<server>__<tool> pattern."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("discover an MCP server's tools by enumerating mcp__<server>__<tool> in a ZCode session")
+    _print_messages("SESSION 10 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 10",
+        rt.requests[0].messages,
+        "mcp__github__",
+    )
+
+
+def session_failure_recovery(store: InMemoryKnowledgeStore) -> bool:
+    """Round 11 (ERROR RECOVERY): teach a recovery pattern, reuse it."""
+    print("\n" + "=" * 70)
+    print("SESSION 11: ERROR RECOVERY — teach the git-clone-safe recovery, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="recover from 'destination path already exists' on git clone",
+        final_text=(
+            "Use `/Users/orchords/bin/git-clone-safe` (symlinked to "
+            "`/Users/orchords/bin/gh-clone-safe`). 4-case recovery: "
+            "non-existent dir → normal clone; empty dir → clone into it; "
+            "existing checkout of same remote → fetch + ff-merge (or "
+            "reset --hard); existing checkout of different remote OR "
+            "non-empty non-git dir → refuse with diagnostic. After "
+            "recovery the agent sees `[git-clone-safe auto-recovered: rc=N]` "
+            "and continues. Per AGENTS.md Appendix A, verified 2026-10-01."
+        ),
+        finished_reason="stop",
+        total_tool_calls=1,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-011-A",
+        verification_ref="verifier://battle/011",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "recover from 'destination path already exists' on git clone"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will call /Users/orchords/bin/git-clone-safe with the absolute path."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("recover from 'destination path already exists' on git clone")
+    _print_messages("SESSION 11 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 11",
+        rt.requests[0].messages,
+        "git-clone-safe",
+    )
+
+
+def session_retention_after_other_sessions(store: InMemoryKnowledgeStore) -> bool:
+    """Round 12 (RETENTION): a prior lesson is still retrievable after
+    many other lessons have been added — verifies the store doesn't
+    silently drop or deprioritize early knowledge.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 12: RETENTION — Session 1 lesson still retrievable after 6 more lessons")
+    print("=" * 70)
+    rt = _StubRuntime(
+        script=[{"text": "I will re-use the find . -name '*.py' pattern from earlier."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("list all Python files in the OAI-2.0 repository")
+    _print_messages("SESSION 12 / Task B (re-ask of Session 1)", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 12",
+        rt.requests[0].messages,
+        "find . -name '*.py'",
+    )
+
+
+def session_multi_tool_engineering(store: InMemoryKnowledgeStore) -> bool:
+    """Round 13 (MULTI-TOOL): a task that legitimately needs multiple
+    tools composed. Teaches + reuses the multi-tool pattern.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 13: MULTI-TOOL — compose Read+Edit+Bash+Grep, reuse it")
+    print("=" * 70)
+    run_a = _make_run(
+        user_prompt="add a new evidence-package render helper that composes Read+Edit+Bash+Grep",
+        final_text=(
+            "1) Bash: locate the file. 2) Read: confirm the existing render. "
+            "3) Edit: add the helper with old_string/new_string exact-match. "
+            "4) Bash: run `uv run ruff check` and `uv run pytest` on the "
+            "touched file. 5) Bash: `git add` + `git -c commit.gpgsign=false "
+            "commit -m '...'` + `git push origin main`. 6) Bash: verify "
+            "`git rev-parse origin/main` matches local HEAD. If any step "
+            "fails, the task is FAIL — the student must actually invoke "
+            "the tool, read the result, react correctly, and verify the "
+            "final state."
+        ),
+        finished_reason="stop",
+        total_tool_calls=6,
+    )
+    lesson = extract_lesson(
+        run_a,
+        task_id="bt-013-A",
+        verification_ref="verifier://battle/013",
+        source_version="1571c13",
+        runtime_version="oai2/0.1+battle",
+    )
+    shared_topic = "add a new evidence-package render helper that composes Read+Edit+Bash+Grep"
+    promoted = lesson.model_copy(
+        update={
+            "topic": shared_topic,
+            "knowledge_id": KnowledgeId(
+                sha256_hex(shared_topic + "verified")[:32]
+            ),
+        }
+    )
+    store.put(promoted)
+    print(f"  Task A → extract_lesson → put (kid={promoted.knowledge_id})")
+
+    rt = _StubRuntime(
+        script=[{"text": "I will use Read, Edit, Bash, Grep in sequence, verify each step."}]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+    )
+    loop.run("add a new evidence-package render helper that composes Read+Edit+Bash+Grep")
+    _print_messages("SESSION 13 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 13",
+        rt.requests[0].messages,
+        "old_string",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -435,6 +844,14 @@ def main() -> int:
         session_ruff_workflow,
         session_negative_memory_does_not_instruct,
         session_unrelated_query_no_injection,
+        session_shell_command,
+        session_git_workflow,
+        session_github_evidence_comment,
+        session_zcode_tool_invocation,
+        session_mcp_tool_discovery,
+        session_failure_recovery,
+        session_retention_after_other_sessions,
+        session_multi_tool_engineering,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
