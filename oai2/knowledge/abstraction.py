@@ -40,6 +40,29 @@ class KnowledgeObject(BaseModel):
     artifact_ref: str | None = None
     embedding_ref: str | None = None
 
+    # --- Temporal / supersession (OAI-2.0 #200 REQ-TEMP-001/011/012, #207) ---
+    # `claim_key` is the stable identity of the CLAIM (polarity-independent
+    # subject signature) and is deliberately distinct from `content_hash`,
+    # which identifies one exact revision of it. A claim whose
+    # recommendation was flipped keeps its claim_key and gains a new
+    # content_hash, which is what makes supersession and conflict
+    # reconciliation possible at all. Conflating the two would make every
+    # reworded revision look like an unrelated claim.
+    claim_key: str | None = Field(default=None, max_length=128)
+    content_version: str | None = Field(default=None, max_length=128)
+    source_version: str | None = Field(default=None, max_length=128)
+    effective_at: float | None = None
+    superseded_by: str | None = Field(default=None, max_length=128)
+    superseded_at: float | None = None
+
+    # --- Trust and isolation (OAI-2.0 #185) ---
+    # Retrieved evidence is never equivalent to an instruction. `trust_class`
+    # records that in the authoritative store, and `scope_class` records who
+    # may receive it, so a lesson promoted from one client's private context
+    # cannot be served to another by virtue of being globally indexed.
+    trust_class: str = Field(default="retrieved_evidence", max_length=64)
+    scope_class: str = Field(default="global", max_length=32)
+
 
 @dataclass(slots=True, frozen=True)
 class RetrievalRequest:

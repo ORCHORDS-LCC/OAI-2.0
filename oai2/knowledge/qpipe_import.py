@@ -61,6 +61,45 @@ class QPipeSource(StrEnum):
     SCENARIO_FORGE = "scenario-forge"
     TERMINAL_BENCH = "terminal-bench-2.1"
     ANDROID_CURRICULUM = "android-curriculum-oss"
+    RECIPE_CANDIDATES = "recipe-candidates"
+
+
+#: q-pipe sources that may import WITHOUT explicit operator opt-in.
+DEFAULT_SOURCES = frozenset({
+    QPipeSource.SCENARIO_FORGE.value,
+    QPipeSource.TERMINAL_BENCH.value,
+})
+
+#: Sources that are structurally allowed but require an explicit opt-in flag.
+#: Each has its own ImportPolicy flag; membership here does not enable it.
+OPT_IN_SOURCES = frozenset({
+    QPipeSource.ANDROID_CURRICULUM.value,
+    QPipeSource.RECIPE_CANDIDATES.value,
+})
+
+#: q-pipe scope values whose lessons are reusable by every caller and so may
+#: enter a shared knowledge store. This is an ALLOW-list, not a deny-list: a
+#: shared store serves everyone, so a scope that is not positively known to be
+#: globally reusable must be refused rather than assumed harmless. That covers
+#: `private`, every `client:*` / `session:*` / `project:*` form, and any value
+#: nobody has classified.
+#:
+#: `generic` plus the legacy `local`/`global` synonyms are q-pipe's generic
+#: scope vocabulary; `router` is the pre-existing environment selector already
+#: carried by this import contract.
+EXPORTABLE_SCOPES = frozenset({"generic", "global", "local", "router"})
+
+#: Historical spelling of RECIPE_CANDIDATES. The live store carries the
+#: pre-migration value; both are accepted so an import is not silently
+#: dropped by a rename, and both map to the same canonical source.
+RECIPE_CANDIDATES_SOURCE_ALIASES = frozenset({"recipe_candidates"})
+
+#: Provenance states q-pipe considers attributable. A row whose origin cannot
+#: be reconstructed (no task text at harvest) is refused here even if it were
+#: somehow marked promoted, because a reusable claim needs a recoverable
+#: identity. Mirrors qpipe.memory.QUARANTINED_STATES.
+QPIPE_PROVENANCE_VERIFIED = "verified"
+QPIPE_PROVENANCE_BLOCKED = frozenset({"unattributed"})
 
 
 class QPipeStatus(StrEnum):
@@ -176,6 +215,15 @@ class QPipeRow:
     promoted_at: int | None = None
     promoter: str | None = None
     last_used_at: int | None = None
+    # Temporal / supersession / isolation, added for OAI-2.0 #200 and #207.
+    # Optional so a pre-migration row still parses; absence is reported
+    # rather than guessed.
+    claim_key: str | None = None
+    superseded_by: int | None = None
+    superseded_at: int | None = None
+    domain: str | None = None
+    source_version: str | None = None
+    provenance_state: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, object]) -> QPipeRow:
@@ -206,6 +254,10 @@ class QPipeRow:
             raise KeyError("scope")
         scope = raw_scope.strip().lower()
 
+        def _i_opt_default(key: str, default: int | None = None) -> int | None:
+            val = d.get(key, default)
+            return int(val) if val is not None else default  # type: ignore[arg-type]
+
         return cls(
             recipe_id=_i_or("id", 0),
             source=str(d["source"]).strip().lower(),
@@ -224,6 +276,12 @@ class QPipeRow:
             promoted_at=_i_opt("promoted_at"),
             promoter=_s_opt("promoter"),
             last_used_at=_i_opt("last_used_at"),
+            claim_key=_s_opt("claim_key"),
+            superseded_by=_i_opt_default("superseded_by"),
+            superseded_at=_i_opt_default("superseded_at"),
+            domain=_s_opt("domain"),
+            source_version=_s_opt("source_version"),
+            provenance_state=_s_opt("provenance_state"),
         )
 
 
@@ -233,6 +291,7 @@ class ImportPolicy:
 
     allow_candidates: bool = False
     allow_android_curriculum: bool = False
+    allow_recipe_candidates: bool = False
     require_verified: bool = True
 
 
@@ -246,8 +305,11 @@ class ImportReport:
     skipped_rejected: list[str] = field(default_factory=list)
     skipped_not_promoted: list[str] = field(default_factory=list)
     skipped_requires_opt_in: list[str] = field(default_factory=list)
+    skipped_unattributable: list[str] = field(default_factory=list)
+    skipped_non_exportable_scope: list[str] = field(default_factory=list)
     skipped_unverified_or_low_quality: list[str] = field(default_factory=list)
     rejected_malformed: list[tuple[str, str]] = field(default_factory=list)
+    unresolved_supersession: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def total_seen(self) -> int:
@@ -258,21 +320,30 @@ class ImportReport:
             + len(self.skipped_rejected)
             + len(self.skipped_not_promoted)
             + len(self.skipped_requires_opt_in)
+            + len(self.skipped_unattributable)
+            + len(self.skipped_non_exportable_scope)
             + len(self.skipped_unverified_or_low_quality)
             + len(self.rejected_malformed)
+            + len(self.unresolved_supersession)
         )
+
+
+def _canonical_source(source: str) -> str:
+    if source in RECIPE_CANDIDATES_SOURCE_ALIASES:
+        return QPipeSource.RECIPE_CANDIDATES.value
+    return source
 
 
 def _validate_row(row: QPipeRow, policy: ImportPolicy) -> str | None:
     """Return an eligibility error, or None when the row may import."""
-    default_sources = {
-        QPipeSource.SCENARIO_FORGE.value,
-        QPipeSource.TERMINAL_BENCH.value,
-    }
-    if row.source == QPipeSource.ANDROID_CURRICULUM.value:
+    source = _canonical_source(row.source)
+    if source == QPipeSource.ANDROID_CURRICULUM.value:
         if not policy.allow_android_curriculum:
-            return "android curriculum requires opt-in"
-    elif row.source not in default_sources:
+            return "requires opt-in"
+    elif source == QPipeSource.RECIPE_CANDIDATES.value:
+        if not policy.allow_recipe_candidates:
+            return f"disallowed source: {row.source}"
+    elif source not in DEFAULT_SOURCES:
         return f"disallowed source: {row.source}"
 
     if row.recipe_id < 1:
@@ -283,6 +354,20 @@ def _validate_row(row: QPipeRow, policy: ImportPolicy) -> str | None:
         return "negative counters"
     if not row.external_id or len(row.external_id) > 160:
         return "invalid external_id"
+
+    # Provenance must be attributable. A row quarantined in q-pipe because its
+    # origin cannot be reconstructed has no recoverable claim identity, so it
+    # is refused even if it were marked promoted.
+    provenance = (row.provenance_state or QPIPE_PROVENANCE_VERIFIED).strip().lower()
+    if provenance in QPIPE_PROVENANCE_BLOCKED:
+        return "unattributable provenance"
+
+    # Only globally reusable material belongs in a shared knowledge store.
+    # A private or client-scoped lesson that reached here would be served to
+    # every caller, so it is refused rather than stripped.
+    scope = (row.scope or "").strip().lower()
+    if scope not in EXPORTABLE_SCOPES:
+        return f"non-exportable scope: {scope or '(empty)'}"
 
     fingerprint = " ".join(row.fingerprint.strip().lower().split())
     if len(fingerprint.split()) < 3 or len(fingerprint) > 1000:
@@ -310,6 +395,7 @@ def row_to_knowledge_object(
     row: QPipeRow,
     *,
     imported_at_epoch: float | None = None,
+    superseded_by_ref: str | None = None,
 ) -> KnowledgeObject:
     """Translate one q-pipe row into an OAI-2.0 :class:`KnowledgeObject`.
 
@@ -325,10 +411,17 @@ def row_to_knowledge_object(
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    topic = f"qpipe:{row.source}:{row.scope}"
+    source = _canonical_source(row.source)
+    topic = f"qpipe:{source}:{row.scope}"
     authority = derive_authority(row.capture_count, row.success_count)
     qpipe_status = QPipeStatus(row.status)
     oai_status = QPIPE_TO_OAI_STATUS[qpipe_status]
+    # A superseded revision is IMPLEMENTED in OAI terms (it was real) but must
+    # not be retrieval-default, so it is carried as EXPERIMENTAL alongside the
+    # explicit superseded_by link. Losing the link would lose REQ-TEMP-004
+    # traceability of the historical evidence.
+    if row.superseded_by is not None:
+        oai_status = Status.EXPERIMENTAL
 
     return KnowledgeObject(
         knowledge_id=KnowledgeId(f"ko_{digest[:12]}"),
@@ -343,6 +436,20 @@ def row_to_knowledge_object(
         ),
         authority=authority,
         status=oai_status,
+        # claim_key is the stable claim identity; content_version is the exact
+        # revision digest. Both travel, because a reader must be able to tell
+        # "this is a newer version of a claim I already have" from "this is a
+        # different claim" (REQ-TEMP-011/012).
+        claim_key=row.claim_key or None,
+        content_version=row.source_version or None,
+        source_version=row.source_version or None,
+        effective_at=float(row.source_updated_at),
+        superseded_by=superseded_by_ref,
+        superseded_at=(
+            float(row.superseded_at) if row.superseded_at is not None else None
+        ),
+        trust_class="retrieved_evidence",
+        scope_class="global",
     )
 
 
@@ -355,6 +462,7 @@ def import_qpipe_rows(
     policy = policy or ImportPolicy()
     report = ImportReport()
     seen: set[tuple[str, str]] = set()
+    accepted: list[QPipeRow] = []
 
     for raw in rows:
         try:
@@ -374,14 +482,19 @@ def import_qpipe_rows(
         if err is not None:
             if err.startswith("disallowed source"):
                 report.skipped_disallowed_source.append(row.external_id)
-            elif err == "android curriculum requires opt-in":
+            elif err == "requires opt-in":
                 report.skipped_requires_opt_in.append(row.external_id)
+            elif err == "unattributable provenance":
+                report.skipped_unattributable.append(row.external_id)
+            elif err.startswith("non-exportable scope"):
+                report.skipped_non_exportable_scope.append(row.external_id)
             elif err == "rejected":
                 report.skipped_rejected.append(row.external_id)
             elif err == "not promoted":
                 report.skipped_not_promoted.append(row.external_id)
             elif err in {
                 "unverified",
+                "unattributable provenance",
                 "verified_count exceeds success_count",
                 "success_count must exceed failure_count",
                 "invalid or unsafe guidance",
@@ -397,12 +510,40 @@ def import_qpipe_rows(
             report.skipped_duplicate.append(row.external_id)
             continue
         seen.add(key)
-        report.imported.append(row_to_knowledge_object(row))
+        accepted.append(row)
+
+    # Second pass: resolve supersession against the WINNING row's identity.
+    # q-pipe stores `superseded_by` as an integer FK, which is meaningless
+    # outside its own database, so it is translated here. A target that is not
+    # part of this import stays None and is reported, rather than being
+    # rendered as a link that names the wrong or a nonexistent record.
+    id_to_external: dict[int, str] = {}
+    for row in accepted:
+        if row.superseded_by is None:
+            id_to_external[row.recipe_id] = row.external_id
+    for row in accepted:
+        ref: str | None = None
+        if row.superseded_by is not None:
+            winner_external = id_to_external.get(int(row.superseded_by))
+            if winner_external is None:
+                report.unresolved_supersession.append(
+                    (row.external_id, int(row.superseded_by))
+                )
+            else:
+                ref = f"qpipe:{row.source}:{winner_external}"
+        report.imported.append(
+            row_to_knowledge_object(row, superseded_by_ref=ref)
+        )
 
     return report
 
 
 __all__ = [
+    "DEFAULT_SOURCES",
+    "OPT_IN_SOURCES",
+    "RECIPE_CANDIDATES_SOURCE_ALIASES",
+    "QPIPE_PROVENANCE_BLOCKED",
+    "QPIPE_PROVENANCE_VERIFIED",
     "QPIPE_COMPATIBILITY_SOURCE_REVISION",
     "QPIPE_COMPATIBILITY_SOURCE_BLOBS",
     "QPipeSource",

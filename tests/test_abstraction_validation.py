@@ -460,8 +460,27 @@ def test_knowledge_object_extra_config_is_forbid() -> None:
     assert KnowledgeObject.model_config["extra"] == "forbid"
 
 
-def test_knowledge_object_field_set_pinned_to_nine_names() -> None:
+def test_knowledge_object_field_set_is_explicitly_pinned() -> None:
+    """The field set stays a reviewed contract, not an open bag.
+
+    The original nine carry identity/content/authority/lifecycle. The ten
+    added fields carry what OAI-2.0 #200/#207/#185 require the canonical
+    record to be able to express and that a content hash alone cannot:
+
+      claim_key       stable identity of the CLAIM, so a reworded or
+                      recommendation-flipped revision is recognisable as the
+                      same claim rather than a new one (REQ-TEMP-011/012)
+      content_version per-revision digest
+      source_version  version of the source the revision came from
+      effective_at    effective time, distinct from retrieval time
+      superseded_by   linkage to the superseding record (REQ-TEMP-004)
+      superseded_at
+      trust_class     retrieved evidence is not an instruction (REQ-PROMPT-011)
+      scope_class     who may receive it, so a private lesson is not served
+                      to every caller by virtue of being indexed
+    """
     assert set(KnowledgeObject.model_fields.keys()) == {
+        # original nine
         "knowledge_id",
         "topic",
         "content",
@@ -472,7 +491,29 @@ def test_knowledge_object_field_set_pinned_to_nine_names() -> None:
         "status",
         "artifact_ref",
         "embedding_ref",
+        # temporal / supersession
+        "claim_key",
+        "content_version",
+        "source_version",
+        "effective_at",
+        "superseded_by",
+        "superseded_at",
+        # trust / isolation
+        "trust_class",
+        "scope_class",
     }
+
+
+def test_claim_identity_and_content_version_are_separate_fields() -> None:
+    """Conflating them would make supersession impossible."""
+    fields = KnowledgeObject.model_fields
+    assert "claim_key" in fields and "content_version" in fields
+    assert "content_hash" in fields
+    # content_hash is mandatory; claim identity is not, because a record may
+    # predate claim tracking and we report its absence rather than invent one.
+    assert fields["content_hash"].is_required()
+    assert not fields["claim_key"].is_required()
+    assert not fields["content_version"].is_required()
 
 
 def test_knowledge_object_knowledge_id_is_mandatory() -> None:

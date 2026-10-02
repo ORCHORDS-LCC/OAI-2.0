@@ -131,7 +131,14 @@ class KnowledgeTransportResponse(BaseModel):
 
 
 class D1KnowledgeIndexRecord(BaseModel):
-    """Authoritative metadata shape intended for D1 persistence."""
+    """Authoritative metadata shape intended for D1 persistence.
+
+    D1 is authoritative, so every field retrieval filters on must live here
+    and not only in the vector store: claim identity, content version,
+    supersession, trust class and scope class. A Vectorize record missing its
+    D1 row is removed from results (REQ-RET-013), so a candidate that cannot
+    be checked against these fields is not eligible.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -145,6 +152,22 @@ class D1KnowledgeIndexRecord(BaseModel):
     r2_blob_key: str | None = None
     vectorize_id: str | None = None
     corpus_revision: int = Field(ge=0)
+
+    # Temporal / supersession / trust — see KnowledgeObject for why claim_key
+    # and content_hash are different things.
+    claim_key: str | None = Field(default=None, max_length=128)
+    content_version: str | None = Field(default=None, max_length=128)
+    source_version: str | None = Field(default=None, max_length=128)
+    effective_at: float | None = None
+    superseded_by: str | None = Field(default=None, max_length=128)
+    superseded_at: float | None = None
+    trust_class: str = Field(default="retrieved_evidence", max_length=64)
+    scope_class: str = Field(default="global", max_length=32)
+
+    @property
+    def is_active(self) -> bool:
+        """A superseded record stays retrievable for audit, never by default."""
+        return self.superseded_by is None
 
     @classmethod
     def from_knowledge(
@@ -166,6 +189,14 @@ class D1KnowledgeIndexRecord(BaseModel):
             r2_blob_key=r2_blob_key,
             vectorize_id=vectorize_id,
             corpus_revision=corpus_revision,
+            claim_key=obj.claim_key,
+            content_version=obj.content_version,
+            source_version=obj.source_version,
+            effective_at=obj.effective_at,
+            superseded_by=obj.superseded_by,
+            superseded_at=obj.superseded_at,
+            trust_class=obj.trust_class,
+            scope_class=obj.scope_class,
         )
 
 

@@ -58,6 +58,9 @@ from oai2.knowledge import (
     derive_authority,
 )
 from oai2.knowledge.qpipe_import import (
+    DEFAULT_SOURCES,
+    EXPORTABLE_SCOPES,
+    OPT_IN_SOURCES,
     QPIPE_COMPATIBILITY_SOURCE_BLOBS,
     QPIPE_COMPATIBILITY_SOURCE_REVISION,
     QPIPE_TO_OAI_STATUS,
@@ -147,15 +150,33 @@ def test_qpipe_source_enum_values_are_stable_strings(
     assert source.value == expected_value
 
 
-def test_qpipe_source_has_exactly_three_distinct_values() -> None:
+def test_qpipe_source_surface_is_explicitly_pinned() -> None:
     """Closing the surface: the allow-list cannot grow without a
-    coordinated q-pipe schema revision (the importer's contract is
-    "these 3 sources, no more")."""
-    assert len(set(QPipeSource)) == 3
+    coordinated q-pipe schema revision (the importer's contract is an
+    explicit, reviewed set -- no more).
+
+    `recipe-candidates` was added deliberately, not casually. Measured on the
+    live store it is the only producer of verified promoted lessons, and
+    without it the canonical knowledge path is unreachable: all 3 active
+    lessons were refused as "disallowed source". It is NOT a default source --
+    it requires `ImportPolicy.allow_recipe_candidates` -- and it is
+    additionally gated on attributable provenance and an exportable scope, so
+    admitting it does not weaken the guarantee the original 3-source list
+    provided.
+    """
     assert set(QPipeSource) == {
         QPipeSource.SCENARIO_FORGE,
         QPipeSource.TERMINAL_BENCH,
         QPipeSource.ANDROID_CURRICULUM,
+        QPipeSource.RECIPE_CANDIDATES,
+    }
+    # The new source must not have silently become a default.
+    assert QPipeSource.RECIPE_CANDIDATES.value not in DEFAULT_SOURCES
+    assert QPipeSource.RECIPE_CANDIDATES.value in OPT_IN_SOURCES
+    # The original default set is unchanged.
+    assert DEFAULT_SOURCES == {
+        QPipeSource.SCENARIO_FORGE.value,
+        QPipeSource.TERMINAL_BENCH.value,
     }
 
 
