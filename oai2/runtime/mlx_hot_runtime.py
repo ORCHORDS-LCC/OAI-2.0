@@ -21,7 +21,6 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import mlx.core as mx
 from mlx_lm import load as _mlx_lm_load
 from mlx_lm import stream_generate
 from mlx_lm.tokenizer_utils import TokenizerWrapper
@@ -32,7 +31,7 @@ from .inference import (
     InferenceResponse,
     InferenceRuntime,
 )
-from .model import ModelSpec
+from .model import ModelSpec, _reset_peak_memory, discover_default_device
 
 
 class MLXHotRuntime(InferenceRuntime):
@@ -74,7 +73,7 @@ class MLXHotRuntime(InferenceRuntime):
         tokenizer: TokenizerWrapper = self._tokenizer
         model: Any = self._model
 
-        mx.reset_peak_memory()
+        _reset_peak_memory()
         prompt_tokens = len(tokenizer.encode(request.prompt))
         t_prefill_start = time.perf_counter()
         text = ""
@@ -113,7 +112,7 @@ class MLXHotRuntime(InferenceRuntime):
             text=text,
             tokens=tokens_generated,
             elapsed_ms=(t_end - t_prefill_start) * 1000.0,
-            device=f"mlx:{mx.default_device()}",
+            device=f"mlx:{discover_default_device()}",
             status=Status.EXPERIMENTAL,
             notes=notes,
         )

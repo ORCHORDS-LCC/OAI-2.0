@@ -49,6 +49,20 @@ def discover_default_device() -> str:
     return str(mx.default_device())
 
 
+def _reset_peak_memory() -> None:
+    """Reset MLX peak-memory accounting; no-op when MLX is unavailable.
+
+    Package-internal helper so sibling runtime modules that must not
+    import ``mlx`` directly can still reset peak-memory accounting;
+    ``model.py`` stays the single sanctioned MLX importer.
+    """
+    try:
+        import mlx.core as mx  # local import: keep this module dependency-free at parse time.
+    except Exception:  # pragma: no cover - depends on install
+        return
+    mx.reset_peak_memory()
+
+
 def smoke_check() -> tuple[bool, str]:
     """Return ``(ok, device_or_error)`` for the installed MLX stack.
 
