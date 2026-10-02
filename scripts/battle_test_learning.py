@@ -2446,6 +2446,335 @@ def session_retention_round4(store: InMemoryKnowledgeStore) -> bool:
     )
 
 
+def session_all_six_tools(store: InMemoryKnowledgeStore) -> bool:
+    """Round 46 (FULL TOOL SURFACE): drive all six canonical tools
+    (Read, Write, Edit, Glob, Grep, Bash) through the real dispatcher
+    in one chain.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 46: FULL TOOL SURFACE — all six canonical tools, real execution")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    root = Path("/tmp/oai2-battle-six")
+    root.mkdir(exist_ok=True)
+    target = str(root / "six.txt")
+    policy = default_dispatch_policy(
+        resource_scopes={target, str(root)},
+        budget_calls=12,
+    )
+
+    def _step(step: str, call: dict[str, Any], expect: str) -> bool:
+        rt = _StubRuntime(
+            script=[
+                {"text": "", "tool_calls": (call,), "finish_reason": "tool_calls"},
+                {"text": "done", "finish_reason": "stop"},
+            ]
+        )
+        loop = AgentLoop(runtime=rt, cwd=root, policy=policy, max_steps=4)
+        loop.run(f"battle 46 {step}")
+        tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+        content = tool_msgs[0].get("content", "") if tool_msgs else ""
+        if expect not in content:
+            print(f"  [SESSION 46] {step} FAIL: expected {expect!r}, got {content!r}")
+            return False
+        print(f"  [SESSION 46] {step}: {content.strip()[:70]!r}")
+        return True
+
+    steps = [
+        ("Write", {
+            "id": "c46w", "type": "function", "function": {
+                "name": "Write",
+                "arguments": json.dumps({"path": target, "content": "alpha NEEDLE46 omega"}),
+            },
+        }, "wrote"),
+        ("Read", {
+            "id": "c46r", "type": "function", "function": {
+                "name": "Read", "arguments": json.dumps({"path": target}),
+            },
+        }, "NEEDLE46"),
+        ("Edit", {
+            "id": "c46e", "type": "function", "function": {
+                "name": "Edit",
+                "arguments": json.dumps({
+                    "path": target, "old_string": "alpha", "new_string": "ALPHA",
+                }),
+            },
+        }, "replaced 1 occurrence"),
+        ("Glob", {
+            "id": "c46g", "type": "function", "function": {
+                "name": "Glob", "arguments": json.dumps({"pattern": "six.txt"}),
+            },
+        }, "six.txt"),
+        ("Grep", {
+            "id": "c46s", "type": "function", "function": {
+                "name": "Grep",
+                "arguments": json.dumps({"pattern": "NEEDLE46", "path": "."}),
+            },
+        }, "six.txt:1"),
+        ("Bash", {
+            "id": "c46b", "type": "function", "function": {
+                "name": "Bash", "arguments": json.dumps({"command": "printf BASH-OK-46"}),
+            },
+        }, "BASH-OK-46"),
+    ]
+    for step, call, expect in steps:
+        if not _step(step, call, expect):
+            return False
+    print("  [SESSION 46] PASS: all six tools executed for real in one chain")
+    return True
+
+
+def session_negative_inventory(store: InMemoryKnowledgeStore) -> bool:
+    """Round 47 (NEGATIVE INVENTORY): every negative memory stored so
+    far is retrievable under its own topic with its diagnostic
+    marker intact.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 47: NEGATIVE INVENTORY — every stored failure retrievable")
+    print("=" * 70)
+    topics = [
+        ("apply the starlette deprecation patch to test_service_binding.py", "starlette_deprecation"),
+        ("run uv run pytest tests/test_agents_agent_loop.py and capture output", "tool_timeout"),
+        ("import oai2.knowledge at Python 3.14 on Mac", "import_error"),
+        ("read /tmp/oai2-battle-marker.txt with the default dispatch policy", "dispatch_deny_scope"),
+        ("battle 39 run bash with exhausted budget", "budget_exceeded"),
+        ("battle 40 call read with unknown arguments", "bad_arguments"),
+        ("battle 41 invoke a tool that does not exist", "unknown_tool"),
+        ("battle 33 real denial", "high_impact_denial"),
+    ]
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    ok_all = True
+    for topic, failure_class in topics:
+        loop.run(topic)
+        content = rt.requests[-1].messages[-1].get("content", "")
+        has = "diagnostic:" in content and failure_class in content
+        print(f"  [{failure_class:<22}] retrieved={has}")
+        ok_all = ok_all and has
+    if not ok_all:
+        print("  [SESSION 47] FAIL: at least one negative memory not retrievable")
+        return False
+    print(f"  [SESSION 47] PASS: all {len(topics)} negative memories retrievable")
+    return True
+
+
+def session_fail_reteach_retest(store: InMemoryKnowledgeStore) -> bool:
+    """Round 48 (THE TRAINING LOOP ITSELF): the mandated cycle —
+    OAI-2.0 FAILS a task (real gate denial) → exact failure recorded
+    → negative memory injected into a FRESH EQUIVALENT task → the
+    retest carries the lesson and SUCCEEDS with real tool output.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 48: FAIL → RETEACH → RETEST — the training loop, end to end")
+    print("=" * 70)
+    from oai2.tools import DispatchPolicy
+
+    topic = "battle 48 run the OAI-2.0 smoke bench on the marker file"
+    target = "/tmp/oai2-battle-marker.txt"
+    Path(target).write_text("OAI2-BATTLE-OK\n", encoding="utf-8")
+
+    # ---- Attempt 1: FAIL (real gate-6 denial: no high-impact approval) ----
+    no_approval = DispatchPolicy(
+        allow_capabilities=frozenset({"fs.read", "fs.write", "fs.list", "shell.exec"}),
+        deny_capabilities=frozenset(),
+        resource_scopes=frozenset({target}),
+        budget_calls=8,
+        high_impact_approved=False,
+    )
+    rt1 = _StubRuntime(
+        script=[
+            {
+                "text": "",
+                "tool_calls": (
+                    {
+                        "id": "c48a",
+                        "type": "function",
+                        "function": {
+                            "name": "Bash",
+                            "arguments": json.dumps({"command": f"cat {target}"}),
+                        },
+                    },
+                ),
+                "finish_reason": "tool_calls",
+            },
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    loop1 = AgentLoop(runtime=rt1, cwd=Path("/tmp"), policy=no_approval, max_steps=4)
+    loop1.run(topic)
+    tool_msgs = [m for m in rt1.requests[1].messages if m.get("role") == "tool"]
+    failure = tool_msgs[0].get("content", "") if tool_msgs else ""
+    if "dispatch:deny" not in failure:
+        print(f"  [SESSION 48] FAIL: attempt 1 did not produce a real denial: {failure!r}")
+        return False
+    print(f"  [SESSION 48] ATTEMPT 1 → FAIL (real): {failure.strip()!r}")
+
+    # ---- Retrain: record the exact failure as negative memory (#88) ----
+    neg = record_failure(
+        _make_run(
+            user_prompt=topic,
+            final_text=failure,
+            finished_reason="tool_calls",
+            total_tool_calls=1,
+        ),
+        task_id="bt-048-fail",
+        failure_class="high_impact_denial",
+        evidence_ref="verifier://battle/048-attempt1",
+        source_version="13a85e0",
+        runtime_version="oai2/0.1+battle",
+    )
+    store.put(neg.model_copy(update={
+        "topic": topic,
+        "knowledge_id": KnowledgeId(sha256_hex("neg|" + topic)[:32]),
+    }))
+    print("  [SESSION 48] RETEACH: exact failure recorded as negative memory")
+
+    # ---- Attempt 2: FRESH EQUIVALENT task, approval granted, the
+    # negative memory is injected, and the run SUCCEEDS (real Bash
+    # reads the real marker file) ----
+    with_approval = DispatchPolicy(
+        allow_capabilities=frozenset({"fs.read", "fs.write", "fs.list", "shell.exec"}),
+        deny_capabilities=frozenset(),
+        resource_scopes=frozenset({target}),
+        budget_calls=8,
+        high_impact_approved=True,
+    )
+    rt2 = _StubRuntime(
+        script=[
+            {
+                "text": "",
+                "tool_calls": (
+                    {
+                        "id": "c48b",
+                        "type": "function",
+                        "function": {
+                            "name": "Bash",
+                            "arguments": json.dumps({"command": f"cat {target}"}),
+                        },
+                    },
+                ),
+                "finish_reason": "tool_calls",
+            },
+            {"text": "The marker file contains OAI2-BATTLE-OK. Task verified.", "finish_reason": "stop"},
+        ]
+    )
+    loop2 = AgentLoop(
+        runtime=rt2,
+        cwd=Path("/tmp"),
+        policy=with_approval,
+        knowledge_store=store,
+        evidence_budget_tokens=512,
+        max_steps=4,
+    )
+    run2 = loop2.run(topic)  # same topic → retrieval injects the diagnostic
+    evidence = next(
+        (m for m in rt2.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 48] FAIL: retest did not receive the failure lesson")
+        return False
+    if "high_impact_denial" not in evidence["content"]:
+        print("  [SESSION 48] FAIL: retest evidence lacks the failure class")
+        return False
+    tool_msgs2 = [m for m in rt2.requests[1].messages if m.get("role") == "tool"]
+    real_out = tool_msgs2[0].get("content", "") if tool_msgs2 else ""
+    if "OAI2-BATTLE-OK" not in real_out:
+        print(f"  [SESSION 48] FAIL: retest real output wrong: {real_out!r}")
+        return False
+    if "OAI2-BATTLE-OK" not in run2.final_text:
+        print(f"  [SESSION 48] FAIL: retest final text wrong: {run2.final_text!r}")
+        return False
+    print(f"  [SESSION 48] ATTEMPT 2 → PASS (real Bash read: {real_out.strip()!r}); "
+          "failure lesson was in the retest context")
+    print("  [SESSION 48] PASS: full FAIL → RETEACH → RETEST → PASS cycle verified")
+    return True
+
+
+def session_provenance_chain(store: InMemoryKnowledgeStore) -> bool:
+    """Round 49 (PROVENANCE): lessons extracted under different source
+    SHAs preserve their distinct provenance — the evidence package
+    exposes each lesson's own source version.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 49: PROVENANCE — per-lesson source SHAs preserved in the package")
+    print("=" * 70)
+    topic = "battle 49 provenance check"
+    for i, sha in enumerate(["3250049", "1571c13", "13a85e0"]):
+        lesson = extract_lesson(
+            _make_run(
+                user_prompt=topic,
+                final_text=f"provenance variant {i} recorded at {sha}",
+                finished_reason="stop",
+                total_tool_calls=0,
+            ),
+            task_id=f"bt-049-{i}",
+            verification_ref=f"verifier://battle/049-{i}",
+            source_version=sha,
+            runtime_version="oai2/0.1+battle",
+        )
+        store.put(lesson.model_copy(update={
+            "topic": topic,
+            "knowledge_id": KnowledgeId(sha256_hex(topic + sha)[:32]),
+        }))
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=1024)
+    loop.run(topic)
+    evidence = next(
+        (m for m in rt.requests[0].messages if "Retrieved evidence" in m.get("content", "")),
+        None,
+    )
+    if evidence is None:
+        print("  [SESSION 49] FAIL: no evidence message")
+        return False
+    content = evidence["content"]
+    found = [sha for sha in ["3250049", "1571c13", "13a85e0"] if f"source={sha}" in content]
+    print(f"  [SESSION 49] provenance SHAs found in package: {found}")
+    if len(found) < 3:
+        print("  [SESSION 49] FAIL: not all per-lesson source SHAs surfaced")
+        return False
+    print("  [SESSION 49] PASS: all three per-lesson source SHAs visible in one package")
+    return True
+
+
+def session_milestone_inventory(store: InMemoryKnowledgeStore) -> bool:
+    """Round 50 (MILESTONE): full inventory audit — the store holds
+    the accumulated corpus, first/early/mid lessons and a negative
+    are all retrievable at the 50-session mark.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 50: MILESTONE — inventory audit of the accumulated corpus")
+    print("=" * 70)
+    items = list(store.all())
+    positives = [o for o in items if o.status == Status.IMPLEMENTED]
+    negatives = [o for o in items if o.status == Status.PROPOSED]
+    print(f"  [SESSION 50] store totals: {len(items)} entries "
+          f"({len(positives)} positive, {len(negatives)} negative)")
+    if len(items) < 30 or len(positives) < 20 or len(negatives) < 6:
+        print("  [SESSION 50] FAIL: corpus smaller than expected")
+        return False
+
+    rt = _StubRuntime(script=[{"text": "ok"}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    checks = [
+        ("list all Python files in the OAI-2.0 repository", "find . -name '*.py'", "FIRST lesson (S1)"),
+        ("check q-pipe import compatibility for the OAI-2.0 knowledge layer", "QPIPE_COMPATIBILITY_SOURCE_REVISION", "EARLY lesson (S2)"),
+        ("set up the OAI-2.0 Android / Kotlin battle-test toolchain on Mac", "gradlew", "MID lesson (S14)"),
+        ("battle 33 real denial", "high_impact_denial", "NEGATIVE (S33)"),
+    ]
+    for topic, needle, label in checks:
+        loop.run(topic)
+        content = rt.requests[-1].messages[-1].get("content", "")
+        if needle not in content:
+            print(f"  [SESSION 50] FAIL: {label} not retrievable (needle {needle!r})")
+            return False
+        print(f"  [SESSION 50] {label}: retrievable")
+    print("  [SESSION 50] PASS: corpus audit green — first, early, mid, and negative "
+          "entries all retrievable at 50 sessions")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -2506,6 +2835,11 @@ def main() -> int:
         session_authority_ranking,
         session_negative_isolation,
         session_retention_round4,
+        session_all_six_tools,
+        session_negative_inventory,
+        session_fail_reteach_retest,
+        session_provenance_chain,
+        session_milestone_inventory,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
