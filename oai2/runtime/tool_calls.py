@@ -72,6 +72,22 @@ def _balanced_json_objects(text: str) -> list[str]:
     return out
 
 
+#: In untagged mode, the surrounding text may hold at most this many words
+#: before the JSON is treated as an example inside prose rather than the
+#: model's answer. A real call is essentially the whole reply; a quoted
+#: example, an explanation, or an echoed lesson body is wrapped in sentences.
+_BARE_MAX_SURROUNDING_WORDS = 12
+
+
+def _surrounding_word_count(text: str, blocks: Sequence[str]) -> int:
+    """Words left in ``text`` once the candidate blocks are removed."""
+    remainder = text
+    for block in blocks:
+        remainder = remainder.replace(block, " ", 1)
+    remainder = _FENCE_RE.sub(" ", remainder)
+    return len([w for w in remainder.split() if w])
+
+
 def _candidate_blocks(text: str, *, allow_bare_json: bool) -> list[str]:
     """Candidate tool-call payloads, most-trusted first."""
     tagged = [m.group(1) for m in _TOOL_CALL_RE.finditer(text)]
@@ -82,9 +98,16 @@ def _candidate_blocks(text: str, *, allow_bare_json: bool) -> list[str]:
     fenced = [b.strip() for b in _FENCE_RE.findall(text)]
     fenced = [b for b in fenced if b]
     # Fenced blocks win over a raw scan: if the model chose to fence its
-    # output, that fence is the whole payload, not something to be picked
-    # out of surrounding prose.
-    return fenced or _balanced_json_objects(text)
+    # output, that fence is the payload, not something to be picked out of
+    # surrounding prose.
+    blocks = fenced or _balanced_json_objects(text)
+    # A JSON object buried in a paragraph is documentation, not a request.
+    # The model was asked for a call, but "here is an example of what a call
+    # looks like: {...}" and an echoed lesson that happens to contain one are
+    # exactly the shapes this must refuse.
+    if _surrounding_word_count(text, blocks) > _BARE_MAX_SURROUNDING_WORDS:
+        return []
+    return blocks
 
 TOOL_CALLS_ENABLED = True
 

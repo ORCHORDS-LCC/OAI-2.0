@@ -131,11 +131,20 @@ def default_tool_definitions() -> tuple[ToolDefinition, ...]:
         _function_tool(
             name="Glob",
             description=(
-                "List paths matching a glob pattern. Returns newline-"
-                "separated paths relative to cwd."
+                "List paths matching a glob pattern under ``path`` "
+                "(default: the working directory). Returns newline-separated "
+                "paths relative to that directory."
             ),
-            arguments=(ToolArgument(name="pattern", type="string"),),
+            arguments=(
+                ToolArgument(name="pattern", type="string"),
+                ToolArgument(name="path", type="path"),
+            ),
             capability="fs.list",
+            # Scoped: it takes a ``path``, so gate 4 can hold the listing root
+            # inside the host's declared scopes. Without it, directory listing
+            # had no scope to be checked against and had to be granted
+            # unscoped reach.
+            scoped=True,
         ),
         _function_tool(
             name="Grep",
@@ -294,16 +303,29 @@ def _bash(command: str, *, timeout_seconds: int | None, cwd: Path) -> ExecutionO
         return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
 
 
-def _glob(pattern: str, *, cwd: Path) -> ExecutionOutcome:
+def _glob(pattern: str, *, cwd: Path, root: str | None = None) -> ExecutionOutcome:
+    """List paths matching ``pattern`` under ``root`` (default: ``cwd``).
+
+    Every match is resolved and checked to be inside the search root before it
+    is returned. A pattern can name an absolute path, and following one would
+    walk the filesystem outside the root the host authorised — lexical checks
+    on the *requested* path say nothing about where a match actually lives.
+    """
     try:
-        # Use a recursive search via pathlib. Supports ``**``.
-        root = cwd
-        if pattern.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", pattern):
-            p = Path(pattern)
-            root = p.parent if p.is_dir() else root
+        base = (cwd / root).resolve() if root else cwd.resolve()
+        if not base.is_dir():
+            return ExecutionOutcome(False, "", f"not a directory: {base}")
         matches: list[str] = []
-        for path in root.rglob(pattern):
-            matches.append(str(path.relative_to(cwd)))
+        for path in base.rglob(pattern):
+            try:
+                resolved = path.resolve()
+            except OSError:  # pragma: no cover - broken symlink
+                continue
+            # Containment is checked on the RESOLVED path, so a symlink
+            # pointing outside the root cannot smuggle a match through.
+            if resolved != base and base not in resolved.parents:
+                continue
+            matches.append(str(resolved.relative_to(base)))
         if not matches:
             return ExecutionOutcome(True, "(no matches)")
         return ExecutionOutcome(True, "\n".join(sorted(matches)[:200]))
@@ -390,7 +412,11 @@ def execute_tool(
             cwd=working_dir,
         )
     elif name == "glob":
-        outcome = _glob(str(args.get("pattern", "*")), cwd=working_dir)
+        outcome = _glob(
+            str(args.get("pattern", "*")),
+            cwd=working_dir,
+            root=str(args.get("path")) if args.get("path") else None,
+        )
     elif name == "grep":
         outcome = _grep(
             str(args.get("pattern", "")),

@@ -77,9 +77,17 @@ class ToolDispatcher:
 
         ``..`` is collapsed *before* the scope test, so a path such as
         ``<scope>/../etc/passwd`` normalises to ``/etc/passwd`` and is
-        correctly judged out of scope. Normalisation is lexical on purpose:
-        it must not depend on the target existing, and a symlink the model
-        cannot see must not be able to widen its own scope.
+        correctly judged out of scope.
+
+        Symlinks are then resolved, because a lexical check says nothing about
+        where the executor ultimately reads. A link inside an allowed directory
+        that points outside it is the obvious escape, and it is invisible until
+        the link is followed. Resolution covers the deepest existing ancestor
+        and re-appends the remainder, so a target that does not exist yet (a
+        file about to be written) is still resolved against its real parent.
+
+        ``strict=False`` is deliberate: resolution must not depend on the
+        target existing, or an existence check would become the gate.
         """
         if not isinstance(raw, str) or not raw:
             return None
@@ -87,7 +95,11 @@ class ToolDispatcher:
         candidate = Path(expanded)
         if not candidate.is_absolute():
             candidate = self._cwd / candidate
-        return Path(os.path.normpath(str(candidate)))
+        candidate = Path(os.path.normpath(str(candidate)))
+        try:
+            return candidate.resolve()
+        except (OSError, RuntimeError):  # pragma: no cover - defensive
+            return candidate
 
     def _in_scope(self, target: Path) -> bool:
         """Whether ``target`` is at or beneath any declared scope root."""

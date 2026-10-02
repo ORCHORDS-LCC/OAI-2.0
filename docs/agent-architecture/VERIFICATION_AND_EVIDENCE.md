@@ -193,3 +193,52 @@ exactly one model id, `oai-2.0`; `scripts/verify.py gateway-reach`
 passes against the default configuration and the verifier chain is the
 canonical acceptance gate as described. The probe table above is
 retained as the historical record of the pre-fix wire state.
+
+### Student exercises through the MiniMax-app route (Refs #185, #186)
+
+The client for these runs is the **MiniMax native app**, not ZCode. Its
+supported integration to OAI-2.0 is the `custom_provider` entry in
+`~/.minimax/config.yaml`:
+
+| | |
+| --- | --- |
+| provider id | `orchorsd` (`kind: custom`, `enabled: true`) |
+| api | `anthropic-messages` |
+| baseUrl | `https://api.orchords.com/v1` |
+| model | `oai-2.0` (`configuration_source: discovered`) |
+
+Roles are kept explicit: the MiniMax app is the **controller**; **oai-2.0 is the
+student** and emits every tool call; the executor is OAI-2.0's host-side
+`execute_tool` admitted by the installed `DispatchPolicy`; verification is an
+independent subprocess check that does not trust the student.
+
+| Attempt | Kind | Result | Evidence |
+| --- | --- | --- | --- |
+| MR-01 | guided, tool named and pinned | PASS | turn 0 `stop_reason=tool_use`, `list_dir(/tmp/oai2-serve/student)` → `alpha.py beta.py notes.md`; `req-860e27f9…` |
+| MR-02 | **independent**, tool not named, answer not supplied, unseen directory | PASS | chose `list_dir` itself → `README.md one.py`, then an unprompted `read_file`; `req-e28c328a…`, `req-995be791…`, `req-68ad9932…` |
+
+Sanitized per-attempt records, request ids, usage, verifier output and the
+cache/concurrency/streaming measurements are committed at
+`evals/benchmarks/summary_minimax-route-student-exercises.json`.
+
+Three findings recorded there rather than smoothed over:
+
+1. **Accounting correction.** An earlier report counted six verification
+   checkpoints as six independent student tasks. The artifact separates student
+   attempts from verifier, lesson-promotion and retrieval checks, and records the
+   attempts that originally failed.
+2. **A wrong attribution, corrected.** Two paraphrases that produced prose were
+   reported as a model-capability limit. They were not: they were the pre-fix
+   prefix-cache miss bug. Re-run after the fix, all six phrasings emit a correct
+   tool call with cache on *and* off.
+3. **Prefix reuse stays off by default**, now for two independently reproduced
+   reasons: partial-prefix reuse is unsound in mlx_lm 0.32, and the shared KV
+   layers are not concurrency-safe (cache-on returns HTTP 500 under two
+   concurrent requests; `RuntimeError: There is no Stream(gpu, 3) in current
+   thread`, while cache-off serves both correctly).
+
+Streaming from this endpoint is labelled **`BUFFERED_SSE`**: every frame is
+emitted after generation completes. Client-observed first frame and last frame
+were 89.5 ms and 89.9 ms apart by 0.4 ms, with internal prefill 13.7 ms and
+decode 45.5 ms — internal timings are not a substitute for client-observed first
+output and must not be reported as one.

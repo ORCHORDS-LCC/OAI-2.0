@@ -143,7 +143,7 @@ def test_tool_scoping_table() -> None:
         "Edit": True,
         "Write": True,
         "Bash": False,
-        "Glob": False,
+        "Glob": True,
         "Grep": True,
     }
 
@@ -186,8 +186,15 @@ def test_unscoped_capability_runs_when_explicitly_granted(installed) -> None:
 
 
 def test_default_policy_grants_exactly_the_tools_without_a_path() -> None:
+    """Only ``Bash`` lacks a path, so only ``Bash`` holds an unscoped grant.
+
+    ``Glob`` used to be here too, because it declared no ``path`` argument and
+    therefore had nothing for gate 4 to constrain. It now takes a ``path`` and
+    is scoped, so directory listing is bound by the host's scopes like any
+    other filesystem read.
+    """
     granted = default_dispatch_policy().allow_unscoped_capabilities
-    assert granted == frozenset({"shell.exec", "fs.list"})
+    assert granted == frozenset({"shell.exec"})
     # Nothing that *can* be scoped may hold an unscoped grant.
     for td in default_tool_definitions():
         if td.scoped:

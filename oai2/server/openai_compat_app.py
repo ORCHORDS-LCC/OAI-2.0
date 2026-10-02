@@ -113,16 +113,29 @@ def _completion_payload(
     *,
     declared_tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    tool_calls = list(response.tool_calls) if response.tool_calls else None
+    """Build the non-streaming chat-completion body.
+
+    A call the client never advertised, a call whose contract does not hold, or
+    a pinned function the model did not honour is **not** returned in
+    ``message.tool_calls``. Clients execute that array, so putting a violating
+    call there turns a contract failure into ordinary executable success. Such
+    calls are reported under ``rejected_tool_calls`` — visible, auditable, and
+    not runnable — and ``finish_reason`` says so.
+    """
     problems = validate_tool_calls(
         response.tool_calls,
         declared=declared_tools,
         tool_choice=body.tool_choice,
     )
     message: dict[str, Any] = {"role": "assistant", "content": response.text or ""}
-    if tool_calls is not None:
-        message["tool_calls"] = tool_calls
-    return {
+    finish_reason = response.finish_reason or "stop"
+    rejected: list[dict[str, Any]] = []
+    if problems:
+        rejected = list(response.tool_calls)
+        finish_reason = "tool_contract_violation"
+    elif response.tool_calls:
+        message["tool_calls"] = list(response.tool_calls)
+    payload: dict[str, Any] = {
         "id": "chatcmpl-local",
         "object": "chat.completion",
         "created": 0,
@@ -131,7 +144,7 @@ def _completion_payload(
             {
                 "index": 0,
                 "message": message,
-                "finish_reason": response.finish_reason or "stop",
+                "finish_reason": finish_reason,
             }
         ],
         "usage": _usage(response),
@@ -141,6 +154,9 @@ def _completion_payload(
         "notes": response.notes,
         "device": response.device,
     }
+    if rejected:
+        payload["rejected_tool_calls"] = rejected
+    return payload
 
 
 def create_app(
@@ -259,6 +275,17 @@ def create_app(
     return app
 
 
+#: How this endpoint's `stream: true` actually behaves.
+#:
+#: BUFFERED, NOT INCREMENTAL. The runtime generates to completion internally and
+#: exposes no token callback, so every SSE frame is written after generation has
+#: already finished. The stream shape is OpenAI-compatible, but a client
+#: receives nothing while the model is working, and client-observed first output
+#: therefore equals total generation time. Nothing here should be read as
+#: token-level streaming or as a TTFT improvement.
+STREAM_MODE = "BUFFERED_SSE"
+
+
 def _sse(
     body: ChatCompletionRequest,
     response: InferenceResponse,
@@ -268,18 +295,26 @@ def _sse(
 ) -> Iterator[str]:
     """Emit an OpenAI-shaped SSE stream for a completed generation.
 
-    The runtime generates internally and exposes no token callback, so this
-    emits the role chunk, one content chunk, and a final chunk carrying
-    ``finish_reason``, any parsed ``tool_calls`` and real usage. Token-level
-    incremental delivery is *not* provided by this backend and is not
-    claimed; a client that needs per-token TTFT should read the
-    ``prefill_seconds``/``decode_seconds`` notes instead.
+    This is BUFFERED SSE (:data:`STREAM_MODE`), not incremental streaming: the
+    runtime generates to completion first, so all three frames are emitted
+    after generation has finished. A client sees no output while the model is
+    working, and client-observed first output is the full generation time.
+
+    Every frame carries ``stream_mode`` so a client can tell this apart from a
+    genuinely incremental stream without having to time it. Internal timings
+    remain available in the response ``notes``; they are not a substitute for
+    client-observed first output and must not be reported as one.
     """
 
     def event(payload: dict[str, Any]) -> str:
         return f"data: {json.dumps(payload)}\n\n"
 
-    base = {"id": "chatcmpl-local", "object": "chat.completion.chunk", "model": body.model}
+    base = {
+        "id": "chatcmpl-local",
+        "object": "chat.completion.chunk",
+        "model": body.model,
+        "stream_mode": STREAM_MODE,
+    }
     created = int(time.time())
     yield event(
         {

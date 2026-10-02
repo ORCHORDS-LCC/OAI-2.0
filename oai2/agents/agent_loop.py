@@ -108,16 +108,16 @@ def default_dispatch_policy(
     default; supply ``allow_capabilities`` to narrow the surface.
 
     ``allow_unscoped_capabilities`` names the capabilities permitted to act
-    without a resource scope. ``Bash`` (a command string) and ``Glob`` (a
-    bare pattern) carry no path, so gate 4 cannot constrain them; listing
-    them here is the deliberate statement that the default agent may use
-    them. A host that wants the scopes to bind everything it admits should
-    omit them and accept that those two tools are then refused.
+    without a resource scope. Only ``Bash`` needs it: it takes a command
+    string and so has no path for gate 4 to constrain. ``Glob`` and ``Grep``
+    both take a ``path`` and are scoped like ``Read``/``Edit``/``Write``. A
+    host that wants its scopes to bind everything it admits should omit this
+    and accept that ``Bash`` is then refused.
     """
     if allow_capabilities is None:
         allow_capabilities = {"fs.read", "fs.write", "fs.list", "shell.exec"}
     if allow_unscoped_capabilities is None:
-        allow_unscoped_capabilities = {"shell.exec", "fs.list"}
+        allow_unscoped_capabilities = {"shell.exec"}
     return DispatchPolicy(
         allow_capabilities=frozenset(allow_capabilities),
         deny_capabilities=frozenset(),
