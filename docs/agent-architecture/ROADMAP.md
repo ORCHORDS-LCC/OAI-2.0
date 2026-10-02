@@ -168,6 +168,7 @@ A runner-free local preflight exists at `scripts/verify.py` and includes depende
 - **#18 / WI-KNOW-001 is closed** for the versioned transport/schema contract; live network execution remains #19.
 - **#20 / WI-MIG-001 is closed** for q-pipe compatibility; the real migration pilot remains #21.
 - **#214 / WI-GC-001 is closed** for non-destructive R2 liveness reconciliation; #215/#233 own destructive-sweep/concurrency completion.
+- **Cloud-touching test surface (slices 18-22)**: 176 tests across 11 files; all local `scripts/verify.py` gates green; first live bench evidence at `evals/benchmarks/summary_gateway-orchordsai-m3.json` (plus 2 per-run files) committed via `scripts/bench.py --backend=gateway` → `select_runtime_from_env()` → `GatewayRuntime` → `api.orchords.com` end-to-end path. All three CLI entry points (`scripts/backend_smoke.py`, `scripts/gateway_smoke.py`, `scripts/bench.py`) now have runpy-driven `__main__` boundary coverage so a future refactor that moves exit translation into `main()` cannot silently regress the seam.
 
 Knowledge-store reads verify stored content hashes/provenance and fail closed on missing/tampered bodies/corrupted cache records.
 
