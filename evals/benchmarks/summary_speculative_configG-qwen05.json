@@ -1,0 +1,104 @@
+{
+  "benchmark": "wi-perf-003-config-G-speculative",
+  "model": "mlx-community/Qwen2.5-Coder-0.5B-Instruct-4bit",
+  "draft_model": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.7",
+  "target_load_seconds": 0.5558,
+  "draft_load_seconds": 0.4786,
+  "prompt_tokens": 128,
+  "max_tokens": 128,
+  "repetitions": 5,
+  "normal_runs": [
+    {
+      "decode_seconds": 0.217607,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 588.22,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 1
+    },
+    {
+      "decode_seconds": 0.217703,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 587.96,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 2
+    },
+    {
+      "decode_seconds": 0.226443,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 565.26,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 3
+    },
+    {
+      "decode_seconds": 0.217439,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 588.67,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 4
+    },
+    {
+      "decode_seconds": 0.218007,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 587.14,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 5
+    }
+  ],
+  "speculative_runs": [
+    {
+      "decode_seconds": 0.276116,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 463.57,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 1
+    },
+    {
+      "decode_seconds": 0.280543,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 456.26,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 2
+    },
+    {
+      "decode_seconds": 0.280398,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 456.49,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 3
+    },
+    {
+      "decode_seconds": 0.272667,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 469.44,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 4
+    },
+    {
+      "decode_seconds": 0.279495,
+      "generation_tokens": 128,
+      "decode_tokens_per_second": 457.97,
+      "text": "Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two numbers. Write a short Python function that adds two",
+      "rep": 5
+    }
+  ],
+  "normal_decode_tps_aggregate": {
+    "count": 5,
+    "mean": 583.45,
+    "median": 587.96,
+    "min": 565.26,
+    "max": 588.67,
+    "stddev": 9.108607
+  },
+  "speculative_decode_tps_aggregate": {
+    "count": 5,
+    "mean": 460.746,
+    "median": 457.97,
+    "min": 456.26,
+    "max": 469.44,
+    "stddev": 5.089293
+  },
+  "speedup_factor": 0.79,
+  "greedy_text_match": true
+}
