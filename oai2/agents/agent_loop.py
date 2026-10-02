@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..core import ToolId
+from ..core import Status, ToolId
 from ..knowledge import (
     EvidencePackage,
     KnowledgeStore,
@@ -229,9 +229,21 @@ class AgentLoop:
         if self._knowledge_store is None:
             return None
         try:
+            # Per #88 (REQ-LEARN-021), negative memory is representable
+            # as knowledge — include PROPOSED in the retrieval set. The
+            # topic prefix `oai2:negative:` and the content prefix
+            # `diagnostic:` are the markers that distinguish negative
+            # memory from positive instruction; the model can recognize
+            # both. Blocking PROPOSED here would silently swallow
+            # negative memory, which is the opposite of what #88 wants.
             request = RetrievalRequest(
                 topic=user_prompt,
                 limit=8,
+                include_status=(
+                    Status.IMPLEMENTED,
+                    Status.EXPERIMENTAL,
+                    Status.PROPOSED,
+                ),
             )
             result = self._knowledge_store.retrieve(request)
         except Exception:
