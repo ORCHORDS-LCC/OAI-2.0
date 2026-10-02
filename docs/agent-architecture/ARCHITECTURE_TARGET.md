@@ -27,6 +27,19 @@ SWARM:                          multiple independent ~1–2B+ lanes
 
 These are targets, not a statement about weights currently trained in this repository.
 
+## Model identity and active-compute boundary
+
+FURIOUS / NORMAL / DEEP / SWARM are **active-compute profiles**, not aliases for one large downloadable base model.
+
+- FURIOUS targets ~500M–1B active compute.
+- NORMAL targets ~1–2B active compute.
+- DEEP targets ~2–4B active compute.
+- SWARM is multiple independent ~1–2B+ lanes.
+
+The repository currently contains small MLX probe/benchmark artifacts used to validate infrastructure. Those probe IDs are evidence artifacts, not final lane assignments. No 20B–30B local model is currently named as the canonical FURIOUS/NORMAL/DEEP/SWARM implementation.
+
+The q-pipe/public gateway wire model ID is an **integration identity** and must not be interpreted as the internal OAI-2.0 lane architecture. Likewise, historical q-pipe 27B/30B models must not be promoted into OAI-2.0's architecture merely because they existed in a previous pipeline.
+
 ## Dynamic expert routing
 
 Candidate expert families:
