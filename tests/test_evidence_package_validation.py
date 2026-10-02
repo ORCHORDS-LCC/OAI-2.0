@@ -172,6 +172,42 @@ def test_build_evidence_package_rejects_bool_max_entries() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Positive-path pinning: `max_entries=None` is the legitimate sentinel for
+# "keep the whole result set" and `max_entries=N` (positive int) truncates.
+# The slice-18 negative-path coverage above locks the rejection branches, so
+# these positive-path tests lock the accept branches. Together they pin the
+# full contract so a refactor that "simplifies" the guard to require a
+# positive int (and accidentally rejects `None`) cannot silently regress.
+# ---------------------------------------------------------------------------
+
+
+def test_build_evidence_package_accepts_none_max_entries_as_no_truncation_sentinel() -> None:
+    objs = [_obj("ko_1", "first claim"), _obj("ko_2", "second claim")]
+    package = build_evidence_package(
+        _result(*objs),
+        token_budget=1000,
+        token_counter=_tokens,
+        max_entries=None,  # sentinel: keep the full result set
+    )
+    assert len(package.entries) == 2
+
+
+def test_build_evidence_package_accepts_positive_int_max_entries_as_truncation() -> None:
+    objs = [
+        _obj("ko_1", "first claim"),
+        _obj("ko_2", "second claim"),
+        _obj("ko_3", "third claim"),
+    ]
+    package = build_evidence_package(
+        _result(*objs),
+        token_budget=1000,
+        token_counter=_tokens,
+        max_entries=2,
+    )
+    assert len(package.entries) == 2
+
+
 @pytest.mark.parametrize("bad_counter", [None, 42, "len", 3.14])
 def test_build_evidence_package_rejects_non_callable_token_counter(
     bad_counter: object,

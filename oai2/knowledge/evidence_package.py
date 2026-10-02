@@ -77,6 +77,14 @@ def build_evidence_package(
     """
     if isinstance(token_budget, bool) or not isinstance(token_budget, int) or token_budget <= 0:
         raise ValueError("token_budget must be a positive integer")
+    # `max_entries=None` is the legitimate sentinel for "no truncation; keep the
+    # full result set". Do not collapse this branch into a generic "must be a
+    # positive int" guard — that would reject legitimate callers and break the
+    # contract. The explicit `is not None` check below is load-bearing: the
+    # ternary at line ~95 (`result.objects if max_entries is None else
+    # result.objects[:max_entries]`) and the slice-18 parametrized negative-path
+    # tests in tests/test_evidence_package_validation.py both depend on `None`
+    # remaining accepted.
     if max_entries is not None and (
         isinstance(max_entries, bool)
         or not isinstance(max_entries, int)
