@@ -18,12 +18,17 @@ Coverage:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import httpx
 import pytest
 
 from oai2.evals import (
     BUILTIN_SUITES_NAMES,
+    CapabilityCase,
+    CapabilitySuite,
     HarnessReport,
+    SuiteReport,
     builtin_suite,
     run_eval_harness,
     run_suite,
@@ -32,6 +37,7 @@ from oai2.runtime import (
     GatewayConfig,
     GatewayRuntime,
     InferenceRequest,
+    InferenceRuntime,
     PlaceholderRuntime,
 )
 
@@ -269,3 +275,112 @@ def test_run_eval_harness_matches_individual_run_suite_pass_rate(
         / sum(r.n_cases for r in individual_reports)
     )
     assert harness_report.pass_rate == individual_pass_rate
+
+
+# ---------------------------------------------------------------------------
+# continue_on_error fault isolation (slice 14)
+# ---------------------------------------------------------------------------
+
+
+def _flaky_first_call(
+    real_run_suite: Callable[..., SuiteReport], exc: Exception
+) -> Callable[..., SuiteReport]:
+    """Return a ``run_suite`` wrapper that raises ``exc`` only on the first call.
+
+    Subsequent calls delegate to ``real_run_suite``. Used by the
+    ``continue_on_error`` tests below to simulate one failing suite in
+    a builtin suite list.
+    """
+
+    state = {"calls": 0}
+
+    def wrapper(
+        suite: CapabilitySuite,
+        runtime: InferenceRuntime,
+        *,
+        request_factory: Callable[[CapabilityCase], InferenceRequest] | None = None,
+        max_tokens: int = 256,
+    ) -> SuiteReport:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            raise exc
+        return real_run_suite(
+            suite,
+            runtime,
+            request_factory=request_factory,
+            max_tokens=max_tokens,
+        )
+
+    return wrapper
+
+
+def test_run_eval_harness_continue_on_error_runs_all_suites_when_one_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``continue_on_error=True`` runs every builtin suite even when one raises."""
+    rt = PlaceholderRuntime()
+    _patched_selector(monkeypatch, rt)
+
+    flaky = _flaky_first_call(run_suite, RuntimeError("first-suite boom"))
+    monkeypatch.setattr("oai2.evals.run_suite", flaky)
+
+    report = run_eval_harness(continue_on_error=True)
+
+    assert len(report.reports) == len(BUILTIN_SUITES_NAMES)
+    errored = [sub for sub in report.reports if sub.error is not None]
+    successful = [sub for sub in report.reports if sub.error is None]
+    assert len(errored) == 1
+    assert len(successful) == len(BUILTIN_SUITES_NAMES) - 1
+
+
+def test_run_eval_harness_continue_on_error_surfaces_error_in_subreport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The captured exception is recorded as ``f"{ExcType}: {msg}"`` on the SuiteReport."""
+    rt = PlaceholderRuntime()
+    _patched_selector(monkeypatch, rt)
+
+    flaky = _flaky_first_call(run_suite, RuntimeError("first-suite boom"))
+    monkeypatch.setattr("oai2.evals.run_suite", flaky)
+
+    report = run_eval_harness(continue_on_error=True)
+    errored = [sub for sub in report.reports if sub.error is not None]
+    assert len(errored) == 1
+    failing = errored[0]
+    assert failing.error == "RuntimeError: first-suite boom"
+    assert failing.n_cases == 0
+    assert failing.n_passed == 0
+    assert failing.pass_rate == 0.0
+    assert failing.scores == []
+
+
+def test_run_eval_harness_default_raises_on_first_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default behavior (``continue_on_error=False``) propagates the first per-suite error."""
+    rt = PlaceholderRuntime()
+    _patched_selector(monkeypatch, rt)
+
+    flaky = _flaky_first_call(run_suite, RuntimeError("first-suite boom"))
+    monkeypatch.setattr("oai2.evals.run_suite", flaky)
+
+    with pytest.raises(RuntimeError, match="first-suite boom"):
+        run_eval_harness()
+
+
+def test_run_eval_harness_default_propagates_runtime_error_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom runtime-error subclass propagates as-is when ``continue_on_error`` is unset."""
+
+    class BoomError(RuntimeError):
+        pass
+
+    rt = PlaceholderRuntime()
+    _patched_selector(monkeypatch, rt)
+
+    flaky = _flaky_first_call(run_suite, BoomError("specific subclass"))
+    monkeypatch.setattr("oai2.evals.run_suite", flaky)
+
+    with pytest.raises(BoomError, match="specific subclass"):
+        run_eval_harness()

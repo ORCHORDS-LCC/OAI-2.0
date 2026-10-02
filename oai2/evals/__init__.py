@@ -130,6 +130,10 @@ class SuiteReport:
     n_cases: int
     n_passed: int
     scores: list[CapabilityScore] = field(default_factory=list)
+    # Populated by ``run_eval_harness(continue_on_error=True)`` when
+    # ``run_suite`` raised for this suite. ``None`` on a successful
+    # suite; a short error message otherwise.
+    error: str | None = None
 
     @property
     def pass_rate(self) -> float:
@@ -150,6 +154,7 @@ class SuiteReport:
             "n_passed": self.n_passed,
             "pass_rate": self.pass_rate,
             "mean_score": self.mean_score,
+            "error": self.error,
             "scores": [
                 {
                     "case_id": s.case_id,
@@ -317,6 +322,7 @@ def run_eval_harness(
     suite_names: Iterable[str] | None = None,
     *,
     max_tokens: int = 256,
+    continue_on_error: bool = False,
 ) -> HarnessReport:
     """Run the eval harness against the env-aware selected runtime.
 
@@ -340,6 +346,13 @@ def run_eval_harness(
     max_tokens
         Forwarded to each :class:`InferenceRequest` so the harness
         bounds per-case token cost.
+    continue_on_error
+        When ``True``, a per-suite exception is captured into the
+        corresponding :class:`SuiteReport` (``error`` field) and the
+        harness proceeds with the remaining suites. When ``False``
+        (default), the first per-suite exception propagates and
+        earlier work is preserved in :attr:`HarnessReport.reports` only
+        if it was the *first* suite.
     """
     # Local import: ``select_runtime_from_env`` lives in
     # ``oai2.runtime.inference`` which imports ``gateway_runtime``
@@ -352,9 +365,28 @@ def run_eval_harness(
             suites = list(builtin_suites())
         else:
             suites = [builtin_suite(name) for name in suite_names]
-        sub_reports = [
-            run_suite(s, runtime, max_tokens=max_tokens) for s in suites
-        ]
+        sub_reports: list[SuiteReport] = []
+        for suite in suites:
+            if continue_on_error:
+                try:
+                    sub_reports.append(
+                        run_suite(suite, runtime, max_tokens=max_tokens)
+                    )
+                except Exception as exc:  # noqa: BLE001 — boundary
+                    sub_reports.append(
+                        SuiteReport(
+                            suite_id=suite.suite_id,
+                            capability=suite.capability,
+                            runtime=type(runtime).__name__,
+                            n_cases=0,
+                            n_passed=0,
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+            else:
+                sub_reports.append(
+                    run_suite(suite, runtime, max_tokens=max_tokens)
+                )
         return HarnessReport(
             runtime=type(runtime).__name__,
             reports=tuple(sub_reports),

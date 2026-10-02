@@ -115,7 +115,7 @@ HTTP status code is preserved on `exc.status_code`.
 | Cross-repo Protocol conformance (OAI-2.0 ↔ q-pipe)   | IMPLEMENTED | 10 tests in `tests/test_gateway_model_client_protocol.py`; `isinstance(client, qpipe.ModelClient)` is True. |
 | `scripts/verify.py gateway-reach`                    | IMPLEMENTED | SKIP by default, live when key is set.                                             |
 | `oai2.runtime.select_runtime_from_env()`             | IMPLEMENTED | Env-aware public entry point: returns `GatewayRuntime` when `OAI2_GATEWAY_API_KEY` is set, else `PlaceholderRuntime`. Never raises. 5 dedicated tests in `tests/test_runtime.py`. |
-| `oai2.evals.run_eval_harness()` + `HarnessReport`    | IMPLEMENTED | Drives the builtin capability suites via `select_runtime_from_env()`; aggregates per-suite pass-rate; 8 dedicated tests in `tests/test_eval_harness.py` covering both placeholder and gateway (with MockTransport) paths. |
+| `oai2.evals.run_eval_harness()` + `HarnessReport`    | IMPLEMENTED | Drives the builtin capability suites via `select_runtime_from_env()`; aggregates per-suite pass-rate; 12 dedicated tests in `tests/test_eval_harness.py` covering both placeholder and gateway (with MockTransport) paths plus `continue_on_error` fault isolation (`SuiteReport.error` carries `f"{ExcType}: {msg}"` for failing suites while surviving suites still complete). |
 | End-to-end from P50                                  | OPEN        | Not yet exercised — pending operator-supplied token.                                |
 | api.orchords.com model list                          | OPEN        | Cloud currently exposes 4 models; local qpipe exposes 1.                           |
 | Knowledge transport worker                           | PROPOSED    | Cloudflare Worker entrypoint in design phase.                                      |
@@ -136,8 +136,8 @@ runs the full set; live acceptance still requires
 | `tests/test_bench_gateway.py`                     |  7    | `53b546a`  | `bench.py --backend=gateway` end-to-end + key redaction in metrics.       |
 | `tests/test_gateway_model_client_protocol.py`     | 10    | `33b76fb`  | Cross-repo `isinstance(client, qpipe.ModelClient)` + signature parity.    |
 | `tests/test_runtime.py` (selector slice)           |  5    | (slice 12) | `select_runtime_from_env()` no-key / key-set / partial-config / re-export / default-unchanged. |
-| `tests/test_eval_harness.py` (harness slice)       |  8    | (slice 13) | `run_eval_harness()` placeholder path (5) and gateway MockTransport path (1) + suite-name filtering / pass-rate aggregation. |
-| **Total cloud-touching tests**                    | **107**|           |                                                                          |
+| `tests/test_eval_harness.py` (harness slice)       | 12    | (slice 13, 14) | `run_eval_harness()` placeholder path (5), gateway MockTransport path (1), suite-name filtering / pass-rate aggregation (2), and `continue_on_error` fault isolation (4) — runs-all-when-one-raises, surfaces-error-in-subreport, default-raises, default-propagates-subclass. |
+| **Total cloud-touching tests**                    | **111**|           |                                                                          |
 
 Cross-repo Protocol tests discover q-pipe via the same convention
 `scripts/verify.py` uses (`$OAI2_QPIPE_REPO` overrides;
@@ -180,6 +180,7 @@ reason; it is not silently discarded or represented as a completed answer.
 | `e645633`   | Env-aware runtime selector `oai2.runtime.select_runtime_from_env()`; 5 dedicated tests. |
 | `69aac20`   | Doc refresh: wire-status table reflects post-`33b76fb` cloud-touching surface. |
 | `33b76fb`   | Cross-repo `ModelClient` Protocol conformance (10 tests).                      |
+| (slice 14)  | `continue_on_error` fault isolation on `run_eval_harness()` (4 tests; `SuiteReport.error` carries `f"{ExcType}: {msg}"` while surviving suites still complete). |
 | `6a4fb5f`   | Smoke-CLI test coverage (9 tests on `scripts/gateway_smoke.py`).               |
 | `2f29287`   | Mypy clean-up on `scripts/bench.py` (silences 2 long-standing errors).         |
 | `53b546a`   | `bench.py --backend=gateway` integration + 7 dedicated tests.                   |
