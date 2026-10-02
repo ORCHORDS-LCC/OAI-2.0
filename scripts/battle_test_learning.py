@@ -1821,7 +1821,7 @@ def session_real_deny_to_negative_loop(store: InMemoryKnowledgeStore) -> bool:
         high_impact_approved=False,
     )
     loop = AgentLoop(runtime=rt, cwd=Path("/tmp"), policy=policy, max_steps=4)
-    run = loop.run("battle 33 real denial")
+    loop.run("battle 33 real denial")
     tool_msgs = [
         m for m in rt.requests[1].messages if m.get("role") == "tool"
     ]
