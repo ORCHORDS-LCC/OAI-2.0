@@ -67,6 +67,8 @@ SWARM:                      multiple ~1–2B+ lanes
 
 These are research ranges, not a claim about a trained model currently in this repository.
 
+The mode sizes above are active-compute targets, not specific downloadable model IDs. Current small MLX models in this repository are probe/benchmark artifacts; they are not automatically final FURIOUS/NORMAL/DEEP/SWARM assignments. Historical q-pipe 27B/30B models are not the OAI-2.0 lane architecture.
+
 ## Current measured MLX smoke evidence
 
 The corrected v0.2 benchmark harness has one committed smoke result for `mlx-community/Qwen2.5-0.5B-Instruct-4bit` on the M5 Max:
