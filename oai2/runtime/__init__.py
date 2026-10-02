@@ -40,7 +40,7 @@ from .gateway_runtime import (
     GatewayRuntimeError,
     load_gateway_config_from_env,
 )
-from .inference import (
+from .local_service import create_local_service_app\nfrom .inference import (
     InferenceRequest,
     InferenceResponse,
     InferenceRuntime,
@@ -84,7 +84,7 @@ __all__ = [
     "GatewayModelClient",
     "GatewayRuntime",
     "GatewayRuntimeError",
-    "InferenceRequest",
+    "InferenceRequest",\n    "create_local_service_app",
     "InferenceResponse",
     "InferenceRuntime",
     "IsolatedSessionRegistry",
