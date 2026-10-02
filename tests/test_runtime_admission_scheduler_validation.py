@@ -198,14 +198,16 @@ def test_module_uses_future_annotations_for_up006_compliance() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_module_all_lists_exactly_three_public_names() -> None:
-    """The bridge exports exactly three public names."""
+def test_module_all_pins_full_public_names() -> None:
+    """The bridge exports exactly the deliberate public surface."""
     import oai2.runtime.admission_scheduler as mod
 
     assert set(mod.__all__) == {
         "AdmissionScheduledRequest",
         "AdmissionSchedulerMetrics",
         "AdmissionBatchController",
+        "AdmissionDecisionTrace",
+        "AdmissionTelemetry",
     }
 
 
