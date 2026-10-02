@@ -153,6 +153,52 @@ def test_backend_smoke_documents_exit_codes() -> None:
     assert "SystemExit(2)" in source
 
 
+def test_backend_smoke_close_is_only_called_on_gateway_runtime() -> None:
+    """``main()``'s ``finally`` must guard ``runtime.close()`` with an
+    ``isinstance(..., GatewayRuntime)`` check.
+
+    :func:`scripts.backend_smoke.main` calls
+    :func:`_build_mocked_runtime` and unconditionally invokes
+    ``runtime.close()`` in its ``finally`` block. That happens to
+    work today because the production factory only returns
+    :class:`GatewayRuntime` objects — but it's a footgun for tests
+    and any future factory swap that returns a different runtime
+    class (e.g. :class:`PlaceholderRuntime` for a hermetic dry-run
+    smoke). :class:`PlaceholderRuntime` has no ``.close()`` method,
+    so an unguarded ``runtime.close()`` would raise
+    :class:`AttributeError`, masking the actual contract failure
+    as exit 2.
+
+    This regression test patches the factory to return a
+    :class:`PlaceholderRuntime` directly (no wrapper shim). The
+    guard under test ensures contract 1 still fires with exit 1
+    rather than masking as an exit 2 AttributeError.
+    """
+    import scripts.backend_smoke as smoke
+    from oai2.runtime.inference import PlaceholderRuntime
+
+    placeholder = PlaceholderRuntime()
+    prior_env = os.environ.get("OAI2_GATEWAY_API_KEY")
+    os.environ["OAI2_GATEWAY_API_KEY"] = smoke._TOKEN_PLACEHOLDER
+    try:
+        with patch.object(
+            smoke,
+            "_build_mocked_runtime",
+            return_value=(placeholder, []),
+        ):
+            rc = smoke.main()
+    finally:
+        if prior_env is None:
+            os.environ.pop("OAI2_GATEWAY_API_KEY", None)
+        else:
+            os.environ["OAI2_GATEWAY_API_KEY"] = prior_env
+
+    assert rc == 1, (
+        f"expected exit 1 on contract-1 violation (selector mismatch), got {rc}. "
+        "If this assertion fails with AttributeError, the close() guard is missing."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Forced-failure coverage
 #
@@ -173,9 +219,8 @@ def test_backend_smoke_prints_fail_when_selector_returns_wrong_runtime() -> None
     The script's first contract assertion is ``report.runtime ==
     'GatewayRuntime'``. We force the failure by patching
     :func:`scripts.backend_smoke._build_mocked_runtime` to return a
-    :class:`PlaceholderRuntime` (wrapped so it has a ``.close()`` that
-    the smoke's ``finally`` block can call) instead of the default
-    :class:`GatewayRuntime`. The harness then records
+    raw :class:`PlaceholderRuntime` (no wrapper shim needed after the
+    ``close()`` guard was added in slice 17). The harness records
     ``runtime='PlaceholderRuntime'`` on the report, and the script's
     contract-1 assertion fires.
 
@@ -184,31 +229,11 @@ def test_backend_smoke_prints_fail_when_selector_returns_wrong_runtime() -> None
     (it installs ``lambda: runtime`` after building its own
     runtime). The cleanest seam is the factory
     :func:`_build_mocked_runtime`, which ``main`` calls exactly once.
-
-    Note: :func:`main`'s ``finally`` unconditionally calls
-    ``runtime.close()`` — we wrap the placeholder so that call still
-    works (and is a no-op) without altering ``main`` itself.
     """
     import scripts.backend_smoke as smoke
     from oai2.runtime.inference import PlaceholderRuntime
 
-    class _CloseablePlaceholder:
-        """PlaceholderRuntime wrapper that exposes a no-op ``.close()``."""
-
-        def __init__(self) -> None:
-            self._runtime = PlaceholderRuntime()
-
-        def generate(self, request):  # type: ignore[no-untyped-def]
-            return self._runtime.generate(request)
-
-        @property
-        def device(self):  # type: ignore[no-untyped-def]
-            return self._runtime.device
-
-        def close(self) -> None:
-            return None
-
-    placeholder = _CloseablePlaceholder()
+    placeholder = PlaceholderRuntime()
     prior_env = os.environ.get("OAI2_GATEWAY_API_KEY")
     os.environ["OAI2_GATEWAY_API_KEY"] = smoke._TOKEN_PLACEHOLDER
     try:

@@ -51,6 +51,19 @@ from oai2.evals import run_eval_harness
 from oai2.runtime import GatewayConfig, GatewayRuntime
 from oai2.runtime import inference as inference_module
 
+
+def _owns_runtime(runtime: object) -> bool:
+    """Return ``True`` when :func:`main` should call ``.close()`` on the runtime.
+
+    The production factory always returns a :class:`GatewayRuntime`
+    (whose ``close()`` is the canonical lifetime hook), but the
+    factory is monkey-patched in tests to exercise failure modes. A
+    non-``GatewayRuntime`` runtime (e.g. :class:`PlaceholderRuntime`)
+    has no ``.close()`` — calling it unconditionally would mask the
+    actual contract violation as an ``AttributeError`` exit 2.
+    """
+    return isinstance(runtime, GatewayRuntime)
+
 # 15-char placeholder that stays under the public-safety regex's
 # 16-char threshold. The selector reads ``OAI2_GATEWAY_API_KEY`` only
 # at the moment ``run_eval_harness()`` calls
@@ -150,7 +163,8 @@ def main() -> int:
         report = run_eval_harness(suite_names=["coding"])
     finally:
         inference_module.select_runtime_from_env = original_selector
-        runtime.close()
+        if _owns_runtime(runtime):
+            runtime.close()
 
     # ---- Contract 1: harness picked the gateway runtime ----------------
     if report.runtime != "GatewayRuntime":
