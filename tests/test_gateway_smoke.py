@@ -47,7 +47,7 @@ def _runtime_with(handler) -> GatewayRuntime:
     cfg = GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="smoke-token-xyz",
-        model="oai-1.2",
+        model="oai-2.0",
         timeout_seconds=5.0,
     )
     client = httpx.Client(
@@ -92,7 +92,7 @@ def _patch_runtime(monkeypatch: pytest.MonkeyPatch, runtime: GatewayRuntime) -> 
     monkeypatch.setattr(smoke_pkg, "GatewayRuntime", factory)
 
 
-def _chat_completion(text: str, model: str = "oai-1.2") -> httpx.Response:
+def _chat_completion(text: str, model: str = "oai-2.0") -> httpx.Response:
     body = {
         "id": "chatcmpl-smoke-test",
         "object": "chat.completion",
@@ -156,7 +156,7 @@ def test_main_success_json_path_does_not_leak_api_key(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return _chat_completion("pong", model="oai-1.2")
+        return _chat_completion("pong", model="oai-2.0")
 
     runtime = _runtime_with(handler)
     _patch_runtime(monkeypatch, runtime)
@@ -170,7 +170,7 @@ def test_main_success_json_path_does_not_leak_api_key(
     payload = json.loads(captured.out.strip())
     assert payload["ok"] is True
     assert payload["text"] == "pong"
-    assert payload["model"] == "oai-1.2"
+    assert payload["model"] == "oai-2.0"
     assert "smoke-token-xyz" not in captured.out
     assert "smoke-token-xyz" not in captured.err
 
@@ -180,7 +180,7 @@ def test_main_success_human_path_does_not_leak_api_key(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return _chat_completion("pong", model="oai-1.2")
+        return _chat_completion("pong", model="oai-2.0")
 
     runtime = _runtime_with(handler)
     _patch_runtime(monkeypatch, runtime)
@@ -191,7 +191,7 @@ def test_main_success_human_path_does_not_leak_api_key(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "model:        oai-1.2" in captured.out
+    assert "model:        oai-2.0" in captured.out
     assert "text:         pong" in captured.out
     assert "smoke-token-xyz" not in captured.out
     assert "smoke-token-xyz" not in captured.err
