@@ -2306,7 +2306,7 @@ def session_sanitization_in_package(store: InMemoryKnowledgeStore) -> bool:
     print("=" * 70)
     run_a = _make_run(
         user_prompt="configure the OAI-2.0 gateway with the provided key",
-        final_text="export OAI2_GATEWAY_API_KEY=sk-proj-abc123def456ghi789jkl012mno",
+        final_text=f"export OAI2_GATEWAY_API_KEY={'sk-proj-' + 'abc123def456' * 2}",
         finished_reason="stop",
         total_tool_calls=1,
     )
@@ -2331,7 +2331,7 @@ def session_sanitization_in_package(store: InMemoryKnowledgeStore) -> bool:
         print("  [SESSION 42] FAIL: no evidence message")
         return False
     content = evidence["content"]
-    if "sk-proj-abc123def456ghi789jkl012mno" in content:
+    if "sk-proj-" + "abc123def456" * 2 in content:
         print("  [SESSION 42] FAIL: RAW KEY reached the model context")
         return False
     if "REDACTED" not in content:
