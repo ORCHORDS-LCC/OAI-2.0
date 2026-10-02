@@ -1506,6 +1506,298 @@ def session_chained_reuse(store: InMemoryKnowledgeStore) -> bool:
     )
 
 
+def _real_gate_run(
+    store: InMemoryKnowledgeStore,
+    *,
+    session_no: int,
+    session_name: str,
+    tool_call: dict[str, Any],
+    policy: Any,
+    expect_substring: str,
+    fail_substrings: tuple[str, ...] = (),
+) -> bool:
+    """Shared driver for real six-gate dispatcher sessions.
+
+    Emits ONE scripted tool_call; the AgentLoop dispatches it through
+    the REAL ToolDispatcher + execute_tool; we assert on the REAL
+    tool-role message content.
+    """
+    rt = _StubRuntime(
+        script=[
+            {"text": "", "tool_calls": (tool_call,), "finish_reason": "tool_calls"},
+            {"text": "done", "finish_reason": "stop"},
+        ]
+    )
+    loop = AgentLoop(
+        runtime=rt,
+        cwd=Path("/tmp"),
+        policy=policy,
+        knowledge_store=store,
+        evidence_budget_tokens=384,
+        max_steps=4,
+    )
+    run = loop.run(f"battle gate exercise {session_no}")
+    if len(rt.requests) < 2:
+        print(f"  [SESSION {session_no}] FAIL: no second request")
+        return False
+    tool_msgs = [m for m in rt.requests[1].messages if m.get("role") == "tool"]
+    if not tool_msgs:
+        print(f"  [SESSION {session_no}] FAIL: no tool-role message")
+        return False
+    content = tool_msgs[0].get("content", "")
+    if expect_substring not in content:
+        print(f"  [SESSION {session_no}] FAIL: expected {expect_substring!r} "
+              f"in real tool result, got {content!r}")
+        return False
+    for bad in fail_substrings:
+        if bad in content:
+            print(f"  [SESSION {session_no}] FAIL: unexpected {bad!r} in {content!r}")
+            return False
+    if run.total_tool_calls != 1:
+        print(f"  [SESSION {session_no}] FAIL: tool_calls={run.total_tool_calls}")
+        return False
+    print(f"  [SESSION {session_no}] PASS: real dispatcher returned {content.strip()!r}")
+    return True
+
+
+def session_real_gate_budget(store: InMemoryKnowledgeStore) -> bool:
+    """Round 26 (REAL gate 5): budget_calls=0 forces a RETRY decision —
+    'budget exceeded' — through the real dispatcher.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 26: REAL GATE 5 — budget exceeded forces retry")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    call = {
+        "id": "c26",
+        "type": "function",
+        "function": {"name": "Bash", "arguments": json.dumps({"command": "echo hi"})},
+    }
+    policy = default_dispatch_policy(budget_calls=0)
+    return _real_gate_run(
+        store,
+        session_no=26,
+        session_name="budget",
+        tool_call=call,
+        policy=policy,
+        expect_substring="dispatch:retry",
+    )
+
+
+def session_real_gate_high_impact(store: InMemoryKnowledgeStore) -> bool:
+    """Round 27 (REAL gate 6): Bash is high_impact=True; with
+    high_impact_approved=False the real dispatcher DENIES it.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 27: REAL GATE 6 — high-impact tool denied without approval")
+    print("=" * 70)
+    from oai2.tools import DispatchPolicy
+
+    call = {
+        "id": "c27",
+        "type": "function",
+        "function": {"name": "Bash", "arguments": json.dumps({"command": "echo hi"})},
+    }
+    # default_dispatch_policy hard-codes high_impact_approved=True, so
+    # build the policy directly to exercise the denial path.
+    policy = DispatchPolicy(
+        allow_capabilities=frozenset({"fs.read", "fs.write", "fs.list", "shell.exec"}),
+        deny_capabilities=frozenset(),
+        resource_scopes=frozenset({"/tmp"}),
+        budget_calls=8,
+        high_impact_approved=False,
+    )
+    return _real_gate_run(
+        store,
+        session_no=27,
+        session_name="high-impact",
+        tool_call=call,
+        policy=policy,
+        expect_substring="dispatch:deny",
+    )
+
+
+def session_real_gate_repair(store: InMemoryKnowledgeStore) -> bool:
+    """Round 28 (REAL gate 2): an unknown argument forces a
+    REPAIR decision through the real dispatcher.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 28: REAL GATE 2 — unknown arguments force repair")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    call = {
+        "id": "c28",
+        "type": "function",
+        "function": {
+            "name": "Read",
+            "arguments": json.dumps({"path": "/etc/hostname", "bogus_arg": "x"}),
+        },
+    }
+    policy = default_dispatch_policy(resource_scopes={"/etc/hostname"})
+    return _real_gate_run(
+        store,
+        session_no=28,
+        session_name="repair",
+        tool_call=call,
+        policy=policy,
+        expect_substring="dispatch:repair",
+    )
+
+
+def session_real_gate_unknown_tool(store: InMemoryKnowledgeStore) -> bool:
+    """Round 29 (REAL gate 1): a tool outside the registry forces a
+    REPLAN decision through the real dispatcher.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 29: REAL GATE 1 — unknown tool forces replan")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    call = {
+        "id": "c29",
+        "type": "function",
+        "function": {
+            "name": "DeployToProduction",
+            "arguments": json.dumps({"target": "nowhere"}),
+        },
+    }
+    policy = default_dispatch_policy()
+    return _real_gate_run(
+        store,
+        session_no=29,
+        session_name="unknown-tool",
+        tool_call=call,
+        policy=policy,
+        expect_substring="dispatch:replan",
+    )
+
+
+def session_real_bash_subprocess(store: InMemoryKnowledgeStore) -> bool:
+    """Round 30 (REAL shell): the real execute_tool runs an actual
+    subprocess (Bash) and the tool-role message carries its real
+    stdout.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 30: REAL BASH — execute_tool runs a real subprocess")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    marker = "OAI2-BATTLE-SUBPROC-42"
+    call = {
+        "id": "c30",
+        "type": "function",
+        "function": {
+            "name": "Bash",
+            "arguments": json.dumps({"command": f"printf {marker}"}),
+        },
+    }
+    policy = default_dispatch_policy(
+        resource_scopes={"/tmp"},
+        budget_calls=8,
+    )
+    ok = _real_gate_run(
+        store,
+        session_no=30,
+        session_name="bash",
+        tool_call=call,
+        policy=policy,
+        expect_substring=marker,
+    )
+    if ok:
+        run_fail = _make_run(
+            user_prompt="run a Bash command through the OAI-2.0 agent loop",
+            final_text=f"subprocess stdout carried the marker {marker}",
+            finished_reason="stop",
+            total_tool_calls=1,
+        )
+        lesson = extract_lesson(
+            run_fail,
+            task_id="bt-030-A",
+            verification_ref="verifier://battle/030",
+            source_version="b64f7cc",
+            runtime_version="oai2/0.1+battle",
+        )
+        store.put(lesson)
+        print(f"  [SESSION 30] verified run stored as lesson kid={lesson.knowledge_id}")
+    return ok
+
+
+def session_real_write_read_roundtrip(store: InMemoryKnowledgeStore) -> bool:
+    """Round 31 (REAL fs round trip): Write creates a real file via
+    execute_tool, then Read verifies the bytes actually landed.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 31: REAL WRITE→READ — execute_tool creates and reads a real file")
+    print("=" * 70)
+    from oai2.agents import default_dispatch_policy
+
+    target = "/tmp/oai2-battle-write-target.txt"
+    payload = "OAI2-BATTLE-WRITE-ROUNDTRIP"
+    write_policy = default_dispatch_policy(
+        resource_scopes={target},
+        budget_calls=8,
+    )
+    # Gate 3/6 check needs the fs.write capability allowed AND high
+    # impact approved; Write is scoped (not high-impact) so the above
+    # suffices.
+    write_call = {
+        "id": "c31w",
+        "type": "function",
+        "function": {
+            "name": "Write",
+            "arguments": json.dumps({"path": target, "content": payload}),
+        },
+    }
+    ok_w = _real_gate_run(
+        store,
+        session_no=31,
+        session_name="write",
+        tool_call=write_call,
+        policy=write_policy,
+        expect_substring="wrote",
+    )
+    if not ok_w:
+        return False
+    # Independent verification: the file REALLY exists with the payload.
+    if not Path(target).exists() or payload not in Path(target).read_text(encoding="utf-8"):
+        print("  [SESSION 31] FAIL: file did not actually land on disk")
+        return False
+    print(f"  [SESSION 31] verified on disk: {target} contains {payload!r}")
+
+    read_call = {
+        "id": "c31r",
+        "type": "function",
+        "function": {"name": "Read", "arguments": json.dumps({"path": target})},
+    }
+    return _real_gate_run(
+        store,
+        session_no=31,
+        session_name="read-back",
+        tool_call=read_call,
+        policy=write_policy,
+        expect_substring=payload,
+    )
+
+
+def session_retention_round3(store: InMemoryKnowledgeStore) -> bool:
+    """Round 32 (RETENTION 3): re-ask Session 6's shell lesson after
+    the store now holds ~12+ lessons including several negative
+    memories — proves positives survive alongside negatives.
+    """
+    print("\n" + "=" * 70)
+    print("SESSION 32: RETENTION 3 — Session 6 shell lesson after deep store growth")
+    print("=" * 70)
+    rt = _StubRuntime(script=[{"text": "I will reuse the pytest invocation from earlier."}])
+    loop = AgentLoop(runtime=rt, knowledge_store=store, evidence_budget_tokens=512)
+    loop.run("run the OAI-2.0 unit tests excluding the two pre-existing starlette files")
+    _print_messages("SESSION 32 / Task B", rt.requests[0].messages)
+    return _assert_evidence_present(
+        "SESSION 32", rt.requests[0].messages, "uv run pytest -W error -q",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -1546,6 +1838,13 @@ def main() -> int:
         session_scheduler_batch,
         session_retention_round2,
         session_chained_reuse,
+        session_real_gate_budget,
+        session_real_gate_high_impact,
+        session_real_gate_repair,
+        session_real_gate_unknown_tool,
+        session_real_bash_subprocess,
+        session_real_write_read_roundtrip,
+        session_retention_round3,
     ]
     results: list[tuple[str, bool]] = []
     for fn in rounds:
