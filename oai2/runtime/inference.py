@@ -38,6 +38,15 @@ class InferenceRequest(BaseModel):
     model: ModelSpec | None = None
     # If True, ask the runtime to use speculative decoding if available.
     speculative: bool = False
+    # Optional OpenAI-style chat history. When provided, the gateway
+    # runtime POSTs ``messages`` instead of flattening ``prompt``.
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    # Optional OpenAI-style tool definitions (the wire shape that
+    # makes oai-2.0 actually invoke tools instead of writing essays).
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    # ``"auto"`` lets the model decide; ``"none"`` forbids tool calls;
+    # ``"any"`` requires at least one; or a specific ``{"name": "..."}``.
+    tool_choice: str | dict[str, Any] | None = None
 
 
 @dataclass(slots=True)

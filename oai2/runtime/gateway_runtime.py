@@ -358,11 +358,14 @@ class GatewayRuntime(InferenceRuntime):
     def _build_request_body(self, request: InferenceRequest) -> dict[str, Any]:
         spec = request.model or self.spec
         model_id = spec.name or self._config.model
+        # ``messages`` (when provided) takes precedence over ``prompt``.
+        if request.messages:
+            messages = [dict(m) for m in request.messages]
+        else:
+            messages = [{"role": "user", "content": request.prompt}]
         body: dict[str, Any] = {
             "model": model_id,
-            "messages": [
-                {"role": "user", "content": request.prompt},
-            ],
+            "messages": messages,
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
             "top_p": request.top_p,
@@ -371,6 +374,13 @@ class GatewayRuntime(InferenceRuntime):
             body["stop"] = list(request.stop)
         if request.seed is not None:
             body["seed"] = request.seed
+        # OpenAI-style tool definitions. Sending these is the only way
+        # the model knows tools exist; without this block, oai-2.0 will
+        # write prose instead of emitting ``tool_calls``.
+        if request.tools:
+            body["tools"] = list(request.tools)
+        if request.tool_choice is not None:
+            body["tool_choice"] = request.tool_choice
         return body
 
 

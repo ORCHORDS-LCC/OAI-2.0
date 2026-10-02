@@ -242,6 +242,9 @@ class TestInferenceRequest:
             "seed",
             "model",
             "speculative",
+            "messages",
+            "tools",
+            "tool_choice",
         }
 
     def test_prompt_is_mandatory(self) -> None:

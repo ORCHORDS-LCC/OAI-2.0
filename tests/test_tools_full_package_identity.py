@@ -77,6 +77,13 @@ def test_tools_all_matches_runtime_exports() -> None:
         "DispatchStage",
         "ToolDispatcher",
         "default_dispatcher",
+        # ``oai2.tools.registry`` (added for sess_10cbe33c-d83b-42ce-bf2c
+        # tool-use activation) exposes the canonical agent tool set and
+        # the local execution handlers. They are re-exported from the
+        # package for callers that don't want to reach into ``registry``.
+        "default_tool_definitions",
+        "execute_tool",
+        "to_openai_wire",
     }
     assert declared == expected
-    assert len(declared) == 5
+    assert len(declared) == 8

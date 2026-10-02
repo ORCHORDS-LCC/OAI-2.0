@@ -1,0 +1,409 @@
+"""Default tool registry for the OAI-2.0 agent loop.
+
+This module owns the OpenAI-style tool definitions the agent advertises
+to oai-2.0 via the gateway. It also owns the local tool execution
+handlers so the agent loop can dispatch a model-emitted ``tool_call``
+into a real side effect on the host.
+
+The wire shape follows the OpenAI ``/v1/chat/completions`` tool spec::
+
+    {
+      "type": "function",
+      "function": {
+        "name": "read",
+        "description": "...",
+        "parameters": {
+          "type": "object",
+          "properties": {"path": {"type": "string"}},
+          "required": ["path"],
+        },
+      },
+    }
+
+Status: EXPERIMENTAL (added for WI-AGT-001 / sess_10cbe33c-d83b-42ce-bf2c).
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from ..core import ToolId
+from ..protocols import (
+    ToolArgument,
+    ToolCall,
+    ToolDefinition,
+    ToolResult,
+)
+
+
+def _function_tool(
+    *,
+    name: str,
+    description: str,
+    arguments: tuple[ToolArgument, ...],
+    capability: str,
+    scoped: bool = False,
+    high_impact: bool = False,
+) -> ToolDefinition:
+    return ToolDefinition(
+        id=ToolId(name),
+        name=name,
+        description=description,
+        arguments=arguments,
+        capability=capability,
+        scoped=scoped,
+        high_impact=high_impact,
+    )
+
+
+def default_tool_definitions() -> tuple[ToolDefinition, ...]:
+    """Return the canonical agent tool set.
+
+    Six tools, mirroring the standard agent/IDE surface so the model
+    sees familiar names. ``Bash`` is high-impact; ``Edit`` and
+    ``Write`` are scoped; ``Read``, ``Glob``, ``Grep`` are not.
+    """
+    return (
+        _function_tool(
+            name="Read",
+            description=(
+                "Read the full contents of a file. Path is relative to "
+                "the current working directory or absolute."
+            ),
+            arguments=(
+                ToolArgument(name="path", type="path"),
+                ToolArgument(name="offset", type="integer"),
+                ToolArgument(name="limit", type="integer"),
+            ),
+            capability="fs.read",
+            scoped=True,
+        ),
+        _function_tool(
+            name="Edit",
+            description=(
+                "Edit a file by replacing a unique old_string with a new "
+                "replacement. old_string must match exactly once."
+            ),
+            arguments=(
+                ToolArgument(name="path", type="path"),
+                ToolArgument(name="old_string", type="string"),
+                ToolArgument(name="new_string", type="string"),
+            ),
+            capability="fs.write",
+            scoped=True,
+        ),
+        _function_tool(
+            name="Write",
+            description=(
+                "Write a new file (overwrites if it exists). Path is "
+                "relative to cwd or absolute."
+            ),
+            arguments=(
+                ToolArgument(name="path", type="path"),
+                ToolArgument(name="content", type="string"),
+            ),
+            capability="fs.write",
+            scoped=True,
+        ),
+        _function_tool(
+            name="Bash",
+            description=(
+                "Run a shell command and return its combined stdout+stderr. "
+                "Use for builds, tests, git, and any host command that "
+                "does not have a dedicated tool."
+            ),
+            arguments=(
+                ToolArgument(name="command", type="string"),
+                ToolArgument(name="timeout_seconds", type="integer"),
+            ),
+            capability="shell.exec",
+            high_impact=True,
+        ),
+        _function_tool(
+            name="Glob",
+            description=(
+                "List paths matching a glob pattern. Returns newline-"
+                "separated paths relative to cwd."
+            ),
+            arguments=(ToolArgument(name="pattern", type="string"),),
+            capability="fs.list",
+        ),
+        _function_tool(
+            name="Grep",
+            description=(
+                "Search a path for a regex. Returns matching lines in "
+                "``path:lineno: line`` form."
+            ),
+            arguments=(
+                ToolArgument(name="pattern", type="string"),
+                ToolArgument(name="path", type="path"),
+                ToolArgument(name="include_glob", type="string"),
+            ),
+            capability="fs.read",
+        ),
+    )
+
+
+def to_openai_wire(definitions: Iterable[ToolDefinition]) -> list[dict[str, Any]]:
+    """Convert internal :class:`ToolDefinition` to the OpenAI wire shape.
+
+    The shape is what the gateway passes through to oai-2.0 inside the
+    ``tools`` array of a chat-completions request.
+    """
+    wire: list[dict[str, Any]] = []
+    for td in definitions:
+        properties: dict[str, Any] = {}
+        required: list[str] = []
+        for arg in td.arguments:
+            properties[arg.name] = {"type": _openai_type(arg.type)}
+            if arg.name in {"path", "command", "old_string", "new_string", "content", "pattern"}:
+                required.append(arg.name)
+        wire.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": td.name,
+                    "description": td.description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                },
+            }
+        )
+    return wire
+
+
+def _openai_type(internal: str) -> str:
+    return {
+        "string": "string",
+        "integer": "integer",
+        "number": "number",
+        "boolean": "boolean",
+        "array": "array",
+        "object": "object",
+        "null": "null",
+        "uri": "string",
+        "path": "string",
+        "binary": "string",
+    }.get(internal, "string")
+
+
+# ---------------------------------------------------------------------------
+# Local execution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True, frozen=True)
+class ExecutionOutcome:
+    ok: bool
+    output: str
+    error: str | None = None
+    elapsed_ms: float = 0.0
+
+
+def _resolve(path_str: str, *, cwd: Path) -> Path:
+    p = Path(path_str)
+    if not p.is_absolute():
+        p = cwd / p
+    return p
+
+
+def _read(path_str: str, *, offset: int | None, limit: int | None, cwd: Path) -> ExecutionOutcome:
+    try:
+        p = _resolve(path_str, cwd=cwd)
+        if not p.exists():
+            return ExecutionOutcome(False, "", f"file not found: {p}")
+        if not p.is_file():
+            return ExecutionOutcome(False, "", f"not a file: {p}")
+        text = p.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines(keepends=True)
+        start = max(0, int(offset or 0))
+        end = start + int(limit) if limit else len(lines)
+        return ExecutionOutcome(True, "".join(lines[start:end]))
+    except Exception as exc:  # pragma: no cover - defensive
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def _edit(path_str: str, *, old_string: str, new_string: str, cwd: Path) -> ExecutionOutcome:
+    try:
+        p = _resolve(path_str, cwd=cwd)
+        if not p.exists():
+            return ExecutionOutcome(False, "", f"file not found: {p}")
+        text = p.read_text(encoding="utf-8")
+        if old_string not in text:
+            return ExecutionOutcome(False, "", "old_string not found in file")
+        occurrences = text.count(old_string)
+        if occurrences > 1:
+            return ExecutionOutcome(
+                False, "", f"old_string matches {occurrences} locations; must be unique"
+            )
+        new_text = text.replace(old_string, new_string, 1)
+        p.write_text(new_text, encoding="utf-8")
+        return ExecutionOutcome(
+            True, f"replaced 1 occurrence in {p}"
+        )
+    except Exception as exc:  # pragma: no cover
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def _write(path_str: str, *, content: str, cwd: Path) -> ExecutionOutcome:
+    try:
+        p = _resolve(path_str, cwd=cwd)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return ExecutionOutcome(True, f"wrote {len(content)} bytes to {p}")
+    except Exception as exc:  # pragma: no cover
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def _bash(command: str, *, timeout_seconds: int | None, cwd: Path) -> ExecutionOutcome:
+    try:
+        proc = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds if timeout_seconds else 60,
+        )
+        out = proc.stdout + proc.stderr
+        ok = proc.returncode == 0
+        return ExecutionOutcome(
+            ok,
+            out if out else f"(exit {proc.returncode}, no output)",
+            None if ok else f"exit {proc.returncode}",
+        )
+    except subprocess.TimeoutExpired:
+        return ExecutionOutcome(False, "", "timeout")
+    except Exception as exc:  # pragma: no cover
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def _glob(pattern: str, *, cwd: Path) -> ExecutionOutcome:
+    try:
+        # Use a recursive search via pathlib. Supports ``**``.
+        root = cwd
+        if pattern.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", pattern):
+            p = Path(pattern)
+            root = p.parent if p.is_dir() else root
+        matches: list[str] = []
+        for path in root.rglob(pattern):
+            matches.append(str(path.relative_to(cwd)))
+        if not matches:
+            return ExecutionOutcome(True, "(no matches)")
+        return ExecutionOutcome(True, "\n".join(sorted(matches)[:200]))
+    except Exception as exc:  # pragma: no cover
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def _grep(pattern: str, *, path_str: str, include_glob: str | None, cwd: Path) -> ExecutionOutcome:
+    try:
+        rx = re.compile(pattern)
+        root = _resolve(path_str, cwd=cwd)
+        if not root.exists():
+            return ExecutionOutcome(False, "", f"path not found: {root}")
+        files: Iterable[Path]
+        if root.is_file():
+            files = [root]
+        else:
+            files = list(root.rglob(include_glob)) if include_glob else list(root.rglob("*"))
+        lines: list[str] = []
+        for fp in files:
+            if not fp.is_file():
+                continue
+            try:
+                content = fp.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                if rx.search(line):
+                    rel = fp.relative_to(cwd)
+                    lines.append(f"{rel}:{lineno}: {line}")
+                    if len(lines) >= 200:
+                        break
+            if len(lines) >= 200:
+                lines.append("... (truncated)")
+                break
+        if not lines:
+            return ExecutionOutcome(True, "(no matches)")
+        return ExecutionOutcome(True, "\n".join(lines))
+    except Exception as exc:  # pragma: no cover
+        return ExecutionOutcome(False, "", f"{type(exc).__name__}: {exc}")
+
+
+def execute_tool(
+    call: ToolCall,
+    *,
+    cwd: Path | None = None,
+) -> ToolResult:
+    """Execute one tool call locally and return a :class:`ToolResult`.
+
+    The ``call.id`` is preserved on the result so the agent loop can
+    match it back to the model-emitted ``tool_call``. The function
+    catches every exception so the agent loop never has to deal with
+    raw Python errors.
+    """
+    working_dir = cwd or Path(os.getcwd())
+    args = call.arguments
+    # Tool ids are matched case-insensitively so the model-emitted
+    # ``"Read"`` and the registry's ``"read"`` agree.
+    name = str(call.tool_id).lower()
+    if name == "read":
+        outcome = _read(
+            str(args.get("path", "")),
+            offset=args.get("offset"),
+            limit=args.get("limit"),
+            cwd=working_dir,
+        )
+    elif name == "edit":
+        outcome = _edit(
+            str(args.get("path", "")),
+            old_string=str(args.get("old_string", "")),
+            new_string=str(args.get("new_string", "")),
+            cwd=working_dir,
+        )
+    elif name == "write":
+        outcome = _write(
+            str(args.get("path", "")),
+            content=str(args.get("content", "")),
+            cwd=working_dir,
+        )
+    elif name == "bash":
+        outcome = _bash(
+            str(args.get("command", "")),
+            timeout_seconds=args.get("timeout_seconds"),
+            cwd=working_dir,
+        )
+    elif name == "glob":
+        outcome = _glob(str(args.get("pattern", "*")), cwd=working_dir)
+    elif name == "grep":
+        outcome = _grep(
+            str(args.get("pattern", "")),
+            path_str=str(args.get("path", ".")),
+            include_glob=args.get("include_glob"),
+            cwd=working_dir,
+        )
+    else:
+        outcome = ExecutionOutcome(False, "", f"unsupported tool: {call.tool_id}")
+    return ToolResult(
+        call_id=call.id,
+        ok=outcome.ok,
+        output=outcome.output,
+        error=outcome.error,
+        elapsed_ms=outcome.elapsed_ms,
+    )
+
+
+__all__ = [
+    "default_tool_definitions",
+    "execute_tool",
+    "to_openai_wire",
+]

@@ -149,32 +149,38 @@ def test_runtime_model_module_does_not_import_cloud_runtime_modules() -> None:
 
 
 def test_runtime_model_module_is_the_only_runtime_mlx_importer() -> None:
-    """``runtime/model.py`` is the only runtime module that imports MLX.
+    """``runtime/model.py`` and ``runtime/mlx_hot_runtime.py`` are the
+    only runtime modules that import MLX.
 
     Pins the contract declared in the module docstring: every other
     runtime module (``admission``, ``admission_scheduler``,
     ``gateway_model_client``, ``gateway_runtime``, ``inference``,
-    ``scheduler``) must NOT import ``mlx`` directly.
+    ``scheduler``) must NOT import ``mlx`` directly. ``mlx_hot_runtime``
+    is the concrete live MLX-inference runtime wired into the agent
+    loop (Refs sess_10cbe33c-d83b-42ce-bf2c) so it is also permitted
+    to import MLX.
     """
 
     runtime_dir = Path(__file__).resolve().parent.parent / "oai2" / "runtime"
+    allowed_mlx_importers = {"model.py", "mlx_hot_runtime.py"}
     offenders: list[str] = []
     for py_file in sorted(runtime_dir.glob("*.py")):
         if py_file.name == "__init__.py":
             continue
         text = py_file.read_text(encoding="utf-8")
-        # Skip our own module.
         if py_file.name == "model.py":
-            # The mlx import is allowed (and required) here.
             assert re.search(r"^\s*import\s+mlx\.core", text, re.MULTILINE), (
                 "runtime/model.py must import mlx.core somewhere"
             )
+            continue
+        if py_file.name in allowed_mlx_importers:
             continue
         for line in text.splitlines():
             if re.match(r"^\s*(?:from\s+mlx\b|import\s+mlx(?:\.|\s|$))", line):
                 offenders.append(f"{py_file.name}: {line.strip()}")
     assert offenders == [], (
-        f"runtime/ modules other than model.py must not import mlx directly: {offenders}"
+        f"runtime/ modules other than {sorted(allowed_mlx_importers)} must not "
+        f"import mlx directly: {offenders}"
     )
 
 
