@@ -79,3 +79,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed mock-internal assumptions from `KnowledgeStore.all()`.
 - Fixed q-pipe dedupe ordering so an ineligible row cannot suppress a later eligible row with the same identity.
 - Fixed q-pipe guidance hashing to match the verified exported guidance shape.
+- Fixed the residency accountant rejecting the legitimate queue-to-admit transition: a pending request re-decided as ADMIT now promotes in place instead of raising a duplicate-request error (`1c84f2bb`).
+- Fixed `oai2.runtime.local_service` returning 422 for authenticated requests: under postponed annotation evaluation FastAPI could not resolve the closure-local bearer scheme, so the dependency was silently dropped and `credentials` degraded to a required query parameter; the scheme is now a module-level `HTTPBearer(auto_error=False)` singleton (`f14c87f7`).
+- Fixed `ServiceLifecycle.restart` failing from the FAILED state: restart now re-enters STARTING before delegating to `start`, whose guard only accepts fresh or cleanly-stopped services (`f6e62a77`).
+- Restored the admission-scheduler public-surface pin to the deliberate five-name export set and added `httpx2>=2.0.0` to the dev extra so `starlette.testclient` imports cleanly under `-W error` (`07189ae4`, `c2c0700f`).
