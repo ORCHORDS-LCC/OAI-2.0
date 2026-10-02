@@ -1,0 +1,35 @@
+{
+  "run_id": "bench_6ca39f1cf4",
+  "timestamp": 1790903878.625514,
+  "model": "gateway:orchordsai-m3",
+  "quantization": null,
+  "prompt_label": "~16tokens (12words)",
+  "prompt_tokens": 12,
+  "max_tokens": 256,
+  "load_seconds": null,
+  "compile_seconds": null,
+  "warm_run_seconds": 0.04658662498695776,
+  "prefill_seconds": 0.029842250049114227,
+  "prefill_tokens_per_second": 402.114451164053,
+  "decode_seconds": 0.0,
+  "decode_tokens_per_second": null,
+  "end_to_end_seconds": 0.029842250049114227,
+  "generation_tokens": 82,
+  "peak_memory_gb": null,
+  "active_memory_gb": null,
+  "cache_memory_gb": null,
+  "device": "gateway:https://api.orchords.com",
+  "sys_info": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "processor": "arm",
+    "mlx_default_device": "Device(gpu, 0)",
+    "mlx_lm_version": "0.32.0"
+  },
+  "output_text": "It looks like your message got cut off mid-sentence (\"their inputs and...\"). Could you finish the request? For example, were you asking me to summarize:\n\n- inputs and outputs,\n- inputs and side effects,\n- inputs and behavior,\n- or something else?\n\nAlso, please paste the Python module you'd like summarized (or share it as a file/code block), and I'll give you a clear, focused summary of its public functions, their inputs, and the rest of what you intended to ask for.",
+  "output_excerpt": "It looks like your message got cut off mid-sentence (\"their inputs and...\"). Could you finish the request? For example, were you asking me to summarize:\n\n- inputs and outputs,\n- inputs and side effects,\n- inputs and behavior,\n- or something",
+  "notes": [
+    "gateway: prefill==end_to_end; decode=0.0 by convention"
+  ]
+}

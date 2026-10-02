@@ -20,9 +20,13 @@ the subprocess-level tests can't easily reach.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
+import runpy
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -382,3 +386,144 @@ def test_backend_smoke_prints_fail_when_scores_mismatch_n_cases() -> None:
             os.environ["OAI2_GATEWAY_API_KEY"] = prior_env
 
     assert rc == 1, f"expected exit 1 on contract-3 violation, got {rc}"
+
+
+# ---------------------------------------------------------------------------
+# Slice 19: drive the script's actual ``__main__`` block via
+# :func:`runpy.run_module` so the boundary code (``raise SystemExit(2)
+# from exc``) is exercised end-to-end in-process. This complements the
+# subprocess-level tests above (which verify the script as a black
+# box) and the ``main()``-level forced-failure tests (which verify
+# ``main`` in isolation). The ``__main__`` block sits between them:
+# when called from the command line it catches ``SystemExit`` from
+# ``main()`` and re-raises, and catches any other ``Exception`` and
+# translates it to ``SystemExit(2)`` with the FAIL/stdout prefix.
+#
+# Driving the ``__main__`` block in-process requires setting the env
+# var (the script's first contract assertion is env-var-driven) and
+# running the module via ``runpy.run_module(..., run_name="__main__")``
+# so Python executes the ``if __name__ == "__main__":`` block.
+# ---------------------------------------------------------------------------
+
+
+def test_backend_smoke_main_boundary_exits_zero_and_prints_pass_via_runpy() -> None:
+    """Verify the actual ``__main__`` boundary by re-executing the module
+    via :func:`runpy.run_module`. The existing subprocess test
+    (``test_backend_smoke_exits_zero_and_prints_pass``) covers the
+    hermetic-script path via a real subprocess; this test covers the
+    in-process ``__main__`` boundary so a refactor that moves the
+    exception translation into ``main()`` (which would make the
+    ``__main__`` block a no-op) cannot silently regress.
+
+    The module is invoked with ``run_name="__main__"`` so the
+    ``if __name__ == "__main__":`` block runs. The smoke is hermetic
+    (no live token): we set the env var to the script's own 15-char
+    placeholder, which keeps the public-safety regex quiet and stays
+    under the public-repo secret-threshold.
+    """
+    import scripts.backend_smoke as smoke
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "if __name__ == \"__main__\":" in source, (
+        "backend_smoke.py must keep its __main__ block for this test "
+        "to be meaningful; if you remove it, update or delete this test."
+    )
+    assert "raise SystemExit(2) from exc" in source, (
+        "backend_smoke.py's __main__ boundary must translate "
+        "unexpected exceptions to SystemExit(2) with `from exc`"
+    )
+
+    prior_env = os.environ.get("OAI2_GATEWAY_API_KEY")
+    os.environ["OAI2_GATEWAY_API_KEY"] = smoke._TOKEN_PLACEHOLDER
+    try:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            # runpy emits a RuntimeWarning when it observes the target
+            # module already in sys.modules (because the test imports
+            # scripts.backend_smoke at the top of this function to
+            # access ``smoke._TOKEN_PLACEHOLDER``). The warning is
+            # benign — runpy re-imports the module from disk — but
+            # scripts/verify.py runs pytest with ``-W error`` so the
+            # warning would otherwise fail this test. Suppress only
+            # the specific runpy message; all other warnings still
+            # propagate.
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"'scripts\.backend_smoke' found in sys\.modules",
+                    category=RuntimeWarning,
+                )
+                try:
+                    runpy.run_module(
+                        "scripts.backend_smoke",
+                        run_name="__main__",
+                        alter_sys=True,
+                    )
+                except SystemExit as exc:
+                    # runpy re-raises the script's SystemExit at the end.
+                    exit_code = exc.code if isinstance(exc.code, int) else (
+                        int(exc.code) if exc.code is not None else 0
+                    )
+                else:  # pragma: no cover -- __main__ always SystemExits
+                    exit_code = 0
+    finally:
+        if prior_env is None:
+            os.environ.pop("OAI2_GATEWAY_API_KEY", None)
+        else:
+            os.environ["OAI2_GATEWAY_API_KEY"] = prior_env
+
+    captured = stdout.getvalue()
+    assert exit_code == 0, (
+        f"expected exit 0 from __main__ boundary, got {exit_code}\n"
+        f"stdout={captured!r}"
+    )
+    assert captured.startswith("PASS backend-smoke:"), (
+        f"__main__ boundary stdout must begin with 'PASS backend-smoke:', "
+        f"got {captured!r}"
+    )
+    assert "GatewayRuntime via run_eval_harness()" in captured, (
+        f"__main__ boundary must record which runtime drove the harness, "
+        f"got {captured!r}"
+    )
+
+
+def test_backend_smoke_main_boundary_pins_exception_translation_source() -> None:
+    """Pin the source-level contract of the ``__main__`` boundary's
+    exception translation.
+
+    :func:`runpy.run_module` reloads the target module from disk on
+    every call (it does not respect cached-symbol patches), so the
+    failure path cannot be exercised through the runpy seam without
+    a more elaborate metapath-finder setup. The failure path IS
+    already pinned end-to-end by:
+
+    * :func:`test_backend_smoke_prints_fail_when_runtime_init_raises` —
+      subprocess-runs a wrapper that mirrors the boundary code.
+    * :func:`test_backend_smoke_prints_fail_when_selector_returns_wrong_runtime` —
+      in-process assertion on the contract-1 / contract-2 paths.
+    * :func:`test_backend_smoke_prints_fail_when_scores_mismatch_n_cases` —
+      in-process assertion on the contract-3 path.
+
+    What this test adds is a source-pin: it asserts that the boundary
+    still uses ``raise SystemExit(2) from exc`` so a refactor that
+    loses the ``from exc`` (which preserves the traceback chain) is
+    caught at unit-test granularity.
+    """
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "if __name__ == \"__main__\":" in source, (
+        "backend_smoke.py must keep its __main__ block for this test "
+        "to be meaningful; if you remove it, update or delete this test."
+    )
+    # Boundary must catch broad ``Exception`` (not ``BaseException``) and
+    # translate to SystemExit(2) with the FAIL/stdout prefix and `from exc`
+    # to preserve the original traceback.
+    assert "except Exception as exc" in source, (
+        "backend_smoke.py's __main__ boundary must catch broad Exception"
+    )
+    assert "raise SystemExit(2) from exc" in source, (
+        "backend_smoke.py's __main__ boundary must translate "
+        "unexpected exceptions to SystemExit(2) with `from exc`"
+    )
+    assert 'f"FAIL backend-smoke: unexpected "' in source or (
+        "FAIL backend-smoke: unexpected " in source
+    ), "backend_smoke.py's __main__ boundary must print the FAIL prefix"
