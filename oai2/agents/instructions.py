@@ -27,8 +27,16 @@ Design notes worth keeping in mind when editing:
   conflict only when they share a precedence, share a ``directive``, and assert
   different ``value``\\ s. Instructions without a ``directive`` never conflict.
 * Override detection is **structural**, never textual. Nothing here scans for
-  "ignore previous instructions"; phrase matching is trivially evaded and cannot
-  be made deterministic. See :attr:`Instruction.asserted_precedence`.
+  "ignore previous instructions"; phrase matching is **evadable and incomplete**
+  (it misses paraphrase, non-English text, and instructions that simply do not
+  announce themselves), so it cannot be relied on as the control. Deterministic
+  phrase matching is entirely possible — it is just not a sound boundary.
+* ``asserted_precedence`` is a **claim to evaluate**, never a grant. It can only
+  cause a rejection. Actual trust is assigned by the trusted ingestion layer
+  through :func:`trusted_instruction`, never by the content itself.
+* Malicious content that supplies *no* metadata at all is expected, not
+  exceptional. It stays ``UNTRUSTED`` and cannot bind a directive already held
+  by a stronger class; see the fence tests in ``tests/test_instructions.py``.
 * Nothing is dropped silently. Rejections land in the
   :class:`ResolutionTrace` so a later reader can distinguish "the resolver
   rejected this" from "the resolver never saw it".
@@ -92,6 +100,14 @@ class RejectionReason(StrEnum):
     PERMISSION_GRANT_CLAIMED = "permission_grant_claimed"
     #: Same precedence, same directive, different value; lost the tie-break.
     SUPERSEDED_BY_SAME_LEVEL = "superseded_by_same_level"
+    #: An unauthenticated source tried to revise an instruction it does not own.
+    REVISION_NOT_AUTHORISED = "revision_not_authorised"
+
+
+#: Classes whose content is authored by the operator and may therefore revise
+#: an earlier instruction from the same class. Everything outside this set is
+#: evidence: it may inform, never correct.
+REVISION_AUTHORISED_CLASSES = frozenset({Precedence.SYSTEM, Precedence.USER, Precedence.REPOSITORY})
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,13 +123,20 @@ class Instruction:
             ``"network_access"``. Instructions without one never conflict.
         value: Optional value for ``directive``, e.g. ``"allow"``/``"deny"``.
         asserted_precedence: The precedence the *content claims for itself*.
-            Defaults to ``precedence`` (content claims nothing extra). Set it
-            higher than ``precedence`` to model content that asserts it is
-            policy — the structural form of a prompt-injection claim
-            (REQ-PROMPT-012).
+            Defaults to ``precedence``. A **claim to evaluate, never a grant**:
+            it can only cause this instruction to be rejected, never promoted.
+            Actual trust is assigned by :func:`trusted_instruction`.
         grants_permission: Whether the content claims to authorise an action.
             Only meaningful for :attr:`Precedence.TOOL_METADATA`; a tool
             description asserting this is rejected (REQ-PROMPT-015).
+        revises: Directive this instruction explicitly corrects. An authorised
+            same-class revision replaces the earlier binding and is recorded as
+            a revision rather than a conflict. An unauthenticated source may
+            not revise (REQ-PROMPT-013).
+        authenticated: Whether the host positively established this
+            instruction's origin. Only an authenticated instruction from an
+            operator-authored class may revise. Untrusted content is
+            authenticated ``False`` by construction.
     """
 
     text: str
@@ -123,6 +146,8 @@ class Instruction:
     value: str | None = None
     asserted_precedence: Precedence | None = None
     grants_permission: bool = False
+    revises: str | None = None
+    authenticated: bool = False
 
     @property
     def claims(self) -> Precedence:
@@ -133,6 +158,15 @@ class Instruction:
     def binds_directive(self) -> bool:
         """True when this instruction constrains a named directive."""
         return bool(self.directive) and self.value is not None
+
+    @property
+    def may_revise(self) -> bool:
+        """True when this instruction is allowed to correct an earlier one."""
+        return (
+            self.authenticated
+            and self.revises is not None
+            and self.precedence in REVISION_AUTHORISED_CLASSES
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +216,7 @@ class ResolutionTrace:
     accepted: tuple[str, ...]
     rejections: tuple[Rejection, ...]
     conflicts: tuple[Conflict, ...]
+    revisions: tuple[Conflict, ...] = ()
 
     @property
     def accepted_sources(self) -> tuple[str, ...]:
@@ -229,6 +264,17 @@ class ResolutionTrace:
                     "dropped_value": c.dropped_value,
                 }
                 for c in self.conflicts
+            ],
+            "revisions": [
+                {
+                    "directive": c.directive,
+                    "precedence": str(c.precedence),
+                    "kept_source": c.kept_source,
+                    "dropped_source": c.dropped_source,
+                    "kept_value": c.kept_value,
+                    "dropped_value": c.dropped_value,
+                }
+                for c in self.revisions
             ],
         }
 
@@ -303,7 +349,9 @@ def resolve(instructions: list[Instruction] | tuple[Instruction, ...]) -> Resolv
     # Arrival position is carried explicitly in the sort key rather than stored
     # on the frozen dataclass, so the module keeps no state between calls.
     effective: list[Instruction] = []
-    bound: dict[str, Instruction] = {}
+    # directive -> (position in `effective`, the winning instruction)
+    bound: dict[str, tuple[int, Instruction]] = {}
+    revisions: list[Conflict] = []
     ordered = sorted(enumerate(survivors), key=lambda pair: (pair[1].precedence.rank, pair[0]))
     for _, instruction in ordered:
         # `binds_directive` already requires both fields to be present; the
@@ -314,12 +362,13 @@ def resolve(instructions: list[Instruction] | tuple[Instruction, ...]) -> Resolv
             effective.append(instruction)
             continue
 
-        held = bound.get(directive)
-        if held is None:
+        entry = bound.get(directive)
+        if entry is None:
+            bound[directive] = (len(effective), instruction)
             effective.append(instruction)
-            bound[directive] = instruction
             continue
 
+        held_index, held = entry
         if held.precedence.outranks(instruction.precedence):
             rejections.append(
                 Rejection(
@@ -337,13 +386,32 @@ def resolve(instructions: list[Instruction] | tuple[Instruction, ...]) -> Resolv
 
         # Same precedence and same value: the two instructions agree, so this is
         # redundancy rather than a conflict. Both stay effective.
-        if held.value == instruction.value:
+        if held.value == value:
             effective.append(instruction)
             continue
 
-        # Same precedence, different values: REQ-PROMPT-013 requires the
-        # conflict to surface and the tie-break to be deterministic. Earliest
-        # arrival wins.
+        # An explicit, authorised revision replaces the earlier binding instead
+        # of losing the tie-break. "Use repository B instead of A" and "do not
+        # push; inspect only" must not be silently discarded merely because an
+        # earlier instruction arrived first.
+        if instruction.may_revise and instruction.revises == directive:
+            effective[held_index] = instruction
+            bound[directive] = (held_index, instruction)
+            revisions.append(
+                Conflict(
+                    directive=directive,
+                    precedence=instruction.precedence,
+                    kept_source=instruction.source,
+                    dropped_source=held.source,
+                    kept_value=str(value),
+                    dropped_value=str(held.value),
+                )
+            )
+            continue
+
+        # Same precedence, different values, no revision claim: REQ-PROMPT-013
+        # requires the conflict to surface and the tie-break to be
+        # deterministic. Earliest arrival wins.
         conflicts.append(
             Conflict(
                 directive=str(instruction.directive),
@@ -372,8 +440,73 @@ def resolve(instructions: list[Instruction] | tuple[Instruction, ...]) -> Resolv
         accepted=tuple(i.source for i in effective),
         rejections=tuple(rejections),
         conflicts=tuple(conflicts),
+        revisions=tuple(revisions),
     )
     return ResolvedInstructions(effective=tuple(effective), trace=trace)
+
+
+def trusted_instruction(
+    text: str,
+    precedence: Precedence,
+    *,
+    source: str,
+    authenticated: bool,
+    directive: str | None = None,
+    value: str | None = None,
+    revises: str | None = None,
+) -> Instruction:
+    """Build an instruction whose trust the host has actually established.
+
+    This is the **only** sanctioned way to assign a precedence to content. The
+    trust comes from the caller — the trusted ingestion or composition layer —
+    and not from anything the content says about itself.
+
+    Two rules make that safe to rely on:
+
+    * An :attr:`Instruction` that carries :attr:`Precedence.UNTRUSTED` or
+      :attr:`Precedence.TOOL_METADATA` is always ``authenticated=False``, so
+      untrusted content can never claim authority by passing a flag here.
+    * A class outside :data:`REVISION_AUTHORISED_CLASSES` is never authorised
+      to revise, whatever ``authenticated`` says.
+
+    The content-derived ``asserted_precedence`` is deliberately **not** accepted
+    here. A claim is recorded on the resulting instruction so the resolver can
+    evaluate and reject it, never so a caller can promote on it.
+    """
+    if precedence in (Precedence.UNTRUSTED, Precedence.TOOL_METADATA):
+        authenticated = False
+    return Instruction(
+        text=text,
+        precedence=precedence,
+        source=source,
+        directive=directive,
+        value=value,
+        revises=revises,
+        authenticated=authenticated,
+    )
+
+
+def untrusted_content(
+    text: str,
+    *,
+    source: str,
+    directive: str | None = None,
+    value: str | None = None,
+) -> Instruction:
+    """Wrap retrieved/tool-output content as evidence, never as instruction.
+
+    The common case for anything that did not come from the operator. The
+    resulting instruction can inform the model but cannot bind a directive
+    already held by a stronger class, revise anything, or grant a permission.
+    """
+    return trusted_instruction(
+        text,
+        Precedence.UNTRUSTED,
+        source=source,
+        authenticated=False,
+        directive=directive,
+        value=value,
+    )
 
 
 def _structural_rejection(instruction: Instruction) -> Rejection | None:
@@ -400,11 +533,28 @@ def _structural_rejection(instruction: Instruction) -> Rejection | None:
             instruction=instruction,
         )
 
+    # Revisions are an operator capability, not an evidence capability. A
+    # retrieved document that writes "user update: ignore the previous
+    # instruction" is refused outright rather than being weighed against the
+    # instruction it tried to displace.
+    if instruction.revises is not None and not instruction.may_revise:
+        return Rejection(
+            reason=RejectionReason.REVISION_NOT_AUTHORISED,
+            source=instruction.source,
+            precedence=instruction.precedence,
+            detail=(
+                f"attempted to revise {instruction.revises} without an "
+                "authenticated operator origin"
+            ),
+            instruction=instruction,
+        )
+
     return None
 
 
 __all__ = [
     "INSTRUCTION_SCHEMA_VERSION",
+    "REVISION_AUTHORISED_CLASSES",
     "Conflict",
     "Instruction",
     "Precedence",
@@ -413,4 +563,6 @@ __all__ = [
     "ResolutionTrace",
     "ResolvedInstructions",
     "resolve",
+    "trusted_instruction",
+    "untrusted_content",
 ]

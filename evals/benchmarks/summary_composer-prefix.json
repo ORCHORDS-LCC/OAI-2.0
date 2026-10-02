@@ -1,0 +1,167 @@
+{
+  "script": "bench_composer_prefix",
+  "issue": "#186",
+  "config": {
+    "turns": 6,
+    "model": "(none)",
+    "tokenizer": "whitespace counter (deterministic, not a model tokenizer)",
+    "composer_version": "1.0",
+    "instruction_schema_version": "1.0",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.7"
+  },
+  "prefix_identity_stable_across_turns": true,
+  "distinct_prefix_digests": 1,
+  "rows": [
+    {
+      "turn": 1,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 106,
+      "effective_prompt_bytes": 722,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": false,
+      "rehydrated": true,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        69,
+        361
+      ]
+    },
+    {
+      "turn": 2,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 123,
+      "effective_prompt_bytes": 836,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": true,
+      "rehydrated": false,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        113,
+        69,
+        361
+      ]
+    },
+    {
+      "turn": 3,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 123,
+      "effective_prompt_bytes": 836,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": true,
+      "rehydrated": false,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        113,
+        69,
+        361
+      ]
+    },
+    {
+      "turn": 4,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 123,
+      "effective_prompt_bytes": 836,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": true,
+      "rehydrated": false,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        113,
+        69,
+        361
+      ]
+    },
+    {
+      "turn": 5,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 123,
+      "effective_prompt_bytes": 836,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": true,
+      "rehydrated": false,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        113,
+        69,
+        361
+      ]
+    },
+    {
+      "turn": 6,
+      "prefix_digest": "b0629a98d2a0a2f15421ab2d6b582cc12e7d322af054efd53d32981c1d60d8c6",
+      "prefix_tokens": 40,
+      "effective_prompt_tokens": 123,
+      "effective_prompt_bytes": 836,
+      "fallback_tokens_no_ref": 256,
+      "delta_applied": true,
+      "rehydrated": false,
+      "compact_refs": [
+        {
+          "ref_id": "lesson-zero-rows",
+          "version": "3"
+        }
+      ],
+      "segment_chars": [
+        164,
+        125,
+        113,
+        69,
+        361
+      ]
+    }
+  ],
+  "composition_overhead_ms": 0.308,
+  "compact_ref_saving_percent": {
+    "min": 51.953,
+    "max": 58.594
+  },
+  "model_bound_measurements": {
+    "ttft_ms": null,
+    "prefill_ms": null,
+    "end_to_end_ms": null,
+    "first_useful_tool_action_ms": null,
+    "pending_reason": "Not measured. TTFT/prefill/end-to-end require the target Mac and the MLX hot runtime; the #240 owner is running measurements there. Interfering would corrupt their rows, so these are recorded as pending rather than estimated."
+  },
+  "note": "A shorter wire payload does not by itself prove less prefill. The rows above establish composition shape and stable prefix identity; the prefill consequence is #240's measurement to make."
+}

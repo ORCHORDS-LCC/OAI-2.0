@@ -49,13 +49,16 @@ applied silently (REQ-PROMPT-013).
 Every instruction also carries the precedence that the *content claims for
 itself*. This is the load-bearing idea, and it is deliberately structural
 rather than textual: the resolver never scans for phrases like "ignore previous
-instructions", because phrase matching is trivially evaded and cannot be made
-deterministic.
+instructions", because phrase matching is **evadable and incomplete**. It misses
+paraphrase, non-English text, and — the important case — instructions that
+simply do not announce themselves. Deterministic phrase matching is entirely
+possible; it is just not a sound boundary.
 
 Three rejections follow from the structure:
 
 1. `privilege_escalation` — content at a lower class claims a higher
-   `asserted_precedence` (REQ-PROMPT-012).
+   `asserted_precedence` (REQ-PROMPT-012). A **claim to evaluate, never a
+   grant**: it can only cause a rejection, never a promotion.
 2. `override_attempt` — content re-asserts a `directive` already bound by a
    strictly higher class (REQ-PROMPT-012).
 3. `permission_grant_claimed` — `TOOL_METADATA` declares
@@ -80,10 +83,22 @@ stored trace identifies the rules that produced it (REQ-PROMPT-016).
   precedence explicit and auditable. The real boundary for tool access remains
   the host-side tool policy, matching the existing statement in
   `oai2/agents/agent_loop.py` that the note "is identity branding only".
-- **An attacker who never claims elevated precedence** is still handled: it is
-  classified `UNTRUSTED` and cannot bind a directive already held by a higher
-  class. `asserted_precedence` is defence in depth on top of that, not the
-  mechanism that carries it.
+- **An attacker who never claims elevated precedence** is the expected case,
+  not an edge case. It is classified `UNTRUSTED` and cannot bind a directive
+  already held by a higher class, cannot revise anything, and cannot grant a
+  permission. `asserted_precedence` is defence in depth on top of that, not the
+  mechanism that carries it. `tests/test_instructions.py` covers the
+  no-metadata case explicitly.
+- **Trust is assigned by the host, never by the content.** `Instruction` is not
+  the sanctioned constructor: `trusted_instruction()` is, and it forces
+  `authenticated=False` for `UNTRUSTED` and `TOOL_METADATA` so evidence cannot
+  claim authority by passing a flag.
+- **Revisions are an operator capability.** `revises` on an authenticated
+  `SYSTEM`/`USER`/`REPOSITORY` instruction replaces the earlier binding and is
+  recorded; `revises` from anything else is refused as
+  `revision_not_authorised`. This is what stops "use repository B instead of A"
+  from being discarded because an earlier instruction arrived first — and what
+  stops a retrieved paragraph imitating that correction.
 - **No NLP.** Nothing here infers intent, sentiment, or meaning. If a future
   requirement needs that, it belongs in a different component with its own
   determinism story.
@@ -109,5 +124,40 @@ the acceptance criterion asks for:
 Determinism is asserted directly: resolving the same input twice yields equal
 traces, and resolving a permuted-but-equivalent input yields the same
 precedence outcome.
+
+## Composer (WI-PROMPT-002 / #186)
+
+`oai2/agents/composer.py` builds on this model. Layout, always:
+
+```
+[system policy]        stable, versioned, cacheable
+[project guidance]     stable, versioned, cacheable
+[user goal]            current turn
+[state delta]          only against compatible retained state
+[fenced evidence]      tail, data not instruction
+```
+
+- The prefix identity is a digest over the exact head text **and** every version
+  axis (policy, tools, project, composer). It is forwarded as
+  `InferenceRequest.prefix_digest`, which is what #240's `PrefixKVCache` keys
+  on — the composer supplies identity, the runtime owns KV state, and neither
+  duplicates the other. `SessionCompatibilityKey` is reused rather than a
+  second identity scheme invented.
+- A delta is emitted **only** when retained state matches the exact prefix
+  digest and composer version. Otherwise the composer rehydrates in full. It
+  never assumes a server kept an earlier request's context.
+- Compact references replace a body only when the resolver can return it; a
+  missing or version-mismatched target falls back to the inline body, because a
+  dangling `[ref:...]` would be silent context loss.
+- Evidence is a `user`-role tail message inside an explicit fence, never a
+  `system` message. `assert_template_safe()` runs on every composition and
+  raises on a system message after the first non-system turn — the shape that
+  took `api.orchords.com` down once already.
+
+Measured by `scripts/bench_composer_prefix.py`. That script reports composition
+shape and prefix identity only; TTFT, prefill and end-to-end rows are emitted as
+`null` with a `pending_reason`, because they need the target Mac and the #240
+owner is measuring there. A shorter wire payload is not by itself evidence of
+less prefill.
 
 **ORCHORDS — BUILD DIFFERENT.**

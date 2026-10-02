@@ -21,6 +21,9 @@ Public surface
   :class:`Precedence` — instruction precedence, trust classes and conflict
   resolution (#185 / ``WI-PROMPT-001``). Pure and deterministic; not yet
   wired into :class:`AgentLoop` (#186).
+- :func:`oai2.agents.composer.compose` / :class:`PrefixSpec` /
+  :class:`Composition` — stable versioned prefix, goal, optional state delta and
+  fenced evidence, with per-segment provenance (#186 / ``WI-PROMPT-002``).
 """
 
 from __future__ import annotations
@@ -39,6 +42,18 @@ from .agent_loop import (
     default_dispatch_policy,
     default_system_prompt,
 )
+from .composer import (
+    COMPOSER_SCHEMA_VERSION,
+    CompactRef,
+    Composition,
+    CompositionProvenance,
+    PrefixSpec,
+    RefResolver,
+    Segment,
+    SegmentKind,
+    assert_template_safe,
+    compose,
+)
 from .instructions import (
     INSTRUCTION_SCHEMA_VERSION,
     Conflict,
@@ -49,18 +64,28 @@ from .instructions import (
     ResolutionTrace,
     ResolvedInstructions,
     resolve,
+    trusted_instruction,
+    untrusted_content,
 )
 from .learning import extract_lesson, record_failure, sanitize_text
 from .orchestration import AgentSpec, Orchestrator, OrchestratorContext
 
 __all__ = [
+    "COMPOSER_SCHEMA_VERSION",
     "AgentLoop",
     "AgentRun",
     "AgentStep",
     "AgentSpec",
+    "CompactRef",
+    "Composition",
+    "CompositionProvenance",
     "Conflict",
     "INSTRUCTION_SCHEMA_VERSION",
     "Instruction",
+    "PrefixSpec",
+    "RefResolver",
+    "Segment",
+    "SegmentKind",
     "Orchestrator",
     "OrchestratorContext",
     "Precedence",
@@ -68,10 +93,12 @@ __all__ = [
     "RejectionReason",
     "ResolvedInstructions",
     "ResolutionTrace",
+    "assert_template_safe",
     "build_default_gateway",
     "build_default_runtime",
     "default_dispatch_policy",
     "default_system_prompt",
+    "compose",
     "default_tool_definitions",
     "execute_tool",
     "extract_lesson",
@@ -79,4 +106,6 @@ __all__ = [
     "resolve",
     "sanitize_text",
     "to_openai_wire",
+    "trusted_instruction",
+    "untrusted_content",
 ]
