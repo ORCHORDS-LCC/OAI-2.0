@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Versioned claim-evidence policy primitives for WP-75 claim taxonomy/evidence binding work.
 - Admission-to-safe-batching scheduler bridge for WP-76/WP-25 integration.
 - Request-surface binding for the safe session-batching scheduler: `oai2.runtime.service_binding` composes the WP-39 health slice with session/inference protocol routes, client-owned session isolation, exact-compatibility batching, cancellation, and batch/queue/latency metrics (Refs #76).
+- MLX hot runtime with digest-keyed prefix KV-state reuse for WI-PERF-003: `oai2.runtime.MLXHotRuntime` (resident weights, per-request prefill/decode notes, opt-in `PrefixKVCache` with common-prefix matching and hit/miss/invalidation metrics) behind the request surface, with live measured rows (~46× prefill reduction on exact repeats, ~28× on first-sight shared-base prompts) (Refs #240).
 
 - `AsyncCloudflareKnowledgeRuntime` source core combining async D1 reader/writer, R2 content bodies, Vectorize semantic retrieval, and best-effort KV caching with integrity/revision checks.
 - Focused async runtime tests covering source-level put/get/retrieve behavior for the composed Cloudflare knowledge path.
