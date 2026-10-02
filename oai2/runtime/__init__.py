@@ -61,6 +61,7 @@ from .inference import (
     select_runtime_from_env,
 )
 from .local_service import create_local_service_app
+from .mlx_hot_runtime import MLXHotRuntime
 from .model import ModelSpec, discover_default_device, smoke_check
 from .residency import (
     CapacityTrendPoint,
@@ -121,6 +122,7 @@ __all__ = [
     "InferenceResponse",
     "InferenceRuntime",
     "IsolatedSessionRegistry",
+    "MLXHotRuntime",
     "ServiceCompatibility",
     "ServiceHealth",
     "ServiceLifecycle",
