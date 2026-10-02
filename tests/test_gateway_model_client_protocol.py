@@ -117,7 +117,7 @@ def _config() -> GatewayConfig:
     return GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="seam-token-xyz",
-        model="oai-2.0",
+        model="oai-1.2",
         timeout_seconds=5.0,
     )
 
@@ -138,7 +138,7 @@ def _completion_response(content: str = "ok") -> httpx.Response:
         200,
         json={
             "id": "chatcmpl-protocol-test",
-            "model": "oai-2.0",
+            "model": "oai-1.2",
             "choices": [
                 {
                     "index": 0,
