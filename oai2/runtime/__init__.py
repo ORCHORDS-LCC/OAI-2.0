@@ -19,8 +19,10 @@ from .admission import (
 )
 from .admission_scheduler import (
     AdmissionBatchController,
+    AdmissionDecisionTrace,
     AdmissionScheduledRequest,
     AdmissionSchedulerMetrics,
+    AdmissionTelemetry,
 )
 from .gateway_model_client import (
     DEFAULT_MAX_TOKENS,
@@ -57,8 +59,10 @@ from .scheduler import (
 
 __all__ = [
     "AdmissionBatchController",
+    "AdmissionDecisionTrace",
     "AdmissionScheduledRequest",
     "AdmissionSchedulerMetrics",
+    "AdmissionTelemetry",
     "AdmissionAction",
     "AdmissionDecision",
     "AdmissionPolicy",
