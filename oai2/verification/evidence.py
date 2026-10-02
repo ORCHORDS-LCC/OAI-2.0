@@ -6,8 +6,9 @@ support or refute a claim. References ``VERIFICATION_AND_EVIDENCE.md``.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from enum import StrEnum
-from typing import Any
+from typing import Any, Mapping, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,7 +57,7 @@ class EvidenceNode(BaseModel):
     CONFLICTING.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     claim_id: str = Field(min_length=1, max_length=128)
     supporting: tuple[Evidence, ...] = Field(default_factory=tuple)
@@ -89,6 +90,18 @@ class EvidenceNode(BaseModel):
         if self.status is not derived:
             object.__setattr__(self, "status", derived)
         return self
+
+    def model_copy(
+        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
+    ) -> Self:
+        """Copy through validation so derived status stays consistent."""
+        if update is None:
+            return super().model_copy(update=None, deep=deep)
+        payload = self.model_dump(mode="python")
+        if deep:
+            payload = deepcopy(payload)
+        payload.update(update)
+        return type(self).model_validate(payload)
 
     @property
     def net_count(self) -> int:

@@ -201,3 +201,29 @@ def test_evidence_node_lying_status_does_not_survive_truthful_construction() -> 
     )
     assert n.status is EvidenceStatus.CONFLICTING
     assert n.net_count == 0
+
+
+def test_evidence_node_model_copy_rederives_status() -> None:
+    node = EvidenceNode(
+        claim_id="c_copy",
+        supporting=(_evidence("copy_support"),),
+        status=EvidenceStatus.VERIFIED,
+    )
+    copied = node.model_copy(
+        update={"supporting": (), "refuting": (), "status": EvidenceStatus.VERIFIED}
+    )
+    assert copied.status is EvidenceStatus.UNVERIFIED
+    assert copied.supporting == ()
+    assert copied.refuting == ()
+
+
+def test_evidence_node_assignment_rederives_status() -> None:
+    node = EvidenceNode(
+        claim_id="c_assignment",
+        supporting=(_evidence("assignment_support"),),
+        status=EvidenceStatus.VERIFIED,
+    )
+    node.supporting = ()
+    assert node.status is EvidenceStatus.UNVERIFIED
+    node.status = EvidenceStatus.VERIFIED
+    assert node.status is EvidenceStatus.UNVERIFIED
