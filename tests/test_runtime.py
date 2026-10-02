@@ -146,6 +146,20 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
         SchedulerMetrics,
         SessionCompatibilityKey,
     )
+    from oai2.runtime.residency import (
+        CapacityTrendPoint,
+        ResidencyAccountant,
+        ResidencyOutcome,
+        ResidencyRecord,
+        ResidencySummary,
+    )
+    from oai2.runtime import (
+        CapacityTrendPoint as ExportedCapacityTrendPoint,
+        ResidencyAccountant as ExportedResidencyAccountant,
+        ResidencyOutcome as ExportedResidencyOutcome,
+        ResidencyRecord as ExportedResidencyRecord,
+        ResidencySummary as ExportedResidencySummary,
+    )
 
     assert ExportedInferenceRequest is InferenceRequest
     assert ExportedInferenceResponse is InferenceResponse
@@ -186,6 +200,12 @@ def test_runtime_inference_model_scheduler_exports_from_runtime_package() -> Non
     assert ExportedDEFAULT_MAX_TOKENS is DEFAULT_MAX_TOKENS
     assert ExportedDEFAULT_TEMPERATURE is DEFAULT_TEMPERATURE
     assert ExportedGatewayModelClient is GatewayModelClient
+    # residency/capacity accounting exports added at #232
+    assert ExportedCapacityTrendPoint is CapacityTrendPoint
+    assert ExportedResidencyAccountant is ResidencyAccountant
+    assert ExportedResidencyOutcome is ResidencyOutcome
+    assert ExportedResidencyRecord is ResidencyRecord
+    assert ExportedResidencySummary is ResidencySummary
     # inference selector (newly exported at #238 slice chain)
     assert ExportedSelectRuntimeFromEnv is select_runtime_from_env
 
