@@ -6,6 +6,8 @@ Everything else uses the abstract :class:`InferenceRuntime`.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import Status
@@ -61,6 +63,26 @@ def _reset_peak_memory() -> None:
     except Exception:  # pragma: no cover - depends on install
         return
     mx.reset_peak_memory()
+
+
+def _prefill_tokens(model: Any, cache_layers: Any, token_ids: list[int]) -> None:
+    """Prefill ``token_ids`` into ``cache_layers`` without generating.
+
+    Package-internal helper so sibling runtime modules that must not
+    import ``mlx`` directly can drive explicit prefill (e.g. to snapshot
+    a prefix's KV state); ``model.py`` stays the single sanctioned MLX
+    importer in the runtime package.
+    """
+    if not token_ids:
+        return
+    try:
+        import mlx.core as mx  # local import: keep this module dependency-free at parse time.
+    except Exception:  # pragma: no cover - depends on install
+        return
+    model(mx.array([token_ids]), cache=cache_layers)
+    first_state = cache_layers[0].state
+    if isinstance(first_state, tuple) and first_state:
+        mx.eval(first_state[0])
 
 
 def smoke_check() -> tuple[bool, str]:

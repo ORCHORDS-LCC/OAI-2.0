@@ -31,7 +31,8 @@ from .inference import (
     InferenceResponse,
     InferenceRuntime,
 )
-from .model import ModelSpec, _reset_peak_memory, discover_default_device
+from .model import ModelSpec, _prefill_tokens, _reset_peak_memory, discover_default_device
+from .prefix_kv_cache import PrefixKVCache
 
 
 class MLXHotRuntime(InferenceRuntime):
@@ -46,12 +47,23 @@ class MLXHotRuntime(InferenceRuntime):
 
     STATUS = Status.EXPERIMENTAL
 
-    def __init__(self, spec: ModelSpec, *, model_id: str) -> None:
+    def __init__(
+        self,
+        spec: ModelSpec,
+        *,
+        model_id: str,
+        prefix_cache: PrefixKVCache | None = None,
+    ) -> None:
         super().__init__(spec)
         self._model_id = model_id
         self._model: Any = None
         self._tokenizer: TokenizerWrapper | None = None
         self._load_seconds: float | None = None
+        # Opt-in digest-keyed prefix KV-state reuse (WI-PERF-003 config D).
+        # When enabled, repeated prompts whose token sequence extends a
+        # stored prefix prefill only the divergent remainder.
+        self._prefix_cache = prefix_cache
+        self._kv_layers: Any | None = None
 
     def load(self) -> None:
         if self._model is not None and self._tokenizer is not None:
@@ -64,6 +76,10 @@ class MLXHotRuntime(InferenceRuntime):
         self._model = result[0]
         self._tokenizer = result[1]
         self._load_seconds = time.perf_counter() - t0
+        if self._prefix_cache is not None and self._kv_layers is None:
+            from mlx_lm.models.cache import make_prompt_cache
+
+            self._kv_layers = make_prompt_cache(self._model)
 
     def generate(self, request: InferenceRequest) -> InferenceResponse:
         if self._model is None or self._tokenizer is None:
@@ -97,14 +113,31 @@ class MLXHotRuntime(InferenceRuntime):
         _reset_peak_memory()
         prompt_tokens = len(tokenizer.encode(prompt_str))
         t_prefill_start = time.perf_counter()
+        prefix_matched: int | None = None
+        gen_input: str | list[int] = prompt_str
+        cache_arg: Any = None
+        if (
+            self._prefix_cache is not None
+            and self._kv_layers is not None
+            and request.prefix_digest is not None
+        ):
+            ids = tokenizer.encode(prompt_str)
+            prefix_matched = self._prefix_cache.lookup_and_apply(ids, self._kv_layers)
+            remainder = ids[prefix_matched:]
+            if len(remainder) > 1:
+                _prefill_tokens(model, self._kv_layers, remainder[:-1])
+                self._prefix_cache.store(ids[:-1], [layer.state for layer in self._kv_layers])
+            gen_input = remainder[-1:]
+            cache_arg = self._kv_layers
         text = ""
         tokens_generated = 0
         first_token_at: float | None = None
         for response in stream_generate(
             model,
             tokenizer,
-            prompt=prompt_str,
+            prompt=gen_input,
             max_tokens=request.max_tokens,
+            prompt_cache=cache_arg,
         ):
             if first_token_at is None:
                 first_token_at = time.perf_counter()
@@ -128,6 +161,8 @@ class MLXHotRuntime(InferenceRuntime):
         ]
         if decode_tps is not None:
             notes.append(f"decode_tps={decode_tps:.2f}")
+        if prefix_matched is not None:
+            notes.append(f"prefix_matched={prefix_matched}")
 
         return InferenceResponse(
             text=text,
@@ -146,9 +181,15 @@ class MLXHotRuntime(InferenceRuntime):
     def load_seconds(self) -> float | None:
         return self._load_seconds
 
+    @property
+    def prefix_cache(self) -> PrefixKVCache | None:
+        """The opt-in digest-keyed prefix KV-state cache, if enabled."""
+        return self._prefix_cache
+
     def close(self) -> None:
         self._model = None
         self._tokenizer = None
+        self._kv_layers = None
 
 
 __all__ = ["MLXHotRuntime"]

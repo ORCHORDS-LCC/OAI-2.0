@@ -17,6 +17,7 @@ import uvicorn
 from oai2.runtime import (
     AccessPolicy,
     IsolatedSessionRegistry,
+    PrefixKVCache,
     SafeBatchScheduler,
     ServiceCompatibility,
     ServiceLifecycle,
@@ -40,7 +41,11 @@ def main(argv: list[str] | None = None) -> int:
 
     model_id = args.model
     spec = ModelSpec(name=model_id)
-    runtime = MLXHotRuntime(spec, model_id=model_id)
+    runtime = MLXHotRuntime(
+        spec,
+        model_id=model_id,
+        prefix_cache=PrefixKVCache(max_entries=64),
+    )
     runtime.load()
 
     compatibility = ServiceCompatibility(

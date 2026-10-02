@@ -9,6 +9,7 @@ import pytest
 from oai2.runtime.inference import InferenceRequest
 from oai2.runtime.mlx_hot_runtime import MLXHotRuntime
 from oai2.runtime.model import ModelSpec
+from oai2.runtime.prefix_kv_cache import PrefixKVCache
 
 
 def test_mlx_hot_runtime_unloaded_state() -> None:
@@ -79,3 +80,28 @@ def test_mlx_hot_runtime_load_and_generate() -> None:
         assert "decode_seconds=" in joined
     finally:
         runtime.close()
+
+
+def test_prefix_cache_reuses_state_for_identical_prompt() -> None:
+    model_id = _smoke_model_id()
+    runtime = MLXHotRuntime(
+        ModelSpec(name=model_id),
+        model_id=model_id,
+        prefix_cache=PrefixKVCache(max_entries=8),
+    )
+    runtime.load()
+    request = InferenceRequest(
+        prompt="Count: one two three four five. " * 4,
+        max_tokens=8,
+        prefix_digest="test-digest",
+    )
+    first = runtime.generate(request)
+    second = runtime.generate(request)
+    assert first.text == second.text
+    joined = "\n".join(second.notes)
+    assert "prefix_matched=" in joined
+    assert "prefix_matched=0" not in joined
+    metrics = runtime.prefix_cache.metrics
+    assert metrics.misses == 1
+    assert metrics.hits == 1
+    runtime.close()
