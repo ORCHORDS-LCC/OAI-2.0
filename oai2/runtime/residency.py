@@ -163,7 +163,25 @@ class ResidencyAccountant:
         _non_negative_float(required_memory_gb, "required_memory_gb")
         _non_negative_float(enqueued_at_ms, "enqueued_at_ms")
         _non_negative_float(now_ms, "now_ms")
-        if request_id in self._records:
+        existing = self._records.get(request_id)
+        if existing is not None:
+            # A queued request re-decided as ADMIT promotes in place; only
+            # genuinely duplicated decisions are rejected.
+            if existing.outcome is ResidencyOutcome.PENDING and decision is AdmissionAction.ADMIT:
+                updated = ResidencyRecord(
+                    request_id=existing.request_id,
+                    mode=existing.mode,
+                    swarm_lanes=existing.swarm_lanes,
+                    required_memory_gb=existing.required_memory_gb,
+                    enqueued_at_ms=existing.enqueued_at_ms,
+                    decision=decision,
+                    decision_reason=reason,
+                    admitted_at_ms=float(now_ms),
+                    outcome=ResidencyOutcome.ADMITTED,
+                )
+                self._records[request_id] = updated
+                self._admitted_total += 1
+                return updated
             raise ValueError(f"request already tracked: {request_id}")
 
         if decision is AdmissionAction.ADMIT:
