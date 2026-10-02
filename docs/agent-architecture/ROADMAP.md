@@ -2,7 +2,7 @@
 
 _Reconciliation baseline: `c4a1f6f6134bd18668b8a621a2c0f0f89708e5e7` (source state before this documentation commit)._
 
-_Last reviewed: 2026-10-02._
+_Last reviewed: 2026-10-02 (rev 37, end-of-slice — doc-follow-up slice; full pytest count 1571 verified at `f0efa44`)._
 
 Stages are evidence gates, not delivery promises. The detailed dependency-ordered implementation map lives in [GitHub Issue #1](https://github.com/ORCHORDS-LCC/OAI-2.0/issues/1).
 
@@ -169,6 +169,7 @@ A runner-free local preflight exists at `scripts/verify.py` and includes depende
 - **#20 / WI-MIG-001 is closed** for q-pipe compatibility; the real migration pilot remains #21.
 - **#214 / WI-GC-001 is closed** for non-destructive R2 liveness reconciliation; #215/#233 own destructive-sweep/concurrency completion.
 - **Cloud-touching test surface (slices 18-22)**: 176 tests across 11 files; all local `scripts/verify.py` gates green; first live bench evidence at `evals/benchmarks/summary_gateway-orchordsai-m3.json` (plus 2 per-run files) committed via `scripts/bench.py --backend=gateway` → `select_runtime_from_env()` → `GatewayRuntime` → `api.orchords.com` end-to-end path. All three CLI entry points (`scripts/backend_smoke.py`, `scripts/gateway_smoke.py`, `scripts/bench.py`) now have runpy-driven `__main__` boundary coverage so a future refactor that moves exit translation into `main()` cannot silently regress the seam.
+- **Full pytest surface (post-slice-36)**: 1571 tests passing under `scripts/verify.py` at `f0efa44`. Slices 23-36 added 1095 non-cloud-touching tests (sweep, abstraction, GC lease + GC deletion D1 + GC, worker transport, evidence_package render + metrics); the cloud-touching subset (176) is unchanged. Cloud-touching slices remain slices 12-22 (selector + harness + smoke + bench + Protocol conformance + retrieval validation + runpy-driven `__main__` boundaries).
 
 Knowledge-store reads verify stored content hashes/provenance and fail closed on missing/tampered bodies/corrupted cache records.
 
