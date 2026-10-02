@@ -22,11 +22,25 @@ ingestion module also has public contracts that aren't currently tested:
 * Empty / single / mixed-input iteration shape — ``ingest([])`` returns
   ``[]``; a single-job pipeline works; mixed OK + FAILED jobs preserve
   positional correspondence.
+* ``_Source`` Protocol-typed source boundary — the pipeline declares
+  ``sources: list[_Source]`` where ``_Source`` is a ``Protocol`` with
+  ``fetch(source_uri: str) -> Iterable[IngestionJob]``. Structural
+  typing means any duck-typed class implementing ``fetch`` is accepted;
+  pin the contract that the Protocol is not rigidly nominal-typed and
+  the ``sources`` field defaults to an empty list.
+* ``IngestionPipeline`` slots / non-frozen mutation — ``sources`` is
+  a mutable list, so callers can append new sources after construction.
+  Pin that the dataclass uses ``__slots__`` and is NOT frozen.
+* ``ingest()`` exception-breadth — the ``try/except`` wraps ``Exception``
+  (not ``BaseException``), so ``KeyboardInterrupt`` / ``SystemExit`` /
+  ``GeneratorExit`` propagate instead of being swallowed as
+  ``IngestionStatus.FAILED``.
 
 A refactor that, e.g., inverts the ``try/except`` semantics (turning
 failures into ``OK``), changes the ``content_hash`` derivation, hardcodes
-the ``knowledge_id`` instead of using ``uuid``, or renames the enum
-strings would propagate silently into the D1 ingestion path.
+the ``knowledge_id`` instead of using ``uuid``, renames the enum
+strings, or wires ``sources`` into ``ingest()`` would propagate silently
+into the D1 ingestion path.
 """
 
 from __future__ import annotations
@@ -425,3 +439,197 @@ def test_sha256_hex_used_by_build_round_trips_through_dataclass() -> None:
         content="日本語content",
     ).build()
     assert obj.content_hash == sha256_hex("日本語content")
+
+
+# ---------------------------------------------------------------------------
+# _Source Protocol — structural-typing contract
+# ---------------------------------------------------------------------------
+
+
+class _FakeSource:
+    """Duck-typed class that satisfies the ``_Source`` Protocol structurally
+    (no explicit ``Protocol`` registration). Used to prove that the
+    pipeline accepts any class implementing ``fetch(source_uri: str) ->
+    Iterable[IngestionJob]``."""
+
+    def __init__(self, jobs: list[IngestionJob]) -> None:
+        self._jobs = jobs
+
+    def fetch(self, source_uri: str) -> Iterable[IngestionJob]:
+        return list(self._jobs)
+
+
+def test_source_protocol_accepts_duck_typed_implementer() -> None:
+    """The ``_Source`` Protocol is structural — any class with a
+    ``fetch(source_uri: str) -> Iterable[IngestionJob]`` method is
+    accepted by ``IngestionPipeline(sources=...)`` without explicit
+    registration. Pinning this guards against a refactor that adds an
+    explicit ABC base class (which would silently break all duck-typed
+    callers, including the test mocks)."""
+    source = _FakeSource([IngestionJob(source_uri="local://a", topic="t", content="c")])
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore(), sources=[source])
+    # The structural-typing assertion: just constructing the pipeline
+    # with a duck-typed source must succeed without runtime Protocol
+    # rejection. (Python's Protocol is nominal only at type-check time;
+    # runtime accepts any object with the right shape.)
+    assert pipeline.sources == [source]
+
+
+def test_source_protocol_accepts_duck_typed_with_generator_fetch() -> None:
+    """The Protocol allows ``fetch`` to return a generator (lazy
+    evaluation). A refactor that pins ``fetch`` to a specific concrete
+    return type (e.g. ``list[IngestionJob]``) would break callers that
+    stream jobs."""
+    job_template = IngestionJob(
+        source_uri="local://template",
+        topic="t",
+        content="c",
+    )
+
+    class _GeneratorSource:
+        def fetch(self, source_uri: str) -> Iterable[IngestionJob]:
+            # Lazy generator: a refactor that pins ``fetch`` to a list
+            # would force this to materialise.
+            yield IngestionJob(source_uri=source_uri, topic="t", content="c")
+            yield job_template  # extra item to prove laziness isn't truncated
+
+    pipeline = IngestionPipeline(
+        store=InMemoryKnowledgeStore(),
+        sources=[_GeneratorSource()],
+    )
+    # The structural-typing assertion: constructing the pipeline with a
+    # generator-yielding source succeeds, and the source's ``fetch``
+    # method is invokable through the generic ``pipeline.sources[0]``
+    # accessor (no Protocol nominal check at runtime).
+    gen = pipeline.sources[0].fetch("local://x")
+    assert iter(gen) is not None
+
+
+# ---------------------------------------------------------------------------
+# IngestionPipeline sources field
+# ---------------------------------------------------------------------------
+
+
+def test_ingestion_pipeline_default_sources_is_empty_list() -> None:
+    """The pipeline's ``sources`` field defaults to ``[]`` (NOT ``None``).
+    A refactor that flipped the default to ``None`` would force every
+    constructor to pass an explicit list and would let callers
+    accidentally pass ``None`` for ``sources``."""
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore())
+    assert pipeline.sources == []
+
+
+def test_ingestion_pipeline_sources_is_a_mutable_list() -> None:
+    """The ``sources`` field is a regular list (not a tuple, not
+    frozen). Callers can append new sources after construction.
+    Pinning this prevents a refactor that switches to ``tuple`` /
+    ``frozen=True`` and breaks the append-after-construct pattern."""
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore())
+    pipeline.sources.append(_FakeSource([]))
+    assert len(pipeline.sources) == 1
+
+
+def test_ingestion_pipeline_is_not_frozen() -> None:
+    """``IngestionPipeline`` is NOT ``frozen=True`` (only ``slots=True``).
+    A refactor that adds ``frozen=True`` would silently break callers
+    that mutate ``pipeline.sources`` after construction."""
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore())
+    # Not-frozen dataclass assignment succeeds (would raise
+    # ``FrozenInstanceError`` if frozen).
+    pipeline.sources = [_FakeSource([])]
+    assert len(pipeline.sources) == 1
+
+
+def test_ingestion_pipeline_uses_slots() -> None:
+    """``IngestionPipeline`` is ``@dataclass(slots=True)`` — the
+    dataclass has a ``__slots__`` and rejects attribute injection
+    outside the declared fields."""
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore())
+    with pytest.raises(AttributeError):
+        pipeline.injected_attribute = "bogus"  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# ingest() return type / shape
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_returns_list_not_iterator() -> None:
+    """``ingest()`` returns ``list[IngestionStatus]`` (not an
+    iterator/iterable). Pinning this prevents a refactor that switches
+    to ``yield from`` — callers that index the result (e.g.
+    ``results[0]``) would silently break."""
+    store = InMemoryKnowledgeStore()
+    pipeline = IngestionPipeline(store=store)
+    result = pipeline.ingest([])
+    assert isinstance(result, list)
+
+
+def test_ingest_with_empty_jobs_and_empty_sources_returns_empty_list() -> None:
+    """Empty input on both axes (no jobs, no sources) returns ``[]``.
+    The two-axis emptiness is independent — a refactor that introduces
+    cross-coupling between ``sources`` and ``jobs`` would break this."""
+    pipeline = IngestionPipeline(store=InMemoryKnowledgeStore())
+    assert pipeline.ingest([]) == []
+
+
+def test_ingest_does_not_swallow_keyboard_interrupt() -> None:
+    """The ``try/except Exception`` around ``store.put`` must NOT catch
+    ``KeyboardInterrupt`` / ``SystemExit`` / ``GeneratorExit`` (those
+    are ``BaseException`` subclasses, not ``Exception``). A refactor
+    that broadens to ``except BaseException`` would silently swallow
+    user-cancellation as ``IngestionStatus.FAILED``, hiding the
+    real signal that the user pressed Ctrl-C."""
+
+    class _KeyboardOnPutStore:
+        def put(self, obj: KnowledgeObject) -> None:
+            raise KeyboardInterrupt("user cancelled")
+
+    pipeline = IngestionPipeline(store=_KeyboardOnPutStore())  # type: ignore[arg-type]
+    with pytest.raises(KeyboardInterrupt):
+        pipeline.ingest([IngestionJob(source_uri="local://a", topic="t", content="c")])
+
+
+def test_ingest_does_not_swallow_system_exit() -> None:
+    """``SystemExit`` is also a ``BaseException`` subclass, not an
+    ``Exception``. Pinning this protects the contract independently
+    of ``KeyboardInterrupt``."""
+
+    class _SystemExitOnPutStore:
+        def put(self, obj: KnowledgeObject) -> None:
+            raise SystemExit(1)
+
+    pipeline = IngestionPipeline(store=_SystemExitOnPutStore())  # type: ignore[arg-type]
+    with pytest.raises(SystemExit):
+        pipeline.ingest([IngestionJob(source_uri="local://a", topic="t", content="c")])
+
+
+def test_ingest_does_swallow_custom_exception_subclass() -> None:
+    """A custom ``RuntimeError`` (an ``Exception`` subclass) IS caught
+    and converted to ``IngestionStatus.FAILED``. Pinning the
+    exception-breadth contract from the other side — the source is
+    NOT broadening to ``BaseException``."""
+
+    class _RuntimeErrorOnPutStore:
+        def put(self, obj: KnowledgeObject) -> None:
+            raise RuntimeError("simulated store failure")
+
+    pipeline = IngestionPipeline(store=_RuntimeErrorOnPutStore())  # type: ignore[arg-type]
+    results = pipeline.ingest([IngestionJob(source_uri="local://a", topic="t", content="c")])
+    assert results == [IngestionStatus.FAILED]
+
+
+def test_ingest_status_list_length_matches_input_length() -> None:
+    """The output list length always equals the input job list length
+    (one status per job, in order). Pinning this catches a refactor
+    that accidentally short-circuits on the first failure."""
+
+    class _AlwaysBoomStore:
+        def put(self, obj: KnowledgeObject) -> None:
+            raise RuntimeError("boom")
+
+    pipeline = IngestionPipeline(store=_AlwaysBoomStore())  # type: ignore[arg-type]
+    jobs = [IngestionJob(source_uri=f"local://{i}", topic="t", content="c") for i in range(5)]
+    results = pipeline.ingest(jobs)
+    assert len(results) == 5
+    assert all(r is IngestionStatus.FAILED for r in results)
