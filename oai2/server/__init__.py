@@ -17,6 +17,7 @@ Two surfaces live here:
 from __future__ import annotations
 
 from oai2.runtime.mlx_hot_runtime import MLXHotRuntime
+
 from .openai_compat_app import create_app as create_openai_compat_app
 
 __all__ = ["create_openai_compat_app", "MLXHotRuntime"]
