@@ -27,7 +27,7 @@ def _config() -> GatewayConfig:
     return GatewayConfig(
         base_url="https://gateway.example.test",
         api_key="test-token-xyz",
-        model="oai-2.0",
+        model="oai-1.2",
         timeout_seconds=5.0,
     )
 
@@ -48,7 +48,7 @@ def _chat_completion_response(content: str = "ok") -> httpx.Response:
         200,
         json={
             "id": "chatcmpl-test",
-            "model": "oai-2.0",
+            "model": "oai-1.2",
             "choices": [
                 {
                     "index": 0,
