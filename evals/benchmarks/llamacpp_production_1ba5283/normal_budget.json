@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-10-03T20:31:54.653622+00:00",
+  "requirement": "AC-PERF-035: promoted settings must stay inside declared p95/p99/resource limits",
+  "gate_owner": "oai2.evals.qos (existing) \u2014 no parallel budget system was introduced",
+  "budget": {
+    "version": "normal-service-v1",
+    "workload": "NORMAL",
+    "kind": "service_budget",
+    "target_hardware": "apple-silicon-m5-max-64gb",
+    "config_id": "normal-smollm2-1.7b-q4km-ctx8192-par4",
+    "first_useful_action_p95_ms": 1000.0,
+    "end_to_end_p95_ms": 5000.0,
+    "end_to_end_p99_ms": 10000.0,
+    "max_false_success_rate": 0.02,
+    "min_verified_success_rate": 0.9
+  },
+  "measured": {
+    "sample_count": 12,
+    "verified_success_rate": 0.3333333333333333,
+    "false_success_rate": 0.6666666666666666,
+    "deadline_miss_rate": 0.6666666666666666,
+    "first_useful_action_ms_p95": 160.71864999999997,
+    "end_to_end_ms_p95": 581.6884999999999,
+    "end_to_end_ms_p99": 678.9241000000001,
+    "ttft_ms_p95": 40.477799999999995
+  },
+  "evaluation": {
+    "budget_version": "normal-service-v1",
+    "budget_kind": "service_budget",
+    "passed": false,
+    "failures": [
+      "false_success_rate",
+      "verified_success_rate"
+    ]
+  },
+  "promotion": {
+    "attempted": false,
+    "reason": "promotion changes what production serves and is an owner decision; this script only declares the budget and evaluates the current configuration against it. evaluate_promotion is also the wrong gate here -- it regresses a candidate against a baseline WorkloadReport, and no baseline report exists for this lane yet."
+  },
+  "censored_observations": [
+    {
+      "case_id": "arithmetic_multistep",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "modular_arithmetic",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "boolean_logic",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "unit_conversion",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "rate_word_problem",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "capital_city",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "distinct_letter_count",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    },
+    {
+      "case_id": "string_reversal",
+      "first_useful_action_is_lower_bound": true,
+      "reason": "no verified-correct answer within the attempt cap"
+    }
+  ]
+}

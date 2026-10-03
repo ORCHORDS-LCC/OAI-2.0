@@ -480,3 +480,67 @@ Per-agent throughput is essentially flat from 4 to 8 agents (78.57 vs 78.17)
 while aggregate doubles (314.27 → 625.14). Eight agents on four slots adds
 throughput and queueing, not per-agent speed — and the TTFT p50 of 1.57 s is
 that queueing made visible.
+
+## Declared NORMAL service budget — `llamacpp_production_1ba5283/normal_budget.json`
+
+AC-PERF-035 requires promoted settings to "pass capability/verification
+gates and remain inside declared p95/p99/resource limits". No limit had ever
+been declared for this lane, so nothing could pass or fail one.
+
+`scripts/declare_normal_budget.py` declares the budget in the terms of the
+**existing** QoS gate (`oai2.evals.qos.WorkloadBudget` / `evaluate_budget`)
+— no parallel budget system was introduced — and evaluates the measured
+evidence against it. It does **not** promote anything; promotion changes
+what production serves and is an owner decision.
+
+### The budget
+
+| Field | Value | Why |
+|---|---:|---|
+| `kind` | `SERVICE_BUDGET` | A research target is an aspiration; only a service budget can gate |
+| `first_useful_action_p95_ms` | 1000 | 1 s to a *usable* answer is the standard interactive budget |
+| `end_to_end_p95_ms` | 5000 | ~2× headroom over the measured 582 ms p95 |
+| `end_to_end_p99_ms` | 10000 | ~15× headroom over the measured 679 ms p99 |
+| `max_false_success_rate` | 0.02 | A confident wrong answer is the dangerous failure, not slowness |
+| `min_verified_success_rate` | 0.90 | A lane right under 90% of the time is not a service |
+
+The values are **not** reverse-engineered from the measurements. They are
+stated so a reviewer can argue with them.
+
+### Result: the current NORMAL configuration FAILS, on correctness only
+
+| Metric | Measured | Budget | |
+|---|---:|---:|---|
+| `first_useful_action_p95` | 160.7 ms | ≤ 1000 | ok |
+| `end_to_end_p95` | 581.7 ms | ≤ 5000 | ok |
+| `end_to_end_p99` | 678.9 ms | ≤ 10000 | ok |
+| `verified_success_rate` | **0.333** | ≥ 0.90 | **FAIL** |
+| `false_success_rate` | **0.667** | ≤ 0.02 | **FAIL** |
+
+**Every latency budget is met and every correctness budget is missed.** The
+lane is fast and unreliable, which is the precise condition the issue's
+promotion rule exists to catch: *"Promote only a configuration that improves
+verified useful work, not just benchmark tok/s."* By that rule the current
+configuration is not promotable, and no amount of throughput work changes
+that.
+
+`test_a_fast_but_wrong_configuration_fails_the_budget` pins this: a
+configuration with every latency number comfortably inside its limit is
+still rejected, so the gate is not a latency rubber stamp.
+
+### Censored observations
+
+Eight of twelve cases have **no finite** time to a correct answer. Rather
+than dropping them — which would report a 100% verified-success rate over
+whichever cases happened to be easy — each is recorded at the attempt cap as
+a **lower bound**, with `deadline_missed=True`, `verified_success=False` and
+`declared_success=True`, which is exactly a false success. The artifact
+records the censoring explicitly, and
+`test_never_solved_cases_are_recorded_as_false_success_not_dropped` pins it.
+
+### Note on `deadline_miss_rate`
+
+`WorkloadBudget.max_deadline_miss_rate` defaults to `1.0`, so the measured
+0.667 passes. That default is permissive by construction. Any budget
+intended to actually bound deadline behaviour must set it explicitly; this
+one leaves it at the default and says so rather than appearing to check it.
