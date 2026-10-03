@@ -231,6 +231,7 @@ class GcReconciliationState:
                 or not key
                 or key != key.strip()
                 or not isinstance(raw_ids, list)
+                or not raw_ids
                 or any(not isinstance(item, str) or not item for item in raw_ids)
             ):
                 raise ValueError("snapshot references contain invalid data")
@@ -318,11 +319,17 @@ class GcReconciliationState:
         for key in all_keys:
             knowledge_ids = tuple(sorted(self.references.get(key, set())))
             obj = self.inventory.get(key)
+            # Membership, not truthiness. A reference record with no ids is a
+            # degraded record, not an absent one: branching on ``knowledge_ids``
+            # dropped such a key into UNREFERENCED_CANDIDATE and queued
+            # referenced data for deletion. The authoritative row naming the
+            # key is the reason to look, not a licence to remove it.
+            referenced = key in self.references
 
-            if knowledge_ids and obj is not None:
+            if referenced and obj is not None:
                 disposition = GcObjectDisposition.REFERENCED_PRESENT
                 referenced_present += 1
-            elif knowledge_ids:
+            elif referenced:
                 disposition = GcObjectDisposition.REFERENCED_MISSING
                 referenced_missing += 1
             else:

@@ -463,3 +463,91 @@ def test_a_failed_put_yields_a_candidate_and_never_a_delete() -> None:
             "SELECT COUNT(*) FROM knowledge_gc_resource_lease WHERE resource_key = ?",
             (live,),
         ).fetchone()[0] == 0, "a lease was acquired on an authoritative vector"
+
+
+# ---------------------------------------------------------------------------
+# A reference record with no ids is a degraded record, not an absent one
+# ---------------------------------------------------------------------------
+
+
+def _referenced_vector_state(ids: object) -> VectorGcReconciliationState:
+    """A state whose single key ``vec-a`` carries ``ids`` as its reference set."""
+    return VectorGcReconciliationState(
+        observed_at=OBSERVED_AT,
+        references={"vec-a": ids},  # type: ignore[arg-type]
+        inventory={
+            "vec-a": VectorInventoryEntry(
+                vector_id="vec-a",
+                knowledge_id="ko-1",
+                content_hash=HASH,
+                embedding_version="v1",
+            )
+        },
+        pages_processed=1,
+        next_cursor=None,
+        inventory_complete=True,
+    )
+
+
+def test_empty_reference_set_is_not_a_delete_candidate() -> None:
+    """An empty id set must not reclassify a referenced vector as an orphan.
+
+    The module states the hazard directly: "an unseen page would make a
+    referenced vector look like an orphan, and orphans are what gets deleted."
+    Branching on ``knowledge_ids`` made an empty set indistinguishable from no
+    reference at all, so a key the authoritative rows still name was queued for
+    deletion.
+    """
+    state = _referenced_vector_state(set())
+    dispositions = {r.vector_id: r.disposition for r in state.build_report().records}
+    assert dispositions["vec-a"] is VectorGcDisposition.REFERENCED_PRESENT
+    assert dispositions["vec-a"] is not VectorGcDisposition.UNREFERENCED_CANDIDATE
+
+
+def test_empty_reference_set_cannot_be_persisted_and_restored() -> None:
+    """The snapshot a degenerate state writes must not be restorable.
+
+    This module has no reference fingerprint to fall back on, so the empty
+    list round-tripped unguarded and misclassified on restore.
+    """
+    state = _referenced_vector_state(set())
+    snap = state.to_snapshot()
+    with pytest.raises(ValueError, match="snapshot references contain invalid data"):
+        VectorGcReconciliationState.from_snapshot(snap)
+
+
+def test_from_snapshot_rejects_empty_reference_list() -> None:
+    """A key mapped to an empty list asserts nothing and must be refused."""
+    state = _referenced_vector_state({"ko-1"})
+    snap = state.to_snapshot()
+    snap["references"] = {"vec-a": []}
+    with pytest.raises(ValueError, match="snapshot references contain invalid data"):
+        VectorGcReconciliationState.from_snapshot(snap)
+
+
+def test_populated_reference_set_is_still_classified_as_before() -> None:
+    """Guard the opposite failure: a real reference must be unaffected."""
+    state = _referenced_vector_state({"ko-1", "ko-2"})
+    dispositions = {r.vector_id: r.disposition for r in state.build_report().records}
+    assert dispositions["vec-a"] is VectorGcDisposition.REFERENCED_PRESENT
+
+
+def test_truly_unreferenced_vector_is_still_a_delete_candidate() -> None:
+    """A key absent from ``references`` entirely is still a real orphan."""
+    state = VectorGcReconciliationState(
+        observed_at=OBSERVED_AT,
+        references={},
+        inventory={
+            "vec-a": VectorInventoryEntry(
+                vector_id="vec-a", knowledge_id="ko-1",
+                content_hash=HASH, embedding_version="v1",
+            )
+        },
+        pages_processed=1,
+        next_cursor=None,
+        inventory_complete=True,
+    )
+    report = state.build_report()
+    dispositions = {r.vector_id: r.disposition for r in report.records}
+    assert dispositions["vec-a"] is VectorGcDisposition.UNREFERENCED_CANDIDATE
+    assert report.unreferenced_candidate_count == 1

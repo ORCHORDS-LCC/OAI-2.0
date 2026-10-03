@@ -974,3 +974,81 @@ def test_knowledge_blob_row_protocol_has_required_attributes() -> None:
     annotations = getattr(protocol, "__annotations__", {})
     assert "knowledge_id" in annotations
     assert "r2_blob_key" in annotations
+
+
+# ---------------------------------------------------------------------------
+# A reference record with no ids is a degraded record, not an absent one
+# ---------------------------------------------------------------------------
+
+
+def _referenced_state(ids: object) -> GcReconciliationState:
+    """A state whose single key ``obj-a`` carries ``ids`` as its reference set."""
+    return GcReconciliationState(
+        observed_at=1000.0,
+        references={"obj-a": ids},  # type: ignore[arg-type]
+        inventory={"obj-a": R2InventoryObject(key="obj-a")},
+        pages_processed=1,
+        next_cursor=None,
+        inventory_complete=True,
+    )
+
+
+def test_empty_reference_set_is_not_an_orphan_candidate() -> None:
+    """An empty id set must not reclassify a referenced key as an orphan.
+
+    Branching on ``knowledge_ids`` treated an empty set as no reference at all,
+    so a key the authoritative rows still name landed in UNREFERENCED_CANDIDATE
+    — which is the list a sweep deletes from.
+    """
+    state = _referenced_state(set())
+    dispositions = {r.key: r.disposition for r in state.build_report().records}
+    assert dispositions["obj-a"] is GcObjectDisposition.REFERENCED_PRESENT
+    assert dispositions["obj-a"] is not GcObjectDisposition.UNREFERENCED_CANDIDATE
+
+
+def test_empty_reference_set_cannot_be_persisted_and_restored() -> None:
+    """The snapshot a degenerate state writes must not be restorable.
+
+    ``to_snapshot`` fingerprints whatever it is given, so a state holding an
+    empty set used to produce a self-consistent snapshot that passed the
+    fingerprint gate and still misclassified on restore. Rejecting it at the
+    boundary closes that path without having to trust the fingerprint.
+    """
+    state = _referenced_state(set())
+    snap = state.to_snapshot()
+    with pytest.raises(ValueError, match="snapshot references contain invalid data"):
+        GcReconciliationState.from_snapshot(snap)
+
+
+def test_from_snapshot_rejects_empty_reference_list() -> None:
+    """A key mapped to an empty list is invalid, not vacuously valid.
+
+    ``any(...)`` over an empty list is trivially true, so the per-id check
+    passed a list that asserts nothing.
+    """
+    state = _build_empty_state()
+    snap = state.to_snapshot()
+    snap["references"] = {"obj-a": []}
+    with pytest.raises(ValueError, match="snapshot references contain invalid data"):
+        GcReconciliationState.from_snapshot(snap)
+
+
+def test_populated_reference_set_is_still_classified_as_before() -> None:
+    """Guard the opposite failure: a real reference must be unaffected."""
+    state = _referenced_state({"ko-1", "ko-2"})
+    dispositions = {r.key: r.disposition for r in state.build_report().records}
+    assert dispositions["obj-a"] is GcObjectDisposition.REFERENCED_PRESENT
+
+
+def test_truly_unreferenced_key_is_still_an_orphan_candidate() -> None:
+    """A key absent from ``references`` entirely is still a real orphan."""
+    state = GcReconciliationState(
+        observed_at=1000.0,
+        references={},
+        inventory={"obj-a": R2InventoryObject(key="obj-a")},
+        pages_processed=1,
+        next_cursor=None,
+        inventory_complete=True,
+    )
+    dispositions = {r.key: r.disposition for r in state.build_report().records}
+    assert dispositions["obj-a"] is GcObjectDisposition.UNREFERENCED_CANDIDATE

@@ -231,6 +231,7 @@ class VectorGcReconciliationState:
                 or not key
                 or key != key.strip()
                 or not isinstance(raw_ids, list)
+                or not raw_ids
                 or any(not isinstance(i, str) or not i for i in raw_ids)
             ):
                 raise ValueError("snapshot references contain invalid data")
@@ -281,10 +282,16 @@ class VectorGcReconciliationState:
         for vector_id in sorted(set(self.references) | set(self.inventory)):
             knowledge_ids = tuple(sorted(self.references.get(vector_id, set())))
             present = vector_id in self.inventory
-            if knowledge_ids and present:
+            # Membership, not truthiness. A reference record with no ids is a
+            # degraded record, not an absent one: branching on ``knowledge_ids``
+            # dropped such a key into UNREFERENCED_CANDIDATE and queued
+            # referenced vectors for deletion. The authoritative row naming the
+            # key is the reason to look, not a licence to remove it.
+            referenced = vector_id in self.references
+            if referenced and present:
                 disposition = VectorGcDisposition.REFERENCED_PRESENT
                 referenced_present += 1
-            elif knowledge_ids:
+            elif referenced:
                 # A row names a vector the index does not have. That is an
                 # integrity state to report, NOT a delete candidate: the
                 # authoritative row is the reason to look, not a licence.
