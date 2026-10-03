@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+import pathlib
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -555,3 +556,416 @@ def test_truly_unreferenced_vector_is_still_a_delete_candidate() -> None:
     dispositions = {r.vector_id: r.disposition for r in report.records}
     assert dispositions["vec-a"] is VectorGcDisposition.UNREFERENCED_CANDIDATE
     assert report.unreferenced_candidate_count == 1
+
+
+# ---------------------------------------------------------------------------
+# REQ-GC-033: grace-windowed candidates with persisted first-seen state that
+# survive at least one authoritative recheck.
+#
+# The gap this covers: on the previous source, `unreferenced_candidate` was a
+# complete answer. A vector seen for the first time thirty seconds ago and a
+# vector unreferenced for years produced byte-identical records, and nothing
+# required a second look at D1 before a destructive act could consume them.
+# ---------------------------------------------------------------------------
+
+GRACE = gc_vector.VectorGcGracePolicy(grace_seconds=900.0, minimum_rechecks=1)
+
+
+def _entries(vector_ids: list[str]) -> list[VectorInventoryEntry]:
+    return [
+        VectorInventoryEntry(
+            vector_id=v,
+            knowledge_id=None,
+            content_hash=None,
+            embedding_version="embed-v1",
+        )
+        for v in vector_ids
+    ]
+
+
+def _state(
+    references: dict[str, list[str]],
+    inventory: list[str],
+    *,
+    now: float,
+    pages: int = 1,
+) -> VectorGcReconciliationState:
+    rows = [
+        _Row(knowledge_id=kid, vectorize_id=vid)
+        for vid, kids in references.items()
+        for kid in kids
+    ]
+    state = VectorGcReconciliationState.from_rows(rows, observed_at=now)
+    entries = _entries(inventory)
+    if pages == 1:
+        state.consume_page(entries, next_cursor=None)
+    else:
+        for i in range(pages):
+            state.consume_page(
+                entries[i::pages], next_cursor=None if i == pages - 1 else f"c-{i}"
+            )
+    return state
+
+
+def _record(state: VectorGcReconciliationState, vector_id: str, policy=GRACE):
+    report = state.build_report(policy=policy)
+    return next(r for r in report.records if r.vector_id == vector_id)
+
+
+class TestGracePolicyValidation:
+    """A policy that could make a first sighting eligible is not constructible."""
+
+    @pytest.mark.parametrize("bad", [0.0, -1.0, float("inf"), float("nan"), True])
+    def test_zero_or_worse_grace_window_is_rejected(self, bad: object) -> None:
+        with pytest.raises(ValueError):
+            gc_vector.VectorGcGracePolicy(grace_seconds=bad)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("bad", [0, -1, True, 1.5])
+    def test_zero_or_worse_recheck_floor_is_rejected(self, bad: object) -> None:
+        with pytest.raises(ValueError):
+            gc_vector.VectorGcGracePolicy(minimum_rechecks=bad)  # type: ignore[arg-type]
+
+
+class TestGraceWindow:
+    def test_first_sighting_is_never_eligible_however_old(self) -> None:
+        """A first sighting is what an in-flight put looks like.
+
+        A `put()` that has written its vector but not yet committed its D1 row
+        is indistinguishable from a real orphan, for exactly as long as that
+        put takes. Age alone must never be enough.
+        """
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        rec = _record(s, "vec-a")
+        assert rec.disposition is VectorGcDisposition.UNREFERENCED_CANDIDATE
+        assert rec.first_seen_at == 1_000.0
+        assert rec.rechecks == 0
+        assert rec.grace_satisfied is False
+        assert rec.eligible_for_authorization is False
+
+        # Same state, evaluated an eternity later, still not eligible.
+        s.observed_at = 10**12
+        assert _record(s, "vec-a").grace_satisfied is False
+
+    def test_candidate_becomes_eligible_only_after_a_recheck_and_the_window(
+        self,
+    ) -> None:
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        # Window elapsed, but only one sighting so far: NOT eligible.
+        s.observed_at = 1_000.0 + 901.0
+        assert _record(s, "vec-a").grace_satisfied is False
+        # Second authoritative recheck against fresh D1.
+        s.recheck_grace(now=1_000.0 + 901.0, policy=GRACE)
+        rec = _record(s, "vec-a")
+        assert rec.rechecks == 1
+        assert rec.grace_satisfied is True
+        assert rec.eligible_for_authorization is True
+
+    def test_recheck_before_the_window_still_does_not_satisfy(self) -> None:
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.recheck_grace(now=1_100.0, policy=GRACE)
+        s.observed_at = 1_100.0
+        assert _record(s, "vec-a").rechecks == 1
+        assert _record(s, "vec-a").grace_satisfied is False
+
+    def test_first_seen_is_not_reset_by_further_sightings(self) -> None:
+        """The window measures elapsed time, not process lifetimes."""
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        for i in range(2, 6):
+            s.recheck_grace(now=1_000.0 + i * 100.0, policy=GRACE)
+        rec = _record(s, "vec-a")
+        assert rec.first_seen_at == 1_000.0
+        assert rec.rechecks == 4
+
+    def test_higher_recheck_floor_is_honoured(self) -> None:
+        strict = gc_vector.VectorGcGracePolicy(grace_seconds=10.0, minimum_rechecks=3)
+        s = _state({}, ["vec-a"], now=0.0)
+        s.recheck_grace(now=0.0, policy=strict)
+        for _ in range(2):
+            s.recheck_grace(now=100.0, policy=strict)
+        s.observed_at = 100.0
+        assert _record(s, "vec-a", strict).rechecks == 2
+        assert _record(s, "vec-a", strict).grace_satisfied is False
+        s.recheck_grace(now=100.0, policy=strict)
+        assert _record(s, "vec-a", strict).grace_satisfied is True
+
+    def test_a_backwards_clock_does_not_satisfy_the_window(self) -> None:
+        s = _state({}, ["vec-a"], now=10_000.0)
+        s.recheck_grace(now=10_000.0, policy=GRACE)
+        s.recheck_grace(now=10_000.0, policy=GRACE)
+        s.observed_at = 1.0  # clock went backwards
+        assert _record(s, "vec-a").grace_satisfied is False
+
+    def test_non_finite_now_is_rejected(self) -> None:
+        s = _state({}, ["vec-a"], now=1.0)
+        with pytest.raises(ValueError):
+            s.recheck_grace(now=float("inf"), policy=GRACE)
+
+    def test_recheck_requires_a_completed_scan(self) -> None:
+        """Aging a candidate on the strength of a page nobody read is a hazard."""
+        rows = [_Row(knowledge_id="ko-1", vectorize_id=None)]
+        s = VectorGcReconciliationState.from_rows(rows, observed_at=1.0)
+        s.consume_page(_entries(["vec-a"]), next_cursor="c-1")
+        with pytest.raises(RuntimeError):
+            s.recheck_grace(now=1.0, policy=GRACE)
+
+
+class TestGraceKeepBranch:
+    """REQ-GC-033's diagram: a reference appearing KEEPS the vector."""
+
+    def test_a_reappearing_reference_clears_the_candidate(self) -> None:
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.recheck_grace(now=2_000.0, policy=GRACE)
+        assert "vec-a" in s.grace_candidates
+
+        # A put adopts it: D1 now names the vector.
+        s.references = {"vec-a": {"ko-1"}}
+        s.recheck_grace(now=3_000.0, policy=GRACE)
+        assert "vec-a" not in s.grace_candidates
+        rec = _record(s, "vec-a")
+        assert rec.disposition is VectorGcDisposition.REFERENCED_PRESENT
+        assert rec.first_seen_at is None
+        assert rec.rechecks == 0
+        assert rec.grace_satisfied is False
+
+    def test_going_unreferenced_again_starts_a_fresh_window(self) -> None:
+        """History is discarded, not paused.
+
+        The reference that came and went may have been a different row, so the
+        old age says nothing about this new period of unreferencedness.
+        """
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.recheck_grace(now=2_000.0, policy=GRACE)
+        s.references = {"vec-a": {"ko-1"}}
+        s.recheck_grace(now=3_000.0, policy=GRACE)
+        s.references = {}
+        s.recheck_grace(now=4_000.0, policy=GRACE)
+        rec = _record(s, "vec-a")
+        assert rec.first_seen_at == 4_000.0
+        assert rec.rechecks == 0
+        assert rec.grace_satisfied is False
+
+    def test_a_referenced_vector_never_carries_grace_fields(self) -> None:
+        """A referenced vector must not read as though it were aging out."""
+        s = _state({"vec-a": ["ko-1"]}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        rec = _record(s, "vec-a")
+        assert rec.disposition is VectorGcDisposition.REFERENCED_PRESENT
+        assert (rec.first_seen_at, rec.rechecks, rec.grace_satisfied) == (None, 0, False)
+        assert rec.eligible_for_authorization is False
+
+
+class TestGraceWithoutPolicy:
+    def test_report_without_a_policy_authorizes_nothing(self) -> None:
+        """The conservative default: classify, but grant no grace credit."""
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.recheck_grace(now=5_000.0, policy=GRACE)
+        s.observed_at = 5_000.0
+        rec = _record(s, "vec-a", policy=None)
+        assert rec.rechecks == 1
+        assert rec.grace_satisfied is False
+        assert rec.eligible_for_authorization is False
+
+    def test_grace_satisfied_is_counted_separately_from_candidates(self) -> None:
+        """'Seen unreferenced' and 'eligible for authorization' are not the same."""
+        s = _state({"vec-live": ["ko-1"]}, ["vec-live", "vec-old", "vec-new"], now=0.0)
+        s.recheck_grace(now=0.0, policy=GRACE)
+        s.recheck_grace(now=10_000.0, policy=GRACE)
+        s.observed_at = 10_000.0
+        report = s.build_report(policy=GRACE)
+        assert report.unreferenced_candidate_count == 2
+        assert report.grace_satisfied_count == 2
+        assert report.referenced_present_count == 1
+
+
+class TestGraceSnapshotPersistence:
+    def test_first_seen_survives_a_snapshot_round_trip(self) -> None:
+        """REQ-GC-033 says PERSISTED first-seen state."""
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        snapshot = s.to_snapshot()
+        assert snapshot["schema_version"] == 2
+
+        restored = VectorGcReconciliationState.from_snapshot(snapshot)
+        assert restored.grace_candidates["vec-a"].first_seen_at == 1_000.0
+        assert restored.grace_candidates["vec-a"].rechecks == 0
+
+        # And the window keeps accruing across the process boundary.
+        restored.observed_at = 2_000.0
+        restored.recheck_grace(now=2_000.0, policy=GRACE)
+        rec = _record(restored, "vec-a")
+        assert rec.first_seen_at == 1_000.0
+        assert rec.rechecks == 1
+        assert rec.grace_satisfied is True
+
+    def test_a_v1_snapshot_grants_no_grace_credit(self) -> None:
+        """An old snapshot must not manufacture age it has no evidence for."""
+        s = _state({}, ["vec-a"], now=1_000.0)
+        snapshot = dict(s.to_snapshot())
+        snapshot["schema_version"] = 1
+        snapshot.pop("grace_candidates")
+        restored = VectorGcReconciliationState.from_snapshot(snapshot)
+        assert restored.grace_candidates == {}
+        rec = _record(restored, "vec-a")
+        assert rec.first_seen_at is None
+        assert rec.grace_satisfied is False
+
+    def test_an_unknown_schema_version_is_still_rejected(self) -> None:
+        s = _state({}, ["vec-a"], now=1.0)
+        snapshot = dict(s.to_snapshot())
+        snapshot["schema_version"] = 99
+        with pytest.raises(ValueError):
+            VectorGcReconciliationState.from_snapshot(snapshot)
+
+    @pytest.mark.parametrize(
+        "bad_entry",
+        [
+            {"first_seen_at": 1.0, "rechecks": 0},  # no vector_id
+            {"vector_id": "other", "first_seen_at": 1.0, "rechecks": 0},  # key mismatch
+            {"vector_id": "vec-a", "first_seen_at": -1.0, "rechecks": 0},  # negative
+            {"vector_id": "vec-a", "first_seen_at": 1.0, "rechecks": -1},  # negative
+            {"vector_id": "vec-a", "first_seen_at": 1.0, "rechecks": 1.5},  # not int
+        ],
+    )
+    def test_degenerate_grace_state_cannot_be_restored(
+        self, bad_entry: dict
+    ) -> None:
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        snapshot = dict(s.to_snapshot())
+        snapshot["grace_candidates"] = {"vec-a": bad_entry}
+        with pytest.raises(ValueError):
+            VectorGcReconciliationState.from_snapshot(snapshot)
+
+
+class TestGraceNegativeControls:
+    """Mutate the implementation and prove the guards above actually bite.
+
+    Each control breaks one behaviour of ``recheck_grace`` or
+    ``to_snapshot`` at the SOURCE level and asserts the corresponding guard
+    then fails. Patching an attribute is not enough here: the behaviours under
+    test are the control flow inside those two functions, so the mutation has
+    to be made in the text and reloaded.
+    """
+
+    @staticmethod
+    def _mutant(tmp_path, mutate):  # type: ignore[no-untyped-def]
+        import importlib.util
+        import sys
+
+        path = pathlib.Path(gc_vector.__file__)
+        source = path.read_text()
+        mutated = mutate(source)
+        assert mutated != source, "mutation did not apply -- control is vacuous"
+        target = tmp_path / "mutant_gc_vector.py"
+        target.write_text(mutated)
+        name = "oai2.knowledge._mutant_gc_vector"
+        spec = importlib.util.spec_from_file_location(name, target)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            del sys.modules[name]
+            raise
+        return module
+
+    def test_control_first_sighting_grants_credit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A policy that ignores the recheck floor would promote a first sighting."""
+        monkeypatch.setattr(
+            gc_vector.VectorGcGracePolicy,
+            "satisfies",
+            lambda self, *, first_seen_at, rechecks, now: rechecks >= 0,
+        )
+        s = _state({}, ["vec-a"], now=1_000.0)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.observed_at = 10**12
+        with pytest.raises(AssertionError):
+            assert _record(s, "vec-a").grace_satisfied is False
+
+    def test_control_first_seen_reset_on_every_recheck(
+        self, tmp_path
+    ) -> None:
+        """A window that restarts each run can never mature."""
+        module = self._mutant(
+            tmp_path,
+            lambda s: s.replace(
+                "                    first_seen_at=prior.first_seen_at,\n",
+                "                    first_seen_at=now,\n",
+                1,
+            ),
+        )
+        s = module.VectorGcReconciliationState.from_rows([], observed_at=1_000.0)
+        s.consume_page(_entries(["vec-a"]), next_cursor=None)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.recheck_grace(now=5_000.0, policy=GRACE)
+        s.recheck_grace(now=9_000.0, policy=GRACE)
+        s.observed_at = 9_000.0
+        rec = s.build_report(policy=GRACE).records[0]
+        assert rec.rechecks == 2
+        with pytest.raises(AssertionError):
+            assert rec.first_seen_at == 1_000.0
+
+    def test_control_candidate_never_cleared_on_a_returning_reference(
+        self, tmp_path
+    ) -> None:
+        """Dropping the KEEP branch would age a referenced vector toward deletion."""
+        module = self._mutant(
+            tmp_path,
+            lambda s: s.replace(
+                "            if vector_id in self.references:\n"
+                "                # Branch 1: KEEP. A reference appeared; the candidate is\n"
+                "                # cleared rather than left to age back into eligibility.\n"
+                "                continue\n",
+                "",
+                1,
+            ),
+        )
+        s = module.VectorGcReconciliationState.from_rows([], observed_at=1_000.0)
+        s.consume_page(_entries(["vec-a"]), next_cursor=None)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        s.references = {"vec-a": {"ko-1"}}
+        s.recheck_grace(now=2_000.0, policy=GRACE)
+        with pytest.raises(AssertionError):
+            assert "vec-a" not in s.grace_candidates
+
+    def test_control_grace_state_dropped_from_the_snapshot(
+        self, tmp_path
+    ) -> None:
+        """Without persistence the window measures process lifetimes, not time."""
+        module = self._mutant(
+            tmp_path,
+            lambda s: s.replace(
+                '            "grace_candidates": {\n'
+                "                vector_id: {\n"
+                '                    "vector_id": grace.vector_id,\n'
+                '                    "first_seen_at": grace.first_seen_at,\n'
+                '                    "rechecks": grace.rechecks,\n'
+                "                }\n"
+                "                for vector_id, grace in sorted(self.grace_candidates.items())\n"
+                "            },\n",
+                '            "grace_candidates": {},\n',
+                1,
+            ),
+        )
+        s = module.VectorGcReconciliationState.from_rows([], observed_at=1_000.0)
+        s.consume_page(_entries(["vec-a"]), next_cursor=None)
+        s.recheck_grace(now=1_000.0, policy=GRACE)
+        snapshot = s.to_snapshot()
+        assert snapshot["grace_candidates"] == {}, "mutation stripped the state"
+        restored = module.VectorGcReconciliationState.from_snapshot(snapshot)
+        assert restored.grace_candidates == {}
+        with pytest.raises(AssertionError):
+            assert (
+                "vec-a" in restored.grace_candidates
+                and restored.grace_candidates["vec-a"].first_seen_at == 1_000.0
+            )

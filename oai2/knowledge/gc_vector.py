@@ -47,6 +47,94 @@ class VectorGcDisposition(StrEnum):
 
 
 @dataclass(slots=True, frozen=True)
+class VectorGcGracePolicy:
+    """How long an unreferenced vector must persist before it is even eligible.
+
+    REQ-GC-033: unreferenced vectors are grace-windowed candidates with
+    persisted first-seen state, and must survive at least one authoritative
+    recheck. Both halves are load-bearing and neither is a formality:
+
+    - ``grace_seconds`` bounds the wall-clock exposure. A concurrent writer
+      that is mid-``put()`` has already written the vector but may not have
+      committed its D1 row yet; a short window converts that race into data
+      loss.
+    - ``minimum_rechecks`` bounds the *observations*. Age alone is not
+      evidence: a single sighting, however old, is exactly what an in-flight
+      adoption looks like. A candidate must be re-observed against fresh D1
+      at least ``minimum_rechecks`` times after it was first seen before the
+      window can be considered satisfied.
+
+    ``grace_seconds`` is required to be strictly positive and
+    ``minimum_rechecks`` at least 1, so a policy cannot be constructed that
+    makes a first sighting eligible. That is the whole point of the type.
+    """
+
+    grace_seconds: float = 900.0
+    minimum_rechecks: int = 1
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.grace_seconds, bool)
+            or not isinstance(self.grace_seconds, (int, float))
+            or not math.isfinite(float(self.grace_seconds))
+            or float(self.grace_seconds) <= 0.0
+        ):
+            raise ValueError("grace_seconds must be a finite number > 0")
+        if (
+            isinstance(self.minimum_rechecks, bool)
+            or not isinstance(self.minimum_rechecks, int)
+            or self.minimum_rechecks < 1
+        ):
+            raise ValueError("minimum_rechecks must be an integer >= 1")
+
+    def satisfies(self, *, first_seen_at: float, rechecks: int, now: float) -> bool:
+        """Whether a candidate has cleared BOTH halves of the window.
+
+        Returns False on a non-finite or backwards ``now``: a clock that went
+        backwards must not manufacture eligibility, and neither must one that
+        is not a real time at all.
+        """
+        if rechecks < self.minimum_rechecks:
+            return False
+        if not math.isfinite(now) or not math.isfinite(first_seen_at):
+            return False
+        age = now - first_seen_at
+        return age >= self.grace_seconds
+
+
+@dataclass(slots=True, frozen=True)
+class VectorGcGraceState:
+    """Persisted first-seen state for one grace-windowed candidate.
+
+    Carried across runs, because the window is a statement about how long a
+    vector has been unreferenced, and that spans process boundaries. A
+    candidate that forgot its first sighting every run would never accumulate
+    age and would never become eligible -- which is the safe direction to
+    fail, but it would also mean the sweep could never run.
+    """
+
+    vector_id: str
+    first_seen_at: float
+    rechecks: int = 0
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.vector_id, str)
+            or not self.vector_id
+            or self.vector_id != self.vector_id.strip()
+        ):
+            raise ValueError("vector_id must be a non-empty normalized string")
+        if not _is_non_negative_number(self.first_seen_at):
+            raise ValueError("first_seen_at must be a finite non-negative number")
+        if (
+            isinstance(self.rechecks, bool)
+            or not isinstance(self.rechecks, int)
+            or self.rechecks < 0
+        ):
+            raise ValueError("rechecks must be a non-negative integer")
+
+
+@dataclass(slots=True, frozen=True)
 class VectorInventoryEntry:
     """Public-safe metadata for one vector in an inventory page.
 
@@ -82,6 +170,25 @@ class VectorGcRecord:
     vector_id: str
     disposition: VectorGcDisposition
     knowledge_ids: tuple[str, ...] = ()
+    # Grace-window state. All three are None/0/False for anything that is not
+    # an UNREFERENCED_CANDIDATE, so a reader cannot mistake a referenced
+    # vector for one that has been accumulating toward deletion.
+    first_seen_at: float | None = None
+    rechecks: int = 0
+    grace_satisfied: bool = False
+
+    @property
+    def eligible_for_authorization(self) -> bool:
+        """Whether a destructive act could even be *asked* for this vector.
+
+        Both halves of REQ-GC-033 must hold, and this module still has no
+        destructive path: satisfying the window earns the right to request
+        separate, explicit authorization. It is not authorization, and it
+        does not make the vector safe to remove on its own.
+        """
+        return self.disposition is VectorGcDisposition.UNREFERENCED_CANDIDATE and (
+            self.grace_satisfied
+        )
 
 
 @dataclass(slots=True, frozen=True)
@@ -95,6 +202,10 @@ class VectorGcDryRunReport:
     referenced_missing_count: int
     unreferenced_candidate_count: int
     inventory_vector_count: int
+    # How many candidates have cleared BOTH halves of the grace window.
+    # Reported separately from the candidate count so a reader can never
+    # mistake 'seen unreferenced' for 'eligible for authorization'.
+    grace_satisfied_count: int = 0
 
 
 @dataclass(slots=True)
@@ -112,6 +223,10 @@ class VectorGcReconciliationState:
     pages_processed: int = 0
     next_cursor: str | None = None
     inventory_complete: bool = False
+    # Persisted first-seen state, keyed by vector id. Carried across snapshot
+    # round-trips so the window measures elapsed time rather than counting
+    # process lifetimes.
+    grace_candidates: dict[str, VectorGcGraceState] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not _is_non_negative_number(self.observed_at):
@@ -189,7 +304,7 @@ class VectorGcReconciliationState:
     def to_snapshot(self) -> dict[str, object]:
         """JSON-serializable snapshot for process-level resume."""
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "observed_at": self.observed_at,
             "references": {k: sorted(v) for k, v in sorted(self.references.items())},
             "inventory": {
@@ -204,6 +319,14 @@ class VectorGcReconciliationState:
             "pages_processed": self.pages_processed,
             "next_cursor": self.next_cursor,
             "inventory_complete": self.inventory_complete,
+            "grace_candidates": {
+                vector_id: {
+                    "vector_id": grace.vector_id,
+                    "first_seen_at": grace.first_seen_at,
+                    "rechecks": grace.rechecks,
+                }
+                for vector_id, grace in sorted(self.grace_candidates.items())
+            },
         }
 
     @classmethod
@@ -214,7 +337,8 @@ class VectorGcReconciliationState:
         authoritative_rows: Iterable[KnowledgeVectorRow] | None = None,
     ) -> VectorGcReconciliationState:
         """Restore a validated snapshot, optionally re-checking current D1 rows."""
-        if snapshot.get("schema_version") != 1:
+        schema_version = snapshot.get("schema_version")
+        if schema_version not in (1, 2):
             raise ValueError("unsupported or missing snapshot schema_version")
 
         raw_references = snapshot.get("references")
@@ -253,6 +377,28 @@ class VectorGcReconciliationState:
                 ),
             )
 
+        grace_candidates: dict[str, VectorGcGraceState] = {}
+        if schema_version >= 2:
+            raw_grace = snapshot.get("grace_candidates", {})
+            if not isinstance(raw_grace, Mapping):
+                raise ValueError("snapshot grace_candidates must be a mapping")
+            for key, raw_grace_entry in raw_grace.items():
+                if not isinstance(key, str) or not isinstance(raw_grace_entry, Mapping):
+                    raise ValueError("snapshot grace_candidates contain invalid data")
+                vector_id = raw_grace_entry.get("vector_id")
+                if not isinstance(vector_id, str) or vector_id != key:
+                    raise ValueError("snapshot grace_candidates key does not match vector_id")
+                grace_candidates[key] = VectorGcGraceState(
+                    vector_id=vector_id,
+                    first_seen_at=_as_number(raw_grace_entry.get("first_seen_at")),
+                    rechecks=_as_int(raw_grace_entry.get("rechecks", 0)),
+                )
+        # A v1 snapshot carries no grace history, so it restores with an EMPTY
+        # candidate set. That is not a downgrade: it grants no grace credit,
+        # so every candidate must re-earn a first sighting. Back-filling
+        # first-seen from the snapshot's observed_at would manufacture the
+        # very age a v1 snapshot has no evidence for.
+
         if authoritative_rows is not None:
             current = cls.from_rows(
                 authoritative_rows, observed_at=_as_number(snapshot.get("observed_at"))
@@ -267,10 +413,79 @@ class VectorGcReconciliationState:
             pages_processed=_as_int(snapshot.get("pages_processed", 0)),
             next_cursor=_optional_cursor(snapshot.get("next_cursor")),
             inventory_complete=bool(snapshot.get("inventory_complete", False)),
+            grace_candidates=grace_candidates,
         )
 
-    def build_report(self) -> VectorGcDryRunReport:
-        """Classify every vector the union of the two sets covers."""
+    def recheck_grace(
+        self,
+        *,
+        now: float,
+        policy: VectorGcGracePolicy,
+    ) -> dict[str, VectorGcGraceState]:
+        """Advance the grace window against a completed reconciliation.
+
+        This is the ``RECHK`` step in this issue's own diagram: the first
+        ``KEEP / clear candidate`` branch and the first half of the
+        ``still unreferenced`` branch. It reads the CURRENT authoritative mark
+        set -- the one just built from D1 -- and reconciles it with the
+        persisted first-seen state.
+
+        Three transitions, and the order matters:
+
+        1. A vector that is referenced again is **removed** from the candidate
+           set. Its grace history is discarded, not merely paused: if it goes
+           unreferenced a second time it must earn a fresh window, because the
+           thing that made it referenced may have moved.
+        2. A vector seen unreferenced for the first time is recorded with
+           ``rechecks=0``. It is deliberately **not** eligible, however much
+           wall-clock time has passed: a first sighting is indistinguishable
+           from a ``put()`` that has written its vector but not yet committed
+           its D1 row.
+        3. A vector already being tracked accrues one recheck, because being
+           re-observed against fresh D1 is precisely what "survived an
+           authoritative recheck" means.
+
+        Mutates and returns ``self.grace_candidates``. Requires a completed
+        scan: classifying against a partial inventory would age a candidate on
+        the strength of a page nobody has read.
+        """
+        if not self.inventory_complete:
+            raise RuntimeError("inventory scan is incomplete")
+        if not _is_non_negative_number(now):
+            raise ValueError("now must be a finite non-negative number")
+
+        tracked: dict[str, VectorGcGraceState] = {}
+        for vector_id in sorted(set(self.references) | set(self.inventory)):
+            if vector_id in self.references:
+                # Branch 1: KEEP. A reference appeared; the candidate is
+                # cleared rather than left to age back into eligibility.
+                continue
+            prior = self.grace_candidates.get(vector_id)
+            if prior is None:
+                # Branch 2: first sighting. No grace credit whatsoever.
+                tracked[vector_id] = VectorGcGraceState(
+                    vector_id=vector_id, first_seen_at=now, rechecks=0
+                )
+            else:
+                # Branch 3: survived another authoritative recheck.
+                tracked[vector_id] = VectorGcGraceState(
+                    vector_id=vector_id,
+                    first_seen_at=prior.first_seen_at,
+                    rechecks=prior.rechecks + 1,
+                )
+        self.grace_candidates = tracked
+        return self.grace_candidates
+
+    def build_report(
+        self, *, policy: VectorGcGracePolicy | None = None
+    ) -> VectorGcDryRunReport:
+        """Classify every vector the union of the two sets covers.
+
+        ``policy`` populates the grace-window fields. Without it a report
+        still classifies, but every candidate is reported as first-sighting
+        and therefore ineligible -- the conservative reading, and the one that
+        cannot accidentally authorize anything.
+        """
         if not self.inventory_complete:
             raise RuntimeError("inventory scan is incomplete")
 
@@ -300,11 +515,30 @@ class VectorGcReconciliationState:
             else:
                 disposition = VectorGcDisposition.UNREFERENCED_CANDIDATE
                 candidates += 1
+            # Grace state is reported ONLY for an unreferenced candidate. A
+            # referenced vector carrying a first-seen timestamp would read as
+            # though it were accumulating toward deletion.
+            grace = (
+                self.grace_candidates.get(vector_id)
+                if disposition is VectorGcDisposition.UNREFERENCED_CANDIDATE
+                else None
+            )
             records.append(
                 VectorGcRecord(
                     vector_id=vector_id,
                     disposition=disposition,
                     knowledge_ids=knowledge_ids,
+                    first_seen_at=None if grace is None else grace.first_seen_at,
+                    rechecks=0 if grace is None else grace.rechecks,
+                    grace_satisfied=(
+                        grace is not None
+                        and policy is not None
+                        and policy.satisfies(
+                            first_seen_at=grace.first_seen_at,
+                            rechecks=grace.rechecks,
+                            now=self.observed_at,
+                        )
+                    ),
                 )
             )
 
@@ -316,6 +550,7 @@ class VectorGcReconciliationState:
             referenced_missing_count=referenced_missing,
             unreferenced_candidate_count=candidates,
             inventory_vector_count=len(self.inventory),
+            grace_satisfied_count=sum(1 for r in records if r.grace_satisfied),
         )
 
 
@@ -372,6 +607,8 @@ def _optional_cursor(value: object) -> str | None:
 __all__ = [
     "KnowledgeVectorRow",
     "VectorGcDisposition",
+    "VectorGcGracePolicy",
+    "VectorGcGraceState",
     "VectorInventoryEntry",
     "VectorGcRecord",
     "VectorGcDryRunReport",
