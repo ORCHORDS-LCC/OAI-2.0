@@ -945,3 +945,48 @@ def test_summary_carries_memory_and_swap_columns(
     for key in ("host_memory_start", "host_memory_end"):
         assert key in data
         assert set(data[key]) >= {"total_gb", "used_gb", "free_gb", "swap_total_gb", "swap_used_gb"}
+
+
+def test_percentiles_are_observed_samples_not_interpolations() -> None:
+    """A reported p99 must be a value some repetition actually produced.
+
+    Interpolated percentiles are conventional but would report numbers no
+    run produced; over a 5-repetition cell that is most of the statistic.
+    Nearest-rank keeps every reported percentile inside the sample set.
+    """
+    values = [10, 20, 30, 40, 50]
+    stat = bench._stat(values)
+    assert stat.p95 in values
+    assert stat.p99 in values
+    # Nearest-rank on 5 samples puts both at the top of the distribution.
+    assert stat.p95 == 50
+    assert stat.p99 == 50
+    assert stat.p95 == stat.max
+    assert stat.p99 == stat.max
+
+
+def test_percentiles_track_the_tail_not_the_median() -> None:
+    """A fast median with a slow tail must be visible as such.
+
+    This is the case min/median/max alone hides: four quick samples and one
+    pathological one still produce a good-looking median.
+    """
+    fast = bench._stat([100, 101, 102, 103, 104])
+    tail = bench._stat([100, 101, 102, 103, 100_000])
+    assert fast.median == tail.median == 102
+    assert tail.p95 == 100_000
+    assert tail.p99 == 100_000
+    assert tail.p99 > tail.median * 100
+
+
+def test_percentiles_are_none_when_there_are_no_samples() -> None:
+    stat = bench._stat([None, None])
+    assert stat.count == 0
+    assert stat.p95 is None
+    assert stat.p99 is None
+
+
+def test_percentiles_handle_a_single_sample() -> None:
+    stat = bench._stat([42.0])
+    assert stat.p95 == 42.0
+    assert stat.p99 == 42.0

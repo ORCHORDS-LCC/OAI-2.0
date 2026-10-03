@@ -142,6 +142,11 @@ class Stat:
     min: float | None
     max: float | None
     stddev: float | None
+    #: Nearest-rank percentiles. AC-PERF-032/035 ask for tail behaviour and
+    #: the aggregate previously carried min/median/max only, so a slow cell
+    #: and a slow *tail* were indistinguishable from the same run.
+    p95: float | None = None
+    p99: float | None = None
 
     def as_dict(self) -> dict[str, float | int | None]:
         return asdict(self)
@@ -152,6 +157,18 @@ def _stat(values: Iterable[float | None]) -> Stat:
     if not nums:
         return Stat(count=0, mean=None, median=None, min=None, max=None, stddev=None)
     n = len(nums)
+    ordered = sorted(nums)
+
+    def _percentile(fraction: float) -> float:
+        """Nearest-rank percentile: the smallest sample at or above ``fraction``.
+
+        Nearest-rank is used rather than interpolation so the reported value
+        is always an observed sample. An interpolated p99 of a 5-sample run
+        would be a number no run produced.
+        """
+        index = max(0, math.ceil(fraction * n) - 1)
+        return ordered[min(index, n - 1)]
+
     mean = statistics.fmean(nums)
     median = statistics.median(nums)
     sd = statistics.pstdev(nums) if n > 1 else 0.0
@@ -162,6 +179,8 @@ def _stat(values: Iterable[float | None]) -> Stat:
         min=min(nums),
         max=max(nums),
         stddev=sd,
+        p95=_percentile(0.95),
+        p99=_percentile(0.99),
     )
 
 
