@@ -62,8 +62,13 @@ class FakeR2:
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
         self.puts: list[tuple[str, str]] = []
+        # Failure injection for the partial-dependency matrix (#205
+        # REQ-CFOPS-014). Off by default; existing tests are unaffected.
+        self.fail_put = False
 
     async def put_text(self, key: str, value: str) -> None:
+        if self.fail_put:
+            raise RuntimeError("R2 outage")
         self.values[key] = value
         self.puts.append((key, value))
 
@@ -76,6 +81,9 @@ class FakeVectorize:
         self.upserts: list[tuple[str, list[float], dict[str, object]]] = []
         self.matches: list[tuple[str, float]] = []
         self.queries: list[int] = []
+        # Failure injection for the partial-dependency matrix (#205
+        # REQ-CFOPS-014). Off by default; existing tests are unaffected.
+        self.fail_upsert = False
 
     async def upsert(
         self,
@@ -86,6 +94,8 @@ class FakeVectorize:
     ) -> object:
         assert isinstance(values, (list, tuple))
         assert isinstance(metadata, dict)
+        if self.fail_upsert:
+            raise RuntimeError("Vectorize outage")
         self.upserts.append(
             (vector_id, [float(v) for v in values], metadata)
         )
@@ -462,3 +472,185 @@ def test_async_cloudflare_runtime_exports_from_knowledge_package() -> None:
     assert ExportedIntegrity is KnowledgeIntegrityError
     assert ExportedRuntimeError is KnowledgeRuntimeError
     assert ExportedCandidate is RetrievalCandidate
+
+
+# ---------------------------------------------------------------------------
+# #205 WI-CFOPS-014 / 015 — partial dependency failure and idempotency.
+#
+# The async runtime writes R2 -> Vectorize -> D1 with no compensation step.
+# These tests pin the state left behind at each failure point, so the
+# consequences are documented behaviour rather than an accident, and so a
+# future reordering cannot silently change which artifacts a failure orphans.
+# They extend the existing fakes; no existing test is duplicated.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_partial_r2_failure_writes_nothing_anywhere() -> None:
+    """A is first in the order, so nothing should exist afterwards."""
+    runtime, _reader, writer, r2, vectorize, _kv = _runtime()
+    r2.fail_put = True
+
+    with pytest.raises(RuntimeError, match="R2 outage"):
+        await runtime.put(_obj(), vector=[1.0, 0.0], now=20.0)
+
+    assert r2.puts == [], "a failed R2 write must not be recorded as a put"
+    assert vectorize.upserts == [], "Vectorize must not be reached after R2 fails"
+    assert writer.writes == [], "authoritative D1 must not be written"
+    assert writer.revision == 4, "a failed put must not advance the revision"
+
+
+@pytest.mark.asyncio
+async def test_partial_vectorize_failure_leaves_an_r2_body_with_no_d1_row() -> None:
+    """B. The orphaned body is a non-authoritative artifact, NOT a false success.
+
+    The R2 key is content-addressed and may already be shared by a retained
+    row, so it is deliberately kept. `gc.py` owns reconciliation of
+    unreferenced bodies; this test records the orphan rather than deleting it,
+    because deleting a possibly-shared body here would be unsafe.
+    """
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+    vectorize.fail_upsert = True
+    obj = _obj()
+
+    with pytest.raises(RuntimeError, match="Vectorize outage"):
+        await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+
+    assert r2.values == {f"oai2-blobs/{obj.content_hash}": obj.content}
+    assert vectorize.upserts == []
+    assert writer.writes == [], "authoritative D1 must not be written"
+    assert writer.revision == 4
+    assert await runtime.get(obj.knowledge_id) is None, (
+        "a partially-written object must not be readable as authoritative"
+    )
+    assert reader.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_partial_d1_failure_leaves_r2_and_vectorize_without_an_authoritative_row() -> None:
+    """C. Neither non-authoritative store is authoritative; D1 is."""
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+    writer.deny_write = True
+    obj = _obj()
+
+    with pytest.raises(KnowledgeConflictError):
+        await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+
+    assert f"oai2-blobs/{obj.content_hash}" in r2.values
+    assert [u[0] for u in vectorize.upserts] == [str(obj.knowledge_id)]
+    assert writer.revision == 4, "a denied write must not advance the revision"
+    assert await runtime.get(obj.knowledge_id) is None
+    assert reader.rows == {}
+
+
+@pytest.mark.asyncio
+async def test_d1_write_exception_is_not_reported_as_success() -> None:
+    """C'. A thrown D1 failure must not be mistaken for a committed write."""
+    runtime, _reader, writer, r2, _vectorize, _kv = _runtime()
+    obj = _obj()
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("D1 outage")
+
+    writer.write_metadata = boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="D1 outage"):
+        await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+
+    assert f"oai2-blobs/{obj.content_hash}" in r2.values
+    assert writer.revision == 4
+
+
+# ---------------------------------------------------------------------------
+# REQ-CFOPS-015 — repeated PUT must not multiply effects
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_repeated_put_is_idempotent_by_key() -> None:
+    """Same logical object twice: same R2 key, same Vectorize id, one D1 row."""
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+    obj = _obj()
+
+    first = await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+    second = await runtime.put(obj, vector=[1.0, 0.0], now=21.0)
+
+    # Content-addressed R2 key: the same object, overwritten not duplicated.
+    assert r2.puts[0][0] == r2.puts[1][0] == f"oai2-blobs/{obj.content_hash}"
+    assert set(r2.values) == {f"oai2-blobs/{obj.content_hash}"}
+    # Vectorize upserts by knowledge_id: same id, no second record.
+    assert {u[0] for u in vectorize.upserts} == {str(obj.knowledge_id)}
+    # D1 is an upsert keyed by knowledge_id: exactly one authoritative row.
+    assert len({row.knowledge_id for row, _exp, _now in writer.writes}) == 1
+    reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
+    assert len(reader.rows) == 1
+    # NOT idempotent for revision: a successful put always advances it, so a
+    # retry after an uncertain outcome costs a revision and invalidates every
+    # KV cache entry. Idempotent for DATA, not for revision/cost.
+    assert first == 5
+    assert second == 6
+
+
+@pytest.mark.asyncio
+async def test_retry_after_partial_failure_creates_no_duplicate_authoritative_row() -> None:
+    """E. A retry after a Vectorize failure must not double-write anything."""
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+    obj = _obj()
+
+    vectorize.fail_upsert = True
+    with pytest.raises(RuntimeError, match="Vectorize outage"):
+        await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+    assert writer.writes == []
+
+    vectorize.fail_upsert = False
+    revision = await runtime.put(obj, vector=[1.0, 0.0], now=21.0)
+
+    assert revision == 5, "the successful retry advances the revision exactly once"
+    assert len(writer.writes) == 1, "only the successful attempt wrote D1"
+    reader.rows[str(obj.knowledge_id)] = writer.writes[0][0]
+    assert len(reader.rows) == 1
+    assert [u[0] for u in vectorize.upserts] == [str(obj.knowledge_id)]
+    assert set(r2.values) == {f"oai2-blobs/{obj.content_hash}"}
+
+
+@pytest.mark.asyncio
+async def test_content_change_under_stable_id_leaves_the_previous_body_orphaned() -> None:
+    """Documented consequence of a content-addressed key under a stable id.
+
+    The previous body is NOT deleted: its key may be shared by a retained row.
+    `gc.py` classifies it UNREFERENCED_CANDIDATE and `sweep.py` owns deletion.
+    """
+    runtime, _reader, _writer, r2, _vectorize, _kv = _runtime()
+    original = _obj(content="first body")
+    updated = _obj(content="second body")
+    assert original.knowledge_id == updated.knowledge_id
+    assert original.content_hash != updated.content_hash
+
+    await runtime.put(original, vector=[1.0, 0.0], now=20.0)
+    await runtime.put(updated, vector=[1.0, 0.0], now=21.0)
+
+    assert set(r2.values) == {
+        f"oai2-blobs/{original.content_hash}",
+        f"oai2-blobs/{updated.content_hash}",
+    }, "the superseded body is retained for reference-safe GC, not deleted here"
+
+
+@pytest.mark.asyncio
+async def test_shared_content_across_rows_is_never_removed_by_a_failed_put() -> None:
+    """F. A body shared by another row must survive a partial failure."""
+    runtime, reader, _writer, r2, vectorize, _kv = _runtime()
+    first = _obj(knowledge_id="ko_shared_a", content="shared body")
+    second = _obj(knowledge_id="ko_shared_b", content="shared body")
+    assert first.content_hash == second.content_hash
+
+    await runtime.put(first, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(first.knowledge_id)] = _row(first)
+
+    vectorize.fail_upsert = True
+    with pytest.raises(RuntimeError, match="Vectorize outage"):
+        await runtime.put(second, vector=[1.0, 0.0], now=21.0)
+
+    assert f"oai2-blobs/{first.content_hash}" in r2.values, (
+        "a shared content-addressed body must never be removed as rollback"
+    )
+    assert await runtime.get(first.knowledge_id) is not None
