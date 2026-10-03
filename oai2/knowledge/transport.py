@@ -117,6 +117,11 @@ class TransportErrorCode(StrEnum):
     UNAVAILABLE_DEPENDENCY = "unavailable_dependency"
     INTEGRITY = "integrity"
     INTERNAL = "internal"
+    # REQ-CFOPS-013: admitted-and-then-refused, distinct from a dependency being
+    # unavailable. A client that conflates the two cannot tell "this system is
+    # momentarily full, retry shortly" from "D1 or Vectorize is down", and those
+    # call for different backoff. Always retryable; the work was not attempted.
+    SATURATED = "saturated"
 
 
 class TransportAuthContext(BaseModel):

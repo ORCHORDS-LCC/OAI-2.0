@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from .abstraction import RetrievalRequest
+from .admission import KnowledgeSaturatedError
 from .cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
@@ -122,6 +123,17 @@ class KnowledgeWorkerTransport:
                 request_id=request.request_id,
                 ok=True,
                 objects=result.objects,
+            )
+        except KnowledgeSaturatedError as exc:
+            # REQ-CFOPS-013: admitted and then refused. Carries its own
+            # transport error so the SATURATED code and its retryability reach
+            # the caller unchanged rather than being collapsed into a generic
+            # dependency failure.
+            return self._failure(
+                request,
+                exc.error.code,
+                exc.error.message,
+                retryable=exc.error.retryable,
             )
         except KnowledgeConflictError as exc:
             return self._failure(

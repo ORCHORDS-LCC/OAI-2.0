@@ -123,6 +123,10 @@ def test_error_codes_cover_contract_failure_classes() -> None:
         "unavailable_dependency",
         "integrity",
         "internal",
+        # REQ-CFOPS-013. Additive wire-contract change; see the cardinality
+        # guard in test_transport_validation.py for why it is its own code
+        # rather than a reuse of unavailable_dependency.
+        "saturated",
     }
     assert {code.value for code in TransportErrorCode} == expected
 

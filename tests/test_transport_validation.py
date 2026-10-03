@@ -171,13 +171,27 @@ def test_transport_error_code_enum_values_are_stable_strings(
     assert code.value == expected_value
 
 
-def test_transport_error_code_has_exactly_seven_distinct_values() -> None:
-    """Closing the surface: the error-code taxonomy is exactly 7 codes
+def test_transport_error_code_has_exactly_eight_distinct_values() -> None:
+    """Closing the surface: the error-code taxonomy is exactly 8 codes
     (auth, validation, not_found, conflict, unavailable_dependency,
-    integrity, internal). A future refactor that collapses these (e.g.
-    folding NOT_FOUND and CONFLICT into VALIDATION) breaks the wire
-    contract for live workers that branch on ``error.code``."""
-    assert len(set(TransportErrorCode)) == 7
+    integrity, internal, saturated). A future refactor that collapses these
+    (e.g. folding NOT_FOUND and CONFLICT into VALIDATION) breaks the wire
+    contract for live workers that branch on ``error.code``.
+
+    SEVEN -> EIGHT, deliberately (#205 REQ-CFOPS-013). SATURATED was added as
+    its own code rather than reusing UNAVAILABLE_DEPENDENCY precisely so this
+    change would show up here instead of being absorbed. A client that cannot
+    distinguish "admitted then refused, retry shortly" from "D1 or Vectorize is
+    down" will apply the wrong backoff to one of them, and the common failure is
+    a saturated system that looks like an outage and backs off far too hard.
+
+    The cost is real and is accepted: this is an additive change to a wire
+    contract, so a live worker that switches on error.code must tolerate an
+    unrecognised code. Nothing is deployed and no live worker sees this yet.
+    See #199 for live acceptance.
+    """
+    assert len(set(TransportErrorCode)) == 8
+    assert TransportErrorCode.SATURATED.value == "saturated"
 
 
 # ---------------------------------------------------------------------------
