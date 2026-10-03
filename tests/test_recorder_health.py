@@ -235,3 +235,106 @@ def test_an_exploding_sink_still_cannot_change_request_semantics() -> None:
     assert good.events[0].seq == bad_recorder.events[0].seq
     assert good.events[0].trace_id == good_recorder.trace_id
     assert ISOLATE_RECORDER_HEALTH.snapshot()["sink_errors"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Containment is only one level deep, or it is not containment.
+# ---------------------------------------------------------------------------
+
+
+class _ExplodingHealth(RecorderHealth):
+    """A health reporter that fails while reporting a failure."""
+
+    def note_sink_error(self) -> None:
+        raise RuntimeError("health reporter is down")
+
+    def note_trace_error(self) -> None:
+        raise RuntimeError("health reporter is down")
+
+
+class _ExplodingSink:
+    """A sink that always fails, to drive the health path."""
+
+    def emit(self, event: object) -> None:
+        raise RuntimeError("sink is down")
+
+
+class _WorkingSink:
+    def __init__(self) -> None:
+        self.events: list[object] = []
+
+    def emit(self, event: object) -> None:
+        self.events.append(event)
+
+
+def test_a_failing_health_reporter_cannot_break_the_request() -> None:
+    """REQ-OBS-025: telemetry must not change request semantics.
+
+    `record` is documented as never raising, and the module states the
+    property exists so that "a broken one must not turn a successful D1 /
+    R2 / Vectorize / KV operation into a failed knowledge request".
+
+    Reporting a fault is itself a call into a collaborator, so without a
+    guard around it the containment was one level deep: a health reporter
+    that raised converted a *telemetry* failure into a *request* failure.
+    The observer broke the operation it observes.
+    """
+    recorder = new_request_recorder(
+        sink=_ExplodingSink(), request_id="r", health=_ExplodingHealth()
+    )
+    # Must not raise.
+    _record(recorder, 2)
+    # And the fault is still counted on the recorder's own accumulator, which
+    # no collaborator owns, so the failure is not lost -- only the report of
+    # it is contained.
+    assert recorder.snapshot()["sink_errors"] == 2
+
+
+def test_a_failing_health_reporter_does_not_break_a_healthy_sink() -> None:
+    """The counterpart: a working sink still receives its events.
+
+    A containment fix that swallowed the emit path would pass the test above
+    while silently dropping every event, so the healthy path is pinned
+    explicitly.
+    """
+    sink = _WorkingSink()
+    recorder = new_request_recorder(
+        sink=sink, request_id="r", health=_ExplodingHealth()
+    )
+    _record(recorder, 3)
+    assert len(sink.events) == 3
+    assert recorder.snapshot()["sink_errors"] == 0
+
+
+def test_a_working_health_reporter_is_still_notified() -> None:
+    """The opposite direction: the guard must not silence a healthy reporter.
+
+    `_note_quietly` swallows everything, so a regression that stopped calling
+    the reporter entirely would be invisible. Health notification is a real
+    side effect and is pinned.
+    """
+
+    class _CountingHealth(RecorderHealth):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def note_sink_error(self) -> None:
+            self.calls.append("sink")
+            super().note_sink_error()
+
+    health = _CountingHealth()
+    recorder = new_request_recorder(
+        sink=_ExplodingSink(), request_id="r", health=health
+    )
+    _record(recorder)
+    assert health.calls == ["sink"]
+    assert health.snapshot()["sink_errors"] == 1
+    assert recorder.snapshot()["sink_errors"] == 1
+
+
+def test_a_health_reporter_is_optional() -> None:
+    """No health reporter must remain a supported configuration."""
+    recorder = new_request_recorder(sink=_ExplodingSink(), request_id="r")
+    _record(recorder)
+    assert recorder.snapshot()["sink_errors"] == 1

@@ -69,6 +69,29 @@ class _Inherit:
 _INHERIT: Any = _Inherit()
 
 
+def _note_quietly(health: RecorderHealth | None, method: str) -> None:
+    """Report a recorder fault to `health`, never letting the report escape.
+
+    REQ-OBS-025 is that a broken recorder must not turn a successful D1/R2/
+    Vectorize/KV operation into a failed request. Reporting a fault is itself
+    a call into a collaborator, so without this the containment is only one
+    level deep: a health reporter that raises turned a *telemetry* failure
+    into a *request* failure, which is exactly the inversion the requirement
+    exists to prevent. The observer broke the operation it observes.
+
+    A failure here is also unobservable by construction -- there is nowhere
+    left to report it to -- so it is swallowed rather than re-raised. The
+    recorder's own `trace_errors` / `sink_errors` counters, which are plain
+    integers no collaborator owns, remain the durable record.
+    """
+    if health is None:
+        return
+    try:
+        getattr(health, method)()
+    except Exception:
+        pass
+
+
 class TraceRecorder:
     """One recorder per accepted request. Owns ordering and delivery."""
 
@@ -197,8 +220,7 @@ class TraceRecorder:
             # Our own invariant broke. Counted separately from a sink fault so
             # #57 can tell an observer problem from a corrupt-trace problem.
             self._trace_errors += 1
-            if self._health is not None:
-                self._health.note_trace_error()
+            _note_quietly(self._health, "note_trace_error")
             return None
 
         try:
@@ -212,8 +234,7 @@ class TraceRecorder:
             # an event describing its own failure, raise again, and be given
             # another. Containment that recurses is not containment.
             self._sink_errors += 1
-            if self._health is not None:
-                self._health.note_sink_error()
+            _note_quietly(self._health, "note_sink_error")
         return event
 
     def snapshot(self) -> Mapping[str, object]:
