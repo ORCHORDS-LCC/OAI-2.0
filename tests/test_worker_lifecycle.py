@@ -98,10 +98,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
-import sys
 import tempfile
-import textwrap
 import time
 import unittest
 from pathlib import Path
@@ -282,8 +281,8 @@ def assert_isolated_env(env: dict[str, str], *, bin_dir: Path, label: str) -> No
     for entry in entries:
         if not is_within(entry, stub_root):
             problems.append(
-                "PATH entry %r is outside the isolated bin dir %s, so a real "
-                "executable on this host is reachable" % (entry, stub_root)
+                f"PATH entry {entry!r} is outside the isolated bin dir {stub_root}, so a real "
+                "executable on this host is reachable"
             )
 
     for name in INFRA_BINARIES:
@@ -292,27 +291,26 @@ def assert_isolated_env(env: dict[str, str], *, bin_dir: Path, label: str) -> No
             continue
         if not is_within(found, stub_root):
             problems.append(
-                "infrastructure executable %r resolves to %s, which is a REAL "
-                "binary and not a stub in %s" % (name, found, stub_root)
+                f"infrastructure executable {name!r} resolves to {found}, which is a REAL "
+                f"binary and not a stub in {stub_root}"
             )
     for name in REQUIRED_STUBS:
         if resolve_in_path(name, path) is None:
             problems.append(
-                "no stub for %r: a probe reaching for it would get a silent "
-                "'command not found' instead of a loud, logged failure" % name
+                f"no stub for {name!r}: a probe reaching for it would get a silent "
+                "'command not found' instead of a loud, logged failure"
             )
 
     for name in CLUSTER_ENV_VARS:
         if name in env:
             problems.append(
-                "%s is set in the test env (%r): a test must not inherit a live "
-                "cluster endpoint or docker context" % (name, env[name])
+                f"{name} is set in the test env ({env[name]!r}): a test must not inherit a live "
+                "cluster endpoint or docker context"
             )
 
     if problems:
         raise IsolationViolation(
-            "test isolation violated (%s):\n  - %s"
-            % (label, "\n  - ".join(problems))
+            "test isolation violated ({}):\n  - {}".format(label, "\n  - ".join(problems))
         )
 
 
@@ -345,33 +343,30 @@ def isolated_target(
     """
     if live and not live_mode_enabled():
         raise IsolationViolation(
-            "live mode refused: it requires %s=%s, which is not set. Isolated "
+            f"live mode refused: it requires {LIVE_ENV_VAR}={LIVE_OPT_IN}, which is not set. Isolated "
             "mode is the default and the only mode this suite runs in."
-            % (LIVE_ENV_VAR, LIVE_OPT_IN)
         )
 
     if not live:
         if container == PRODUCTION_CONTAINER:
             raise IsolationViolation(
-                "isolated mode REFUSES the production container %r. This is the "
+                f"isolated mode REFUSES the production container {container!r}. This is the "
                 "exact target that was stopped in the test-isolation incident "
-                "(see this module's docstring). A test must use %r, or opt in "
-                "with %s=%s." % (container, SYNTHETIC_CONTAINER, LIVE_ENV_VAR, LIVE_OPT_IN)
+                f"(see this module's docstring). A test must use {SYNTHETIC_CONTAINER!r}, or opt in "
+                f"with {LIVE_ENV_VAR}={LIVE_OPT_IN}."
             )
         if state_dir is not None:
             candidate = str(state_dir)
             for production in PRODUCTION_STATE_DIRS:
                 if candidate == production or candidate.startswith(production + "/"):
                     raise IsolationViolation(
-                        "isolated mode REFUSES the production state dir %r. A test "
-                        "state dir must live under its own temp root %s."
-                        % (candidate, root)
+                        f"isolated mode REFUSES the production state dir {candidate!r}. A test "
+                        f"state dir must live under its own temp root {root}."
                     )
             if Path(state_dir).is_absolute() and not is_within(state_dir, root):
                 raise IsolationViolation(
-                    "isolated mode REFUSES the state dir %r: it is outside the "
-                    "test's own temp root %s, so it is not a scratch dir."
-                    % (candidate, root)
+                    f"isolated mode REFUSES the state dir {candidate!r}: it is outside the "
+                    f"test's own temp root {root}, so it is not a scratch dir."
                 )
 
     return IsolatedTarget(container, Path(state_dir) if state_dir is not None else None, live)
@@ -389,7 +384,7 @@ def require_benign_tools_present() -> None:
     if missing:
         raise IsolationViolation(
             "cannot build an isolated bin dir: these real, non-infrastructure "
-            "tools are absent from this host's PATH: %s" % ", ".join(missing)
+            "tools are absent from this host's PATH: {}".format(", ".join(missing))
         )
 
 
@@ -444,8 +439,7 @@ def enforce_module_isolation() -> None:
             except IsolationViolation:
                 continue
             raise IsolationViolation(  # pragma: no cover
-                "the isolation layer did not refuse container=%r state_dir=%r"
-                % (container, state_dir)
+                f"the isolation layer did not refuse container={container!r} state_dir={state_dir!r}"
             )
 
     # 3. The live gate must be shut unless the operator opened it on purpose.
@@ -458,7 +452,7 @@ def enforce_module_isolation() -> None:
                 pass
             else:  # pragma: no cover
                 raise IsolationViolation(
-                    "live mode is open without %s=%s" % (LIVE_ENV_VAR, LIVE_OPT_IN)
+                    f"live mode is open without {LIVE_ENV_VAR}={LIVE_OPT_IN}"
                 )
 
 
@@ -496,7 +490,7 @@ def helper_source() -> str:
     """The probe's embedded python payload, taken from the shipped script."""
     match = _HELPER_RE.search(PRB.read_text(encoding="utf-8"))
     if match is None:
-        raise AssertionError("could not extract PRB_HELPER_SOURCE from %s" % PRB)
+        raise AssertionError(f"could not extract PRB_HELPER_SOURCE from {PRB}")
     return match.group(1)
 
 
@@ -522,7 +516,8 @@ def stat_line(pid: int, pgrp: int, starttime: int) -> str:
     last ')', so field 5 (pgrp) is index 2 and field 22 (starttime) is index 19."""
     rest = ["S", "1", str(pgrp), "1"] + ["0"] * 15 + [str(starttime)]
     assert len(rest) == 20
-    return "%d (python3) %s\n" % (pid, " ".join(rest))
+    joined_rest = " ".join(rest)
+    return f"{pid} (python3) {joined_rest}\n"
 
 
 def write_entry(proc: Path, pid: int, argv: list[str], pgrp: int, starttime: int) -> None:
@@ -597,7 +592,7 @@ def select_field(output: str, name: str) -> str:
                 key, _, value = token.partition("=")
                 if key == name:
                     return value
-    raise AssertionError("no PRB_SELECT %s= in output:\n%s" % (name, output))
+    raise AssertionError(f"no PRB_SELECT {name}= in output:\n{output}")
 
 
 # ---------------------------------------------------------------------------
@@ -873,7 +868,7 @@ class FakeCluster:
         # (stat field 22) is turned into an age. Without it, age is unprovable
         # and the probe must refuse the process.
         self.proc.joinpath("stat").write_text(
-            "cpu  1 2 3 4\nintr 1\nbtime %d\nprocesses 1\n" % BTIME
+            f"cpu  1 2 3 4\nintr 1\nbtime {BTIME}\nprocesses 1\n"
         )
         self.state.joinpath("calls.log").write_text("")
         self.state.joinpath("container").touch()
@@ -934,8 +929,8 @@ class FakeCluster:
             source = resolve_in_path(name, ambient)
             if source is None:
                 raise IsolationViolation(
-                    "cannot build the isolated bin dir: %r is absent from this "
-                    "host's PATH" % name
+                    f"cannot build the isolated bin dir: {name!r} is absent from this "
+                    "host's PATH"
                 )
             link = self.bin / name
             if link.is_symlink() or link.exists():
@@ -945,7 +940,11 @@ class FakeCluster:
     def enable_respawn(self, pid: int, age: float = 1.0, pgrp: int | None = None) -> None:
         self.state.joinpath("respawn").touch()
         self.state.joinpath("respawn_pid").write_text(str(pid))
-        self.state.joinpath("respawn_pgid").write_text(str(pgid if pgrp is not None else pid))
+        # `pgrp` is the parameter; this line previously read an undefined
+        # `pgid`. The conditional short-circuited on `pgrp is None`, so the
+        # single in-suite caller never touched the bad name and the suite
+        # stayed green -- passing `pgrp` at all raised NameError.
+        self.state.joinpath("respawn_pgid").write_text(str(pgrp if pgrp is not None else pid))
         self.state.joinpath("respawn_starttime").write_text(str(starttime_for_age(age)))
 
     def disable_respawn(self) -> None:
@@ -970,7 +969,7 @@ class FakeCluster:
         self.state.joinpath(name).write_text(value)
 
     def calls(self) -> list[str]:
-        return [l for l in self.state.joinpath("calls.log").read_text().splitlines() if l]
+        return [line for line in self.state.joinpath("calls.log").read_text().splitlines() if line]
 
     def env(self) -> dict[str, str]:
         """The environment a test's subprocess sees. Guarded, not merely careful."""
@@ -1002,7 +1001,7 @@ class FakeCluster:
         assert_isolated_env(
             self._raw_env() if env is None else env,
             bin_dir=self.bin,
-            label="FakeCluster %s" % self.root,
+            label=f"FakeCluster {self.root}",
         )
 
     def authorize(self, args: tuple[str, ...]) -> list[str]:
@@ -1022,10 +1021,9 @@ class FakeCluster:
             requested = argv[index + 1]
             if requested != self.target.container:
                 raise IsolationViolation(
-                    "refusing --container %r: this isolated cluster may only "
-                    "target %r. %r is the production container that the "
+                    f"refusing --container {requested!r}: this isolated cluster may only "
+                    f"target {self.target.container!r}. {PRODUCTION_CONTAINER!r} is the production container that the "
                     "test-isolation incident stopped; it is never a test target."
-                    % (requested, self.target.container, PRODUCTION_CONTAINER)
                 )
         if "--container" not in argv:
             argv += ["--container", self.target.container]
@@ -1082,7 +1080,7 @@ class _ClusterCase(unittest.TestCase):
     def output(self, result: subprocess.CompletedProcess[str]) -> str:
         return result.stdout + result.stderr
 
-    def fresh_cluster(self) -> "FakeCluster":
+    def fresh_cluster(self) -> FakeCluster:
         """An independent isolated cluster, for a test that must drive two."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -1121,10 +1119,10 @@ class TestIsolationEnforcement(_ClusterCase):
         # Stubs are the only thing on the PATH that can name a container.
         for name in REQUIRED_STUBS:
             resolved = resolve_in_path(name, env["PATH"])
-            self.assertIsNotNone(resolved, "%s must be stubbed" % name)
+            self.assertIsNotNone(resolved, f"{name} must be stubbed")
             self.assertTrue(
                 is_within(resolved, self.cluster.bin),
-                "%s must resolve to the stub dir, not to %s" % (name, resolved),
+                f"{name} must resolve to the stub dir, not to {resolved}",
             )
         # Everything else in the class has no stub and must not resolve at all.
         for name in INFRA_BINARIES:
@@ -1139,12 +1137,12 @@ class TestIsolationEnforcement(_ClusterCase):
             if entry.is_symlink():
                 self.assertIn(
                     entry.name, BENIGN_TOOLS,
-                    "undeclared symlink in the isolated bin dir: %s" % entry.name,
+                    f"undeclared symlink in the isolated bin dir: {entry.name}",
                 )
             else:
                 self.assertIn(
                     entry.name, REQUIRED_STUBS + SUITE_STUBS,
-                    "undeclared real file in the isolated bin dir: %s" % entry.name,
+                    f"undeclared real file in the isolated bin dir: {entry.name}",
                 )
 
     def test_iso_r2_default_test_target_is_never_the_production_container(self) -> None:
@@ -1172,9 +1170,9 @@ class TestIsolationEnforcement(_ClusterCase):
             self.assertNotIn(
                 PRODUCTION_CONTAINER,
                 call,
-                "a default run addressed the production container: %s" % call,
+                f"a default run addressed the production container: {call}",
             )
-            self.assertIn(SYNTHETIC_CONTAINER, call, "expected the synthetic target: %s" % call)
+            self.assertIn(SYNTHETIC_CONTAINER, call, f"expected the synthetic target: {call}")
         self.assertNotEqual(SYNTHETIC_CONTAINER, PRODUCTION_CONTAINER)
         self.assertFalse(self.cluster.target.live, "a default cluster must not be a live target")
 
@@ -1190,12 +1188,12 @@ class TestIsolationEnforcement(_ClusterCase):
         self.assertTrue(scratch.is_dir(), "the scratch state dir must exist")
         self.assertTrue(
             is_within(scratch, self.cluster.root),
-            "the scratch state dir must be inside the test's own temp root, got %s" % scratch,
+            f"the scratch state dir must be inside the test's own temp root, got {scratch}",
         )
         for production in PRODUCTION_STATE_DIRS:
             self.assertFalse(
                 is_within(scratch, production),
-                "the scratch state dir must not be %s" % production,
+                f"the scratch state dir must not be {production}",
             )
         self.assertEqual(
             self.cluster.target.state_dir, self.cluster.scratch_state,
@@ -1289,8 +1287,7 @@ class TestIsolationEnforcement(_ClusterCase):
         """
         self.assertFalse(
             live_mode_enabled(),
-            "live mode must be OFF by default; the suite is running with %s set"
-            % LIVE_ENV_VAR,
+            f"live mode must be OFF by default; the suite is running with {LIVE_ENV_VAR} set",
         )
         with self.assertRaises(IsolationViolation):
             isolated_target(PRODUCTION_CONTAINER, self.cluster.scratch_state, root=self.cluster.root)
@@ -1336,7 +1333,7 @@ class TestIsolationEnforcement(_ClusterCase):
         hostile.mkdir()
         trace = Path(self._tmp.name) / "real-docker-ran"
         decoy = hostile / "docker"
-        decoy.write_text("#!/bin/sh\n: > '%s'\nexit 0\n" % trace)
+        decoy.write_text(f"#!/bin/sh\n: > '{trace}'\nexit 0\n")
         decoy.chmod(0o755)
 
         # The hazard is real: without the guard this PATH executes `docker`.
@@ -1369,7 +1366,7 @@ class TestIsolationEnforcement(_ClusterCase):
             self.cluster.assert_isolated({"PATH": ambient})
         message = str(caught.exception)
         for name in present:
-            self.assertIn(name, message, "the guard must name %s" % name)
+            self.assertIn(name, message, f"the guard must name {name}")
 
     def test_iso_r11_module_level_guard_runs_before_any_test_and_is_satisfiable(self) -> None:
         """Req 3: the module-level guard is real, not a no-op that always raises.
@@ -1435,7 +1432,7 @@ class MatchingRuleTests(_ClusterCase):
         matches, rejects = parse_records(self.output(result))
 
         self.assertEqual(
-            len(matches), 1, "R1: the probe must not count itself. output:\n%s" % self.output(result)
+            len(matches), 1, f"R1: the probe must not count itself. output:\n{self.output(result)}"
         )
         self.assertEqual(matches[0]["pid"], str(WORKER_PID))
         self.assertEqual(select_field(self.output(result), "selected"), "1")
@@ -1444,8 +1441,7 @@ class MatchingRuleTests(_ClusterCase):
         self.assertIn(str(SELF_PID), rejected, "the probe's own process must be listed as rejected")
         self.assertTrue(
             rejected[str(SELF_PID)].startswith("self-"),
-            "R1: the probe's own process must be rejected by a self exclusion, got %r"
-            % rejected[str(SELF_PID)],
+            f"R1: the probe's own process must be rejected by a self exclusion, got {rejected[str(SELF_PID)]!r}",
         )
 
     def test_r1_marker_layer_rejects_a_non_self_pid_carrying_the_probe_marker(self) -> None:
@@ -1459,7 +1455,7 @@ class MatchingRuleTests(_ClusterCase):
         write_entry(
             self.cluster.proc,
             GHOST_PID,
-            ["python3", "-c", "import os  # %s\nprint('worker verify')\n" % marker],
+            ["python3", "-c", f"import os  # {marker}\nprint('worker verify')\n"],
             GHOST_PID,
             starttime_for_age(2),
         )
@@ -1473,7 +1469,7 @@ class MatchingRuleTests(_ClusterCase):
         self.assertEqual(
             reasons.get(str(GHOST_PID)),
             "self-marker-in-argv",
-            "R1: the marker exclusion must fire before the argv anchor, got %r" % reasons,
+            f"R1: the marker exclusion must fire before the argv anchor, got {reasons!r}",
         )
 
     def test_r1_self_pgid_layer_rejects_a_real_signature_in_the_probe_process_group(self) -> None:
@@ -1558,7 +1554,7 @@ class MatchingRuleTests(_ClusterCase):
                 self.assertEqual(
                     len(matches),
                     1 if expected else 0,
-                    "R1: %s -- matched=%d\n%s" % (why, len(matches), self.output(result)),
+                    f"R1: {why} -- matched={len(matches)}\n{self.output(result)}",
                 )
 
     def test_r2_selector_reports_starttime_from_stat_field_22(self) -> None:
@@ -1625,7 +1621,7 @@ class ProcessRecoveryProbeTests(_ClusterCase):
         self.assertEqual(
             result.returncode,
             EX_NOT_FOUND,
-            "R3: no intended worker must be a failure. output:\n%s" % self.output(result),
+            f"R3: no intended worker must be a failure. output:\n{self.output(result)}",
         )
         self.assertIn("outcome=FAILED", self.output(result))
         self.assertNotIn("killed pids: NONE", self.output(result))
@@ -1682,10 +1678,10 @@ class ProcessRecoveryProbeTests(_ClusterCase):
         elapsed = time.monotonic() - started
 
         self.assertEqual(
-            result.returncode, EX_DEADLINE, "R4: no replacement must fail. output:\n%s" % self.output(result)
+            result.returncode, EX_DEADLINE, f"R4: no replacement must fail. output:\n{self.output(result)}"
         )
         self.assertIn("no replacement within", self.output(result))
-        self.assertLess(elapsed, 30, "R5: the wait must be bounded, took %.1fs" % elapsed)
+        self.assertLess(elapsed, 30, f"R5: the wait must be bounded, took {elapsed:.1f}s")
 
     def test_r5_exceeding_the_deadline_is_a_failure_with_a_shell_deadline_of_one(self) -> None:
         """R5: even a one-second deadline must be enforced and reported."""
@@ -1694,7 +1690,7 @@ class ProcessRecoveryProbeTests(_ClusterCase):
         result = self.cluster.run(PRB, "--deadline", "1", "--poll-interval", "1")
         elapsed = time.monotonic() - started
         self.assertEqual(result.returncode, EX_DEADLINE, self.output(result))
-        self.assertLess(elapsed, 20, "a 1s deadline must not take %.1fs" % elapsed)
+        self.assertLess(elapsed, 20, f"a 1s deadline must not take {elapsed:.1f}s")
 
     def test_r4_replacement_with_a_reused_pid_and_a_new_start_time_is_rejected_by_default(self) -> None:
         """R2/R4: a same-pid replacement is only acceptable when the caller opts
@@ -1740,7 +1736,7 @@ class ProcessRecoveryProbeTests(_ClusterCase):
             "criterion replacement",
             "criterion container-still-up",
         ):
-            self.assertIn("[PASS] %s" % criterion, out)
+            self.assertIn(f"[PASS] {criterion}", out)
         self.assertIn("outcome=PROVEN-RECOVERY", out)
         self.assertNotIn("[FAIL]", out)
 
@@ -1791,10 +1787,10 @@ class ProcessRecoveryProbeTests(_ClusterCase):
         self.cluster.run(PRB, "--deadline", "5")
         verbs = docker_verbs(self.cluster.calls())
         for forbidden in ("restart", "stop", "start", "rm", "kill", "logs"):
-            self.assertNotIn(forbidden, verbs, "R5: the probe must not run `docker %s`" % forbidden)
+            self.assertNotIn(forbidden, verbs, f"R5: the probe must not run `docker {forbidden}`")
         self.assertEqual(verbs, {"inspect", "exec"})
         for call in self.cluster.calls():
-            self.assertNotIn("FORBIDDEN", call, "scope violation: %s" % call)
+            self.assertNotIn("FORBIDDEN", call, f"scope violation: {call}")
             if call.startswith("exec"):
                 self.assertEqual(call.split()[1], CONTAINER_NAME, call)
 
@@ -1893,7 +1889,7 @@ class LifecycleProbeTests(_ClusterCase):
         """L1/scope: no systemctl, no wsl, and only the one container."""
         self.cluster.run(LP, "--deadline-a", "3", "--deadline-b", "3", "--poll-interval", "1")
         for call in self.cluster.calls():
-            self.assertNotIn("FORBIDDEN", call, "scope violation: %s" % call)
+            self.assertNotIn("FORBIDDEN", call, f"scope violation: {call}")
             if call.startswith("exec"):
                 self.assertEqual(call.split()[1], CONTAINER_NAME, call)
 
@@ -2013,12 +2009,10 @@ class SupervisorOwnerStateTests(_ClusterCase):
                 self.write_sentinel(payload)
                 code, token = self.resolved()
                 self.assertEqual(code, EXIT_BAD_INTENT,
-                                 "sentinel %r resolved to %r with exit %d; damaged "
-                                 "owner state must fail closed with %d"
-                                 % (name, token, code, EXIT_BAD_INTENT))
+                                 f"sentinel {name!r} resolved to {token!r} with exit {code}; "
+                                 f"owner state must fail closed with {EXIT_BAD_INTENT}")
                 self.assertTrue(token.startswith("bad:"),
-                                "sentinel %r must be reported as damaged, got %r"
-                                % (name, token))
+                                f"sentinel {name!r} must be reported as damaged, got {token!r}")
 
     def test_sup_r3_a_sentinel_that_is_not_a_readable_regular_file_is_damaged(self) -> None:
         """A directory or a dangling symlink in the sentinel's place is damage."""
@@ -2155,7 +2149,7 @@ class SupervisorOwnerStateTests(_ClusterCase):
         after = (self.cluster.state / "calls.log").read_text()
         self.assertEqual(after, before,
                          "a damaged sentinel must be refused before the container "
-                         "runtime is touched, but calls were logged:\n%s" % after)
+                         f"runtime is touched, but calls were logged:\n{after}")
 
     def test_sup_r12_an_absent_sentinel_reaches_the_supervision_path(self) -> None:
         """The other half of the pair: `run` really does proceed.
@@ -2181,7 +2175,7 @@ class SupervisorOwnerStateTests(_ClusterCase):
         self.write_sentinel(b"stop\n")
         stop = self.run_supervisor()
         self.assertIn(stop.returncode, (EXIT_OK, 13),
-                      "stop must not be a fault: %d\n%s" % (stop.returncode, self.output(stop)))
+                      f"stop must not be a fault: {stop.returncode}\n{self.output(stop)}")
         self.assertNotIn("FAULT", self.output(stop))
 
         self.sentinel().unlink(missing_ok=True)
@@ -2236,8 +2230,8 @@ class ScriptContractTests(unittest.TestCase):
         for code in ("0", "2", "3", "4", "5", "6", "7"):
             self.assertRegex(
                 source,
-                r"(?m)^\s*#\s*%s\s{2,}\S" % code,
-                "exit code %s must be documented in the header" % code,
+                rf"(?m)^\s*#\s*{code}\s{{2,}}\S",
+                f"exit code {code} must be documented in the header",
             )
 
     def test_r5_default_deadline_is_sixty_seconds_and_not_a_fixed_sleep(self) -> None:
@@ -2286,12 +2280,12 @@ class ScriptContractTests(unittest.TestCase):
         runs, otherwise the probe would look for the wrong process."""
         entrypoint = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn(
-            "python3 -c '%s' worker verify" % WORKER_C_SCRIPT,
+            f"python3 -c '{WORKER_C_SCRIPT}' worker verify",
             entrypoint,
             "the worker command line this probe targets must exist in entrypoint.sh",
         )
         source = PRB.read_text(encoding="utf-8")
-        self.assertIn('IMPORT_STMT="%s"' % "from qpipe.cli import main", source)
+        self.assertIn('IMPORT_STMT="{}"'.format("from qpipe.cli import main"), source)
         self.assertIn('ENTRY_CALL="main()"', source)
         self.assertIn('SUBCOMMAND="worker verify"', source)
         self.assertIn('NODE_FLAG="--node-id"', source)
@@ -2301,12 +2295,46 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("process-recovery-probe.sh", LP.read_text(encoding="utf-8"))
         payload = helper_source()
         for token in ("stat", "starttime", "self-pid", "self-pgid", "self-marker-in-c-script"):
-            self.assertIn(token, payload, "the payload must implement %s" % token)
+            self.assertIn(token, payload, f"the payload must implement {token}")
 
     def test_r5_both_probes_are_strict_about_their_own_mode(self) -> None:
         for script in (PRB, LP):
             with self.subTest(script=script.name):
                 self.assertIn("set -u", script.read_text(encoding="utf-8"))
+
+
+class RespawnPgidHelperTests(unittest.TestCase):
+    """Regression: `enable_respawn(pgrp=...)` used to raise NameError.
+
+    The helper read an undefined `pgid` instead of its own `pgrp` parameter.
+    The conditional short-circuited when `pgrp` was None, and the only
+    in-suite caller omitted it, so the whole suite stayed green while the
+    documented parameter was a guaranteed crash. These tests pass the
+    argument, which is the only way the defect is observable.
+    """
+
+    def _helper(self) -> tuple[FakeCluster, Path]:
+        inst = FakeCluster.__new__(FakeCluster)
+        root = Path(tempfile.mkdtemp())
+        inst.state = root
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        return inst, root
+
+    def test_default_pgid_is_the_pid_when_pgrp_is_omitted(self) -> None:
+        inst, root = self._helper()
+        inst.enable_respawn(pid=4242, age=2.0)
+        self.assertEqual((root / "respawn_pgid").read_text(), "4242")
+
+    def test_supplied_pgrp_is_written_and_does_not_raise(self) -> None:
+        inst, root = self._helper()
+        inst.enable_respawn(pid=4242, age=2.0, pgrp=99)
+        self.assertEqual((root / "respawn_pgid").read_text(), "99")
+
+    def test_an_explicit_zero_pgid_is_not_silently_replaced_by_the_pid(self) -> None:
+        """0 is a real value here, not a falsy placeholder."""
+        inst, root = self._helper()
+        inst.enable_respawn(pid=4242, age=2.0, pgrp=0)
+        self.assertEqual((root / "respawn_pgid").read_text(), "0")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -70,7 +70,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -266,7 +266,7 @@ def assert_local_argv_offline(argv: Sequence[str]) -> list[str]:
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def percentile(values: Sequence[float], fraction: float) -> float | None:
