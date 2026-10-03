@@ -8,12 +8,18 @@ from oai2.knowledge import (
     KnowledgeObject,
     RetrievalRequest,
     sha256_hex,
+    vector_id_for,
 )
 from oai2.knowledge.cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
     KnowledgeIntegrityError,
 )
+from oai2.knowledge.transport import VectorMatch
+
+# The runtime instance under test embeds with this version. A different value is
+# how the embedding-migration transition is exercised below.
+_EMBEDDING_VERSION = "embed-v1"
 
 
 class FakeReader:
@@ -79,11 +85,12 @@ class FakeR2:
 class FakeVectorize:
     def __init__(self) -> None:
         self.upserts: list[tuple[str, list[float], dict[str, object]]] = []
-        self.matches: list[tuple[str, float]] = []
+        self.matches: list[VectorMatch] = []
         self.queries: list[int] = []
         # Failure injection for the partial-dependency matrix (#205
         # REQ-CFOPS-014). Off by default; existing tests are unaffected.
         self.fail_upsert = False
+        self.fail_query = False
 
     async def upsert(
         self,
@@ -101,9 +108,14 @@ class FakeVectorize:
         )
         return {"mutationId": "m1"}
 
-    async def query(self, values: object, *, top_k: int = 5) -> list[tuple[str, float]]:
+    async def query(self, values: object, *, top_k: int = 5) -> list[VectorMatch]:
         self.queries.append(top_k)
+        if self.fail_query:
+            raise RuntimeError("Vectorize outage")
         return list(self.matches[:top_k])
+
+    def vector_ids(self) -> list[str]:
+        return [u[0] for u in self.upserts]
 
 
 class FakeKv:
@@ -152,7 +164,28 @@ def _obj(
     )
 
 
-def _row(obj: KnowledgeObject, *, vectorized: bool = True) -> CFRow:
+def _row(
+    obj: KnowledgeObject,
+    *,
+    vectorized: bool = True,
+    embedding_version: str = _EMBEDDING_VERSION,
+) -> CFRow:
+    """An authoritative D1 row.
+
+    ``vectorized=True`` is the post-fix shape: the row names the
+    generation-specific vector id. ``vectorized="legacy"`` reproduces a row
+    written before this change, where vectorize_id is the bare knowledge_id.
+    """
+    if vectorized is True:
+        vectorize_id: str | None = vector_id_for(
+            knowledge_id=obj.knowledge_id,
+            content_hash=obj.content_hash,
+            embedding_version=embedding_version,
+        )
+    elif vectorized == "legacy":
+        vectorize_id = str(obj.knowledge_id)
+    else:
+        vectorize_id = None
     return CFRow(
         knowledge_id=obj.knowledge_id,
         topic=obj.topic,
@@ -162,11 +195,49 @@ def _row(obj: KnowledgeObject, *, vectorized: bool = True) -> CFRow:
         source_uri=obj.source_uri,
         retrieved_at=obj.retrieved_at,
         r2_blob_key=f"oai2-blobs/{obj.content_hash}" if obj.content else None,
-        vectorize_id=str(obj.knowledge_id) if vectorized else None,
+        vectorize_id=vectorize_id,
     )
 
 
-def _runtime() -> tuple[
+def _match(
+    obj: KnowledgeObject,
+    score: float,
+    *,
+    embedding_version: str = _EMBEDDING_VERSION,
+    vector_id: str | None = None,
+    content_hash: str | None = None,
+) -> VectorMatch:
+    """A Vectorize match, carrying the attribution the read contract needs."""
+    return VectorMatch(
+        vector_id=vector_id
+        if vector_id is not None
+        else vector_id_for(
+            knowledge_id=obj.knowledge_id,
+            content_hash=obj.content_hash,
+            embedding_version=embedding_version,
+        ),
+        score=score,
+        knowledge_id=obj.knowledge_id,
+        content_hash=content_hash if content_hash is not None else obj.content_hash,
+        embedding_version=embedding_version,
+    )
+
+
+def _legacy_match(obj: KnowledgeObject, score: float) -> VectorMatch:
+    """A match for a pre-migration vector, whose id is the bare knowledge_id."""
+    return VectorMatch(
+        vector_id=str(obj.knowledge_id),
+        score=score,
+        knowledge_id=obj.knowledge_id,
+        content_hash=obj.content_hash,
+        embedding_version=_EMBEDDING_VERSION,
+    )
+
+
+def _runtime(
+    *,
+    embedding_version: str = _EMBEDDING_VERSION,
+) -> tuple[
     AsyncCloudflareKnowledgeRuntime,
     FakeReader,
     FakeWriter,
@@ -185,7 +256,7 @@ def _runtime() -> tuple[
         r2=r2,  # type: ignore[arg-type]
         vectorize=vectorize,  # type: ignore[arg-type]
         kv=kv,  # type: ignore[arg-type]
-        embedding_version="embed-v1",
+        embedding_version=embedding_version,
         embedding_digest="embed-digest-v1",
     )
     return runtime, reader, writer, r2, vectorize, kv
@@ -200,11 +271,21 @@ async def test_put_writes_r2_vector_then_authoritative_d1_metadata() -> None:
 
     assert revision == 5
     assert r2.puts == [(f"oai2-blobs/{obj.content_hash}", obj.content)]
-    assert vectorize.upserts[0][0] == str(obj.knowledge_id)
+    expected_vector = vector_id_for(
+        knowledge_id=obj.knowledge_id,
+        content_hash=obj.content_hash,
+        embedding_version=_EMBEDDING_VERSION,
+    )
+    # The vector is identified by its generation, NOT by the claim id. This is
+    # what makes the D1 write below an atomic switch rather than a mutation of
+    # the vector an earlier committed row already points at.
+    assert vectorize.upserts[0][0] == expected_vector
+    assert vectorize.upserts[0][0] != str(obj.knowledge_id)
     assert vectorize.upserts[0][2]["content_hash"] == obj.content_hash
     row, expected_revision, now = writer.writes[0]
     assert row.knowledge_id == obj.knowledge_id
-    assert row.vectorize_id == str(obj.knowledge_id)
+    assert row.vectorize_id == expected_vector
+    assert len(expected_vector.encode()) <= 64, "Vectorize id limit"
     assert expected_revision == 4
     assert now == 20.0
 
@@ -301,7 +382,7 @@ async def test_semantic_retrieve_uses_vectorize_and_authoritative_d1_r2() -> Non
     obj = _obj()
     row = _row(obj)
     reader.rows[str(obj.knowledge_id)] = row
-    vectorize.matches = [(str(obj.knowledge_id), 0.99)]
+    vectorize.matches = [_match(obj, 0.99)]
     assert row.r2_blob_key is not None
     r2.values[row.r2_blob_key] = obj.content
 
@@ -325,7 +406,15 @@ async def test_semantic_retrieve_uses_vectorize_and_authoritative_d1_r2() -> Non
 @pytest.mark.asyncio
 async def test_semantic_retrieve_excludes_stale_vector_without_d1_metadata() -> None:
     runtime, _reader, _writer, _r2, vectorize, _kv = _runtime()
-    vectorize.matches = [("missing", 0.99)]
+    vectorize.matches = [
+        VectorMatch(
+            vector_id="oai2v1-" + "0" * 56,
+            score=0.99,
+            knowledge_id=KnowledgeId("ko_missing"),
+            content_hash="0" * 64,
+            embedding_version=_EMBEDDING_VERSION,
+        )
+    ]
 
     result = await runtime.retrieve(
         RetrievalRequest(topic="semantic"),
@@ -337,21 +426,15 @@ async def test_semantic_retrieve_excludes_stale_vector_without_d1_metadata() -> 
     assert bool(result) is False
 
 
-@pytest.mark.asyncio
-async def test_semantic_retrieve_surfaces_vectorize_id_mismatch() -> None:
-    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
-    obj = _obj()
-    row = _row(obj)
-    from dataclasses import replace
-
-    reader.rows[str(obj.knowledge_id)] = replace(row, vectorize_id="different")
-    vectorize.matches = [(str(obj.knowledge_id), 0.99)]
-
-    with pytest.raises(KnowledgeIntegrityError, match="disagrees with D1 vectorize_id"):
-        await runtime.retrieve(
-            RetrievalRequest(topic="semantic"),
-            query_vector=[1.0],
-        )
+# SUPERSEDED by test_a_match_naming_another_vector_is_excluded_not_raised.
+#
+# This used to assert that a match naming a vector D1 does not reference RAISES
+# an integrity error. That was only correct while vector identity was the
+# knowledge_id, which made an id mismatch a genuine contradiction. With
+# generation-specific ids an id mismatch is the ordinary state of an orphaned
+# vector, so raising here would report normal retry churn as corruption. The
+# guarantee is preserved and is now stronger in the way that matters: such a
+# match is never returned and never contributes a score.
 
 
 @pytest.mark.asyncio
@@ -380,10 +463,16 @@ async def test_semantic_retrieve_overfetches_then_filters_authoritative_metadata
         r2.values[row.r2_blob_key] = obj.content
 
     vectorize.matches = [
-        ("ko_missing", 0.99),
-        (str(low.knowledge_id), 0.95),
-        (str(retired.knowledge_id), 0.90),
-        (str(eligible.knowledge_id), 0.80),
+        VectorMatch(
+            vector_id="oai2v1-" + "0" * 56,
+            score=0.99,
+            knowledge_id=KnowledgeId("ko_missing"),
+            content_hash="0" * 64,
+            embedding_version=_EMBEDDING_VERSION,
+        ),
+        _match(low, 0.95),
+        _match(retired, 0.90),
+        _match(eligible, 0.80),
     ]
 
     result = await runtime.retrieve(
@@ -537,7 +626,13 @@ async def test_partial_d1_failure_leaves_r2_and_vectorize_without_an_authoritati
         await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
 
     assert f"oai2-blobs/{obj.content_hash}" in r2.values
-    assert [u[0] for u in vectorize.upserts] == [str(obj.knowledge_id)]
+    assert vectorize.vector_ids() == [
+        vector_id_for(
+            knowledge_id=obj.knowledge_id,
+            content_hash=obj.content_hash,
+            embedding_version=_EMBEDDING_VERSION,
+        )
+    ], "the denied generation is a NEW vector, not an overwrite of the committed one"
     assert writer.revision == 4, "a denied write must not advance the revision"
     assert await runtime.get(obj.knowledge_id) is None
     assert reader.rows == {}
@@ -589,8 +684,15 @@ async def test_repeated_put_targets_the_same_keys_or_ids() -> None:
     # Content-addressed R2 key: the same object, overwritten not duplicated.
     assert r2.puts[0][0] == r2.puts[1][0] == f"oai2-blobs/{obj.content_hash}"
     assert set(r2.values) == {f"oai2-blobs/{obj.content_hash}"}
-    # Vectorize upserts by knowledge_id: same id, no second record.
-    assert {u[0] for u in vectorize.upserts} == {str(obj.knowledge_id)}
+    # Vectorize upserts by generation: identical inputs derive an identical id,
+    # so a retried put re-upserts the same vector instead of accumulating one.
+    assert {u[0] for u in vectorize.upserts} == {
+        vector_id_for(
+            knowledge_id=obj.knowledge_id,
+            content_hash=obj.content_hash,
+            embedding_version=_EMBEDDING_VERSION,
+        )
+    }
     # Same identity targeted on every write. Cardinality of the real
     # authoritative table is NOT established by a recorder.
     assert len({row.knowledge_id for row, _exp, _now in writer.writes}) == 1
@@ -623,7 +725,13 @@ async def test_retry_after_partial_failure_creates_no_duplicate_authoritative_ro
     assert len(writer.writes) == 1
     reader.rows[str(obj.knowledge_id)] = writer.writes[0][0]
     assert len(reader.rows) == 1
-    assert [u[0] for u in vectorize.upserts] == [str(obj.knowledge_id)]
+    assert vectorize.vector_ids() == [
+        vector_id_for(
+            knowledge_id=obj.knowledge_id,
+            content_hash=obj.content_hash,
+            embedding_version=_EMBEDDING_VERSION,
+        )
+    ], "a retry of the same generation targets the same vector"
     assert set(r2.values) == {f"oai2-blobs/{obj.content_hash}"}
 
 
@@ -669,133 +777,397 @@ async def test_shared_content_across_rows_is_never_removed_by_a_failed_put() -> 
     )
     assert await runtime.get(first.knowledge_id) is not None
 
+# ---------------------------------------------------------------------------
+# #19 — D1/Vectorize split-brain, now an implemented invariant.
+#
+# THE DEFECT. The put order is R2 -> Vectorize -> D1 and the vector identity was
+# the stable knowledge_id. A put that succeeded on Vectorize but was then denied
+# by D1 therefore OVERWROTE the vector the last committed D1 row still pointed
+# at, while D1 and R2 kept representing the previous content. Semantic retrieval
+# then scored against the NEW embedding and returned the OLD object, because the
+# only generation check was `row.vectorize_id != vector_id` and both were the
+# same stable id. A caller could not tell which content the score belonged to.
+#
+# THE FIX. Vector identity is now the generation: vector_id_for(knowledge_id,
+# content_hash, embedding_version). A new generation is a NEW vector id, so the
+# vector a committed row references is never mutated by a put, and the D1 write
+# is the atomic switch. A failed update therefore has nothing to roll back.
+#
+# These replaced an xfail(strict=True) and a characterisation test of the broken
+# behaviour. Both are gone rather than relaxed: the invariant is now asserted
+# directly, and the mixed-generation answer it used to produce is asserted to be
+# impossible.
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# #205 section 3 — D1/Vectorize split-brain reproduction.
-#
-# The put order is R2 -> Vectorize -> D1, and the vector identity is the
-# stable knowledge_id. A put that succeeds on Vectorize but is then denied by
-# D1 therefore overwrites the vector that the LAST COMMITTED D1 row still
-# points at, while D1 and R2 keep representing the previous content.
-#
-# Semantic retrieval then scores against the NEW embedding and returns the OLD
-# object, because the only generation check is `row.vectorize_id != vector_id`
-# and both are the same stable id. That is a mixed-generation answer, not an
-# orphan: the caller cannot tell which content the score belongs to.
-#
-# REPRODUCED, NOT FIXED HERE. This is a multi-store architectural invariant
-# owned by the knowledge D1/R2/Vectorize integrity work (#19), with the
-# version/retirement lifecycle in #73 and R2 GC in #209. Fixing it in this
-# issue would duplicate that owner. The test is marked xfail(strict=True) so it
-# documents the current behaviour and FAILS once the behaviour is corrected,
-# forcing this marker to be removed rather than silently going stale.
-# ---------------------------------------------------------------------------
+
+def _vid(obj: KnowledgeObject, *, version: str = _EMBEDDING_VERSION) -> str:
+    return vector_id_for(
+        knowledge_id=obj.knowledge_id,
+        content_hash=obj.content_hash,
+        embedding_version=version,
+    )
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D1/Vectorize split-brain. A put that succeeds on Vectorize but is "
-        "denied by D1 overwrites the embedding the last committed D1 row still "
-        "points at, because the vector identity is the stable knowledge_id. "
-        "Semantic retrieval then scores against the NEW embedding and returns "
-        "the OLD object, and the only generation check -- "
-        "`row.vectorize_id != vector_id` -- passes because both are the same "
-        "stable id. Desired behaviour: refuse to return a candidate whose "
-        "embedding generation disagrees with its authoritative content. "
-        "Owner: #19 (integrity), #73 (version lifecycle), #209 (R2 GC)."
-    ),
-)
-async def test_split_brain_semantic_read_must_not_mix_generations() -> None:
-    """The invariant that SHOULD hold, and currently does not.
+async def test_a_denied_update_never_overwrites_the_committed_vector() -> None:
+    """The core invariant: a failed update cannot corrupt the live one.
 
-    A candidate is only returned when the embedding that produced its score
-    belongs to the same committed content generation as the object returned.
-    """
-    runtime, reader, writer, r2, vectorize, _kv = _runtime()
-
-    old = _obj(knowledge_id="ko_split", content="OLD committed body")
-    new = _obj(knowledge_id="ko_split", content="NEW uncommitted body")
-    assert old.content_hash != new.content_hash
-
-    # 1. The authoritative object: OLD content, D1 pointing at its body.
-    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
-    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
-    assert writer.writes[-1][0].content_hash == old.content_hash
-
-    # 2-5. An update to the SAME knowledge_id: R2 and Vectorize succeed, the
-    #      authoritative D1 write is denied.
-    writer.deny_write = True
-    with pytest.raises(KnowledgeConflictError):
-        await runtime.put(new, vector=[0.0, 1.0], now=21.0)
-
-    # Precondition: the vector store now holds the NEW embedding, D1 still
-    # describes the OLD generation, and the NEW body is orphaned.
-    assert [u[1] for u in vectorize.upserts] == [[1.0, 0.0], [0.0, 1.0]]
-    assert reader.rows[str(old.knowledge_id)].content_hash == old.content_hash
-    assert f"oai2-blobs/{new.content_hash}" in r2.values
-
-    # 6. Semantic retrieval whose match was computed from the NEW embedding.
-    vectorize.matches = [(str(old.knowledge_id), 0.97)]
-
-    with pytest.raises(KnowledgeIntegrityError):
-        await runtime.retrieve(
-            RetrievalRequest(topic="semantic"),
-            query_vector=[0.0, 1.0],
-        )
-
-
-@pytest.mark.asyncio
-async def test_split_brain_is_currently_observable_as_a_mixed_generation_answer() -> None:
-    """Characterisation of the defect, so the report is not just an assertion.
-
-    This is what actually happens today, pinned so the xfail above cannot be
-    "fixed" by accident or by a test that never exercised the real path. It
-    documents a defect and must be replaced when the invariant is implemented.
+    This is the test that was xfail. It now passes, and it passes for a
+    structural reason rather than a defensive one: the denied generation was
+    written under a DIFFERENT vector id, so there was never an overwrite to
+    prevent.
     """
     runtime, reader, writer, _r2, vectorize, _kv = _runtime()
 
     old = _obj(knowledge_id="ko_split", content="OLD committed body")
     new = _obj(knowledge_id="ko_split", content="NEW uncommitted body")
+    assert old.content_hash != new.content_hash
 
     await runtime.put(old, vector=[1.0, 0.0], now=20.0)
-    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+    committed = writer.writes[-1][0]
+    reader.rows[str(old.knowledge_id)] = committed
+    assert committed.vectorize_id == _vid(old)
 
     writer.deny_write = True
     with pytest.raises(KnowledgeConflictError):
         await runtime.put(new, vector=[0.0, 1.0], now=21.0)
 
-    vectorize.matches = [(str(old.knowledge_id), 0.97)]
+    # Two distinct vectors now exist. The committed row still names the OLD
+    # one, and the OLD vector was never rewritten.
+    assert vectorize.vector_ids() == [_vid(old), _vid(new)]
+    assert vectorize.upserts[0][1] == [1.0, 0.0], "the committed vector was overwritten"
+    assert vectorize.upserts[1][1] == [0.0, 1.0], "the denied generation got its own vector"
+    assert reader.rows[str(old.knowledge_id)].vectorize_id == _vid(old)
+    assert reader.rows[str(old.knowledge_id)].content_hash == old.content_hash
+
+    # Semantic retrieval resolves D1 through metadata knowledge_id and requires
+    # the row to reference the matched vector. The denied generation's vector
+    # matches nobody, so it can neither be returned nor lend a score.
+    vectorize.matches = [_match(new, 0.97)]
     result = await runtime.retrieve(
         RetrievalRequest(topic="semantic"),
         query_vector=[0.0, 1.0],
     )
+    assert result.candidates == [], "an unreferenced vector produced a candidate"
+    assert result.objects == []
 
-    # No error. A normal candidate is returned: score from the NEW embedding,
-    # object from the OLD generation, and the candidate carries no generation
-    # or embedding provenance of its own.
+    # The committed generation is still fully readable, with its own score.
+    vectorize.matches = [_match(old, 0.91)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0, 0.0],
+    )
     assert len(result.candidates) == 1
-    candidate = result.candidates[0]
-    assert candidate.content_hash == old.content_hash
-    assert candidate.content_hash != new.content_hash
-    assert candidate.score == 0.97
-    assert not hasattr(candidate, "embedding_version")
+    assert result.candidates[0].content_hash == old.content_hash
+    assert result.candidates[0].score == 0.91
 
 
 @pytest.mark.asyncio
-async def test_the_existing_id_check_still_catches_a_genuine_id_disagreement() -> None:
-    # Control: the guard that DOES exist is not dead code. It fires when the
-    # ids genuinely differ, which is the only case the current design detects.
+async def test_a_successful_update_switches_d1_atomically() -> None:
+    """The other half: a successful update DOES move authority, in one row."""
+    runtime, reader, writer, _r2, vectorize, _kv = _runtime()
+
+    old = _obj(knowledge_id="ko_switch", content="OLD committed body")
+    new = _obj(knowledge_id="ko_switch", content="NEW committed body")
+
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+    await runtime.put(new, vector=[0.0, 1.0], now=21.0)
+
+    assert vectorize.vector_ids() == [_vid(old), _vid(new)]
+    # D1 is written once, and that single write is the switch.
+    assert len(writer.writes) == 2
+    assert writer.writes[-1][0].vectorize_id == _vid(new)
+    reader.rows[str(new.knowledge_id)] = writer.writes[-1][0]
+
+    # The new generation is now the only one that can contribute a score.
+    vectorize.matches = [_match(old, 0.99), _match(new, 0.88)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 1.0],
+    )
+    assert [c.content_hash for c in result.candidates] == [new.content_hash]
+    assert result.candidates[0].score == 0.88
+    # And the superseded vector is unreachable, not merely lower-ranked.
+    vectorize.matches = [_match(old, 0.99)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0, 0.0],
+    )
+    assert result.candidates == []
+
+
+@pytest.mark.asyncio
+async def test_repeated_failed_updates_never_accumulate_authoritative_state() -> None:
+    """Many denied updates in a row: still exactly one authoritative vector."""
+    runtime, reader, writer, _r2, vectorize, _kv = _runtime()
+
+    old = _obj(knowledge_id="ko_repeat", content="generation 0")
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+
+    writer.deny_write = True
+    generations = []
+    for i in range(1, 6):
+        obj = _obj(knowledge_id="ko_repeat", content=f"generation {i}")
+        generations.append(obj)
+        with pytest.raises(KnowledgeConflictError):
+            await runtime.put(obj, vector=[0.0, float(i)], now=20.0 + i)
+
+    # Five orphans were created and none of them is referenced.
+    assert vectorize.vector_ids() == [_vid(old), *[_vid(g) for g in generations]]
+    assert reader.rows[str(old.knowledge_id)].vectorize_id == _vid(old)
+
+    # Every one of them is invisible to a semantic read.
+    vectorize.matches = [_match(g, 0.99) for g in generations]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 1.0],
+    )
+    assert result.candidates == []
+    assert result.objects == []
+
+    # Retrying one of them successfully reuses the SAME vector id rather than
+    # creating a second record for the same generation.
+    writer.deny_write = False
+    await runtime.put(generations[-1], vector=[0.0, 5.0], now=30.0)
+    assert vectorize.vector_ids().count(_vid(generations[-1])) == 2, (
+        "a retry must re-upsert the same vector, not create another"
+    )
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+    vectorize.matches = [_match(generations[-1], 0.77)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 5.0],
+    )
+    assert [c.content_hash for c in result.candidates] == [generations[-1].content_hash]
+
+
+@pytest.mark.asyncio
+async def test_a_vector_whose_content_hash_disagrees_with_d1_is_corruption() -> None:
+    """Rule 4: same vector id, two contents. That is not an orphan, it is a bug.
+
+    An id mismatch is an expected steady state while orphans exist, so it is an
+    exclusion. A content mismatch on a MATCHED id means one vector asserts two
+    different contents, which no legitimate state produces, and it raises.
+    """
+    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
+
+    obj = _obj(knowledge_id="ko_corrupt")
+    row = _row(obj)
+    reader.rows[str(obj.knowledge_id)] = row
+    # The match names the vector D1 references, but carries a different body.
+    vectorize.matches = [_match(obj, 0.99, content_hash="f" * 64)]
+
+    with pytest.raises(KnowledgeIntegrityError, match="carries content_hash"):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"),
+            query_vector=[1.0],
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_match_naming_another_vector_is_excluded_not_raised() -> None:
+    """Rule 3, and the corrected form of the old 'id mismatch raises' test.
+
+    The previous check raised whenever a match named a vector D1 did not
+    reference. Under generation-specific ids that is the NORMAL case: a failed
+    put leaves orphans behind, and eventually-consistent Vectorize can return
+    one. Raising would turn ordinary retry churn into an integrity incident. The
+    invariant is that such a match is never returned and never lends a score.
+    """
     runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
     from dataclasses import replace
 
     obj = _obj(knowledge_id="ko_idcheck")
     row = _row(obj)
-    reader.rows[str(obj.knowledge_id)] = replace(row, vectorize_id="stale-vector-id")
-    vectorize.matches = [(str(obj.knowledge_id), 0.99)]
+    reader.rows[str(obj.knowledge_id)] = replace(row, vectorize_id="oai2v1-" + "1" * 56)
+    vectorize.matches = [_match(obj, 0.99)]     # a vector D1 does not reference
 
-    with pytest.raises(KnowledgeIntegrityError, match="disagrees with D1 vectorize_id"):
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+    assert result.candidates == [], "a score was attached to a row that never claimed it"
+    assert result.objects == []
+
+
+@pytest.mark.asyncio
+async def test_a_row_without_a_vector_never_borrows_one() -> None:
+    """A row with vectorize_id NULL has no semantic index entry at all."""
+    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
+
+    obj = _obj(knowledge_id="ko_novec")
+    reader.rows[str(obj.knowledge_id)] = _row(obj, vectorized=False)
+    vectorize.matches = [_match(obj, 0.99)]
+
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+    assert result.candidates == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_rows_stay_readable_and_migrate_on_the_next_update() -> None:
+    """Rows written before this change store vectorize_id == knowledge_id.
+
+    They are not rewritten here: that would mean rewriting history, and the
+    schema does not require it. A legacy row stays readable through exactly the
+    same integrity rules, because the id match and the content_hash agreement are
+    what decide admission, not the id's shape. Its next successful update writes
+    a generation-specific id and switches D1 atomically, which is the whole
+    migration.
+    """
+    runtime, reader, writer, _r2, vectorize, _kv = _runtime()
+
+    legacy = _obj(knowledge_id="ko_legacy", content="legacy body")
+    row = _row(legacy, vectorized="legacy")
+    assert row.vectorize_id == str(legacy.knowledge_id)
+    reader.rows[str(legacy.knowledge_id)] = row
+    _r2.values[row.r2_blob_key] = legacy.content
+
+    # Still retrievable, and still scored, through the same rules.
+    vectorize.matches = [_legacy_match(legacy, 0.75)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+    assert len(result.candidates) == 1
+    assert result.candidates[0].content_hash == legacy.content_hash
+    assert result.candidates[0].score == 0.75
+
+    # A legacy row is still held to the corruption rule.
+    vectorize.matches = [
+        _legacy_match(legacy, 0.75).__class__(
+            vector_id=str(legacy.knowledge_id),
+            score=0.75,
+            knowledge_id=legacy.knowledge_id,
+            content_hash="f" * 64,
+            embedding_version=_EMBEDDING_VERSION,
+        )
+    ]
+    with pytest.raises(KnowledgeIntegrityError, match="carries content_hash"):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"),
+            query_vector=[1.0],
+        )
+
+    # The migration itself: one successful update, one atomic switch.
+    updated = _obj(knowledge_id="ko_legacy", content="migrated body")
+    await runtime.put(updated, vector=[0.0, 1.0], now=40.0)
+    assert writer.writes[-1][0].vectorize_id == _vid(updated)
+    assert _vid(updated) != str(updated.knowledge_id)
+    reader.rows[str(updated.knowledge_id)] = writer.writes[-1][0]
+
+    vectorize.matches = [_match(updated, 0.81), _legacy_match(legacy, 0.75)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 1.0],
+    )
+    assert [c.content_hash for c in result.candidates] == [updated.content_hash]
+    assert result.candidates[0].score == 0.81
+
+
+@pytest.mark.asyncio
+async def test_a_match_from_another_embedding_version_is_excluded() -> None:
+    """Section 9: the read contract carries the embedding version.
+
+    A vector embedded by a different model has a score that is not comparable to
+    this query's, so it is excluded rather than scored. This is the documented
+    migration transition and is why the version is part of the match contract.
+    """
+    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
+
+    obj = _obj(knowledge_id="ko_embedver")
+    row = _row(obj, embedding_version="embed-v0")
+    reader.rows[str(obj.knowledge_id)] = row
+    _r2.values[row.r2_blob_key] = obj.content
+
+    # The row legitimately references a v0 vector; the runtime is on v1.
+    vectorize.matches = [_match(obj, 0.99, embedding_version="embed-v0")]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+    assert result.candidates == [], "a cross-embedding-space score was accepted"
+
+    # A v1 runtime pointed at a v1 vector is admitted as normal, so the
+    # exclusion is about the version and not about the id shape.
+    v1_row = _row(obj, embedding_version=_EMBEDDING_VERSION)
+    reader.rows[str(obj.knowledge_id)] = v1_row
+    vectorize.matches = [_match(obj, 0.99, embedding_version=_EMBEDDING_VERSION)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[1.0],
+    )
+    assert [c.score for c in result.candidates] == [0.99]
+
+
+@pytest.mark.asyncio
+async def test_an_embedding_version_change_writes_a_new_vector_id() -> None:
+    """Re-embedding a corpus under a new version cannot collide with the old.
+
+    Two runtimes, same knowledge_id and same content, different embedding
+    version. Their vector ids must differ, so a re-embed never overwrites the
+    vector the current corpus still reads from.
+    """
+    old_runtime, _r1, old_writer, _r2a, old_vec, _k1 = _runtime(
+        embedding_version="embed-v1"
+    )
+    new_runtime, _r2, new_writer, _r2b, new_vec, _k2 = _runtime(
+        embedding_version="embed-v2"
+    )
+    obj = _obj(knowledge_id="ko_reembed", content="same body")
+
+    await old_runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+    await new_runtime.put(obj, vector=[1.0, 0.0], now=21.0)
+
+    assert old_vec.vector_ids() == [_vid(obj, version="embed-v1")]
+    assert new_vec.vector_ids() == [_vid(obj, version="embed-v2")]
+    assert _vid(obj, version="embed-v1") != _vid(obj, version="embed-v2")
+    assert old_writer.writes[-1][0].vectorize_id != new_writer.writes[-1][0].vectorize_id
+
+
+@pytest.mark.asyncio
+async def test_a_concurrent_writer_with_a_stale_expected_revision_is_refused() -> None:
+    """The CAS path: another writer took the revision first. Nothing is corrupted."""
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+
+    old = _obj(knowledge_id="ko_cas", content="first writer")
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+
+    # Another writer commits first, so the revision this runtime read is stale
+    # and the CAS denies the write.
+    writer.revision = 9
+    writer.deny_write = True
+
+    other = _obj(knowledge_id="ko_cas", content="second writer")
+    with pytest.raises(KnowledgeConflictError):
+        await runtime.put(other, vector=[0.0, 1.0], now=21.0)
+
+    # The first writer's vector is intact and still authoritative.
+    assert vectorize.upserts[0][1] == [1.0, 0.0]
+    assert reader.rows[str(old.knowledge_id)].vectorize_id == _vid(old)
+    assert reader.rows[str(old.knowledge_id)].content_hash == old.content_hash
+    assert r2.values[f"oai2-blobs/{old.content_hash}"] == old.content
+
+    vectorize.matches = [_match(other, 0.99)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 1.0],
+    )
+    assert result.candidates == []
+
+
+@pytest.mark.asyncio
+async def test_a_vectorize_outage_during_a_semantic_read_is_a_failure_not_an_empty_result() -> None:
+    """A broken dependency must never read as 'nothing matched'."""
+    runtime, _reader, _writer, _r2, vectorize, _kv = _runtime()
+    vectorize.fail_query = True
+
+    with pytest.raises(RuntimeError, match="Vectorize outage"):
         await runtime.retrieve(
             RetrievalRequest(topic="semantic"),
             query_vector=[1.0],

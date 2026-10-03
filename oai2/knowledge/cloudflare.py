@@ -122,9 +122,14 @@ def row_to_d1(row: CFRow) -> dict[str, Any]:
 def object_to_row(obj: KnowledgeObject) -> CFRow:
     """Map a :class:`KnowledgeObject` onto a :class:`CFRow`.
 
-    The body lives in R2 under ``oai2-blobs/<content_hash>``. The
-    embedding record uses ``knowledge_id`` as its Vectorize id so we can
-    delete from Vectorize when a row is removed.
+    The body lives in R2 under ``oai2-blobs/<content_hash>``.
+
+    ``vectorize_id`` is deliberately left ``None``. It used to be set to the
+    knowledge_id here, which is what made a new embedding generation overwrite
+    the vector the committed row referenced. Vector identity is derived from the
+    generation, not from the claim id, so it belongs to the runtime that
+    actually upserts the vector — not to a pure mapper that cannot know it
+    (#19). A row that names no vector simply has no semantic index entry.
     """
     return CFRow(
         knowledge_id=obj.knowledge_id,
@@ -135,7 +140,7 @@ def object_to_row(obj: KnowledgeObject) -> CFRow:
         source_uri=obj.source_uri,
         retrieved_at=obj.retrieved_at,
         r2_blob_key=f"oai2-blobs/{obj.content_hash}" if obj.content else None,
-        vectorize_id=str(obj.knowledge_id),
+        vectorize_id=None,
     )
 
 
@@ -368,6 +373,10 @@ class CloudflareKnowledgeStore(KnowledgeStore):
         # keep the content-addressed body: its key may already be shared by a
         # retained row, and inline deletion would corrupt that row. The
         # reference-safe GC lifecycle handles genuinely unreferenced bodies.
+        #
+        # This store has no Vectorize step, so the row names no vector. It is a
+        # D1/R2 shape only; the live runtime in ``cloudflare_runtime`` is what
+        # derives and commits a generation-specific ``vectorize_id``.
         if obj.content:
             r2_blob_key = r2_blob_key_for(obj.content_hash)
             self._b.r2_put(r2_blob_key, obj.content.encode("utf-8"))

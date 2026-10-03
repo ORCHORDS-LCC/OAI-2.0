@@ -11,6 +11,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from .transport import VectorMatch
+
 
 class R2ObjectBodyBinding(Protocol):
     async def text(self) -> str: ...
@@ -116,7 +118,18 @@ class CloudflareVectorizeStore:
         values: Sequence[float],
         *,
         top_k: int = 5,
-    ) -> list[tuple[str, float]]:
+    ) -> list[VectorMatch]:
+        """Return typed, fully attributed matches.
+
+        The metadata is NOT optional decoration: without the knowledge_id,
+        content_hash and embedding_version carried by the same match, a caller
+        cannot tell whether the score it is holding belongs to the object it is
+        about to return. Discarding it here is what made a mixed-generation
+        answer expressible in the first place.
+
+        A match that cannot be parsed is a dependency fault, not a row to skip.
+        Raising keeps a broken index from being reported as "no results".
+        """
         normalized = _vector(values)
         if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 100:
             raise ValueError("top_k must be an integer between 1 and 100")
@@ -127,19 +140,20 @@ class CloudflareVectorizeStore:
         ):
             raise RuntimeError("Vectorize query result does not expose a matches sequence")
 
-        out: list[tuple[str, float]] = []
+        out: list[VectorMatch] = []
         for match in matches:
-            vector_id = _field(match, "id")
-            score = _field(match, "score")
-            if not isinstance(vector_id, str) or not vector_id.strip():
-                raise RuntimeError("Vectorize match has an invalid id")
-            if (
-                isinstance(score, bool)
-                or not isinstance(score, (int, float))
-                or not math.isfinite(float(score))
-            ):
-                raise RuntimeError("Vectorize match has an invalid score")
-            out.append((vector_id, float(score)))
+            try:
+                out.append(
+                    VectorMatch.from_vectorize_parts(
+                        _field(match, "id"),
+                        _field(match, "score"),
+                        _field(match, "metadata"),
+                    )
+                )
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"Vectorize match could not be validated: {exc}"
+                ) from exc
         return out
 
 

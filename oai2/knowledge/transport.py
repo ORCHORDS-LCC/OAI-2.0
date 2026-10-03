@@ -11,6 +11,9 @@ normalized identity/capability context after authentication.
 
 from __future__ import annotations
 
+import hashlib
+import math
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Self
 
@@ -20,6 +23,84 @@ from ..core import KnowledgeId, Status
 from .abstraction import KnowledgeObject, sha256_hex
 
 TRANSPORT_VERSION = "1"
+
+# ---------------------------------------------------------------------------
+# Vector identity (#19)
+#
+# The vector id is what makes the D1 row an ATOMIC authority switch rather than
+# a description that can drift from the bytes it points at.
+#
+# The previous identity was the bare knowledge_id, so a new embedding generation
+# overwrote the very vector the last committed D1 row still referenced. If the
+# following D1 write was then denied by revision or deletion-lease state, D1
+# still described generation N-1 while Vectorize already held generation N, and
+# a semantic read scored the NEW embedding but returned the OLD body.
+#
+# A generation-specific id makes that state unreachable instead of merely
+# unlikely: writing generation N creates a NEW vector, so the vector the
+# committed row points at is never mutated. D1 then either switches to it
+# atomically, or does not — and if it does not, the old vector is untouched and
+# still authoritative and the new one is a non-authoritative orphan.
+#
+# CANONICAL SERIALIZATION (stable; changing it changes every id)
+#     "\n".join([
+#         "oai2-vector-id-v1",     # scheme version, bumped if this changes
+#         <knowledge_id>,
+#         <content_hash>,
+#         <embedding_version>,
+#     ])
+# joined by LF and hashed with SHA-256. Field values are rejected if they are
+# empty, padded, or contain a line break, so the encoding is unambiguous: no two
+# distinct triples can produce the same byte string.
+#
+# COLLISIONS: 56 hex characters of SHA-256 = 224 bits. The birthday bound puts a
+# collision beyond 2^112 distinct vectors, so it is not a practical concern.
+#
+# LENGTH: the "oai2v1-" prefix plus 56 hex characters is 63 bytes, under
+# Cloudflare's 64-byte Vectorize id limit. The prefix is a namespace and scheme
+# marker, so a future canonicalization change produces a disjoint id space
+# rather than a silent collision with ids written under this scheme.
+# ---------------------------------------------------------------------------
+VECTOR_ID_MAX_BYTES = 64
+_VECTOR_ID_PREFIX = "oai2v1-"
+_VECTOR_ID_SCHEME = "oai2-vector-id-v1"
+_VECTOR_ID_HEX_CHARS = 56
+
+
+def vector_id_for(
+    *,
+    knowledge_id: KnowledgeId,
+    content_hash: str,
+    embedding_version: str,
+) -> str:
+    """Deterministic vector id for one embedding generation of one object.
+
+    Deterministic and content-addressed: the same triple always yields the same
+    id, so a retried put re-upserts the same vector rather than accumulating
+    duplicates, and no random or time-based component is involved.
+    """
+    parts: list[str] = []
+    for name, value in (
+        ("knowledge_id", knowledge_id),
+        ("content_hash", content_hash),
+        ("embedding_version", embedding_version),
+    ):
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ValueError(f"{name} must be a non-empty normalized string")
+        if "\n" in value or "\r" in value:
+            # Would make the canonical encoding ambiguous.
+            raise ValueError(f"{name} must not contain a line break")
+        parts.append(value)
+
+    canonical = "\n".join([_VECTOR_ID_SCHEME, *parts])
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    vector_id = f"{_VECTOR_ID_PREFIX}{digest[:_VECTOR_ID_HEX_CHARS]}"
+    if len(vector_id.encode("utf-8")) > VECTOR_ID_MAX_BYTES:
+        # Unreachable with a fixed-width hex digest; asserted so a future
+        # change to the prefix or digest width cannot silently break the limit.
+        raise ValueError("derived vector id exceeds the Vectorize id length limit")
+    return vector_id
+
 
 
 class TransportOperation(StrEnum):
@@ -253,6 +334,90 @@ class VectorizeMetadata(BaseModel):
         )
 
 
+class VectorMatch(BaseModel):
+    """One Vectorize match, parsed fail-closed into a typed read contract.
+
+    A score on its own is not a candidate. It is a number computed from a
+    specific vector, for a specific knowledge_id, content_hash and
+    embedding_version, and every one of those is needed to decide whether the
+    score may be attached to an object at all. Carrying them together makes it
+    possible to refuse the pairing rather than to assert it later.
+
+    Public-safe by construction: no body bytes, no R2 key, no credential, no
+    deployment identifier, and no field a caller could use to reach anything
+    other than the object it already named. ``extra="forbid"`` so a widened
+    binding payload cannot smuggle extra state into this contract.
+
+    Parsing is fail-closed. A malformed id, a non-finite score, missing
+    metadata, or an invalid knowledge_id / content_hash / embedding_version is
+    an error, not a degraded match: a match that cannot be fully attributed must
+    not become a candidate that merely looks fine.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vector_id: str = Field(min_length=1, max_length=VECTOR_ID_MAX_BYTES)
+    score: float
+    knowledge_id: KnowledgeId
+    content_hash: str = Field(min_length=8, max_length=128)
+    embedding_version: str = Field(min_length=1, max_length=128)
+
+    @classmethod
+    def from_vectorize_parts(
+        cls,
+        vector_id: object,
+        score: object,
+        metadata: object,
+    ) -> VectorMatch:
+        """Build a match from raw binding fields, or raise.
+
+        Raises ``ValueError`` for anything that cannot be attributed. Callers
+        translate that into a dependency failure; it must never be downgraded to
+        a skipped row, because a skipped row is indistinguishable from "no
+        results" and would turn a broken dependency into a quiet empty answer.
+        """
+        if (
+            not isinstance(vector_id, str)
+            or not vector_id
+            or vector_id != vector_id.strip()
+        ):
+            raise ValueError("vector match has a missing or unnormalized id")
+        if len(vector_id.encode("utf-8")) > VECTOR_ID_MAX_BYTES:
+            raise ValueError("vector match id exceeds the Vectorize id length limit")
+        if (
+            isinstance(score, bool)
+            or not isinstance(score, (int, float))
+            or not math.isfinite(float(score))
+        ):
+            raise ValueError("vector match has a non-finite or non-numeric score")
+        if not isinstance(metadata, Mapping):
+            raise ValueError("vector match is missing its metadata")
+
+        def required(name: str) -> str:
+            value = metadata.get(name)
+            # KnowledgeId is a NewType over str, so pydantic imposes no
+            # constraint on it: an empty or padded id would validate. These
+            # three fields are the whole attribution, so each is checked here
+            # rather than trusted to the field constraints.
+            if (
+                not isinstance(value, str)
+                or not value
+                or value != value.strip()
+            ):
+                raise ValueError(
+                    f"vector match metadata has a missing or unnormalized {name}"
+                )
+            return value
+
+        return cls(
+            vector_id=vector_id,
+            score=float(score),
+            knowledge_id=KnowledgeId(required("knowledge_id")),
+            content_hash=required("content_hash"),
+            embedding_version=required("embedding_version"),
+        )
+
+
 class KnowledgeCacheRef(BaseModel):
     """Compact cache entry reference; authoritative bodies remain in R2/D1."""
 
@@ -293,6 +458,9 @@ __all__ = [
     "D1KnowledgeIndexRecord",
     "R2BodyDescriptor",
     "VectorizeMetadata",
+    "VectorMatch",
+    "VECTOR_ID_MAX_BYTES",
+    "vector_id_for",
     "KnowledgeCacheRef",
     "QueryCacheEnvelope",
 ]

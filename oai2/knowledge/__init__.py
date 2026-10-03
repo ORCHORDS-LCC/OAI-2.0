@@ -135,6 +135,7 @@ from .sweep import (
 )
 from .transport import (
     TRANSPORT_VERSION,
+    VECTOR_ID_MAX_BYTES,
     D1KnowledgeIndexRecord,
     KnowledgeCacheRef,
     KnowledgeTransportRequest,
@@ -146,6 +147,8 @@ from .transport import (
     TransportErrorCode,
     TransportOperation,
     VectorizeMetadata,
+    VectorMatch,
+    vector_id_for,
 )
 from .worker_transport import EmbeddingProvider, KnowledgeWorkerTransport
 
@@ -262,6 +265,9 @@ __all__ = [
     "D1KnowledgeIndexRecord",
     "R2BodyDescriptor",
     "VectorizeMetadata",
+    "VectorMatch",
+    "VECTOR_ID_MAX_BYTES",
+    "vector_id_for",
     "KnowledgeCacheRef",
     "QueryCacheEnvelope",
 ]

@@ -54,7 +54,10 @@ def test_row_to_d1_round_trip() -> None:
     obj = _make_obj("a/b", "hello", authority=0.6)
     row = object_to_row(obj)
     assert row.r2_blob_key == r2_blob_key_for(obj.content_hash)
-    assert row.vectorize_id == obj.knowledge_id
+    # object_to_row is a pure mapper and derives NO vector identity. Naming a
+    # vector here is what let a new embedding generation overwrite the vector a
+    # committed row referenced; identity belongs to the runtime that upserts it.
+    assert row.vectorize_id is None
 
     b = MockCloudflareBindings()
     b.d1_upsert(row)
