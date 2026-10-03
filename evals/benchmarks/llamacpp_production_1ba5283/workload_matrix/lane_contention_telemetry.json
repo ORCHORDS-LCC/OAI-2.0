@@ -1,0 +1,3368 @@
+[
+ {
+  "t": 1791057834.287,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057835.299,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057836.311,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057837.322,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057838.328,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057839.336,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057840.344,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057841.351,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057842.363,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057843.373,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057844.381,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057845.392,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057846.417,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057847.43,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 2
+  }
+ },
+ {
+  "t": 1791057848.44,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 2
+  }
+ },
+ {
+  "t": 1791057849.457,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 2
+  }
+ },
+ {
+  "t": 1791057850.466,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 2
+  }
+ },
+ {
+  "t": 1791057851.469,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057852.483,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057853.498,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057854.508,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057855.52,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057856.53,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057857.547,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057858.559,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057859.599,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057860.605,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057861.607,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057862.622,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057863.629,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057864.648,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057865.658,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057866.665,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057867.672,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057868.681,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057869.693,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057870.705,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057871.724,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057872.736,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057873.749,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057874.768,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057875.775,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057876.783,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057877.797,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057878.804,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057879.823,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057880.836,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057881.866,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057882.886,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057883.906,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057884.918,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057885.927,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057886.948,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057887.956,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057888.972,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057889.986,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791057890.997,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057892.012,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057893.022,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057894.044,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057895.051,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057896.067,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057897.088,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057898.102,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057899.109,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057900.121,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057901.131,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057902.139,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057903.161,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057904.177,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057905.198,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057906.218,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057907.225,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057908.24,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057909.247,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057910.268,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057911.286,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057912.305,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057913.317,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057914.329,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057915.35,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057916.372,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057917.391,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057918.414,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057919.434,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057920.442,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057921.457,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057922.471,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057923.481,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057924.486,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057925.521,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057926.541,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057927.544,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057928.563,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057929.566,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 2
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057930.58,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057931.593,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057932.611,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057933.636,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057934.653,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057935.67,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057936.683,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057937.696,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057938.705,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057939.732,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057940.746,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057941.759,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057942.768,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057943.778,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057944.79,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057945.803,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 2
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057946.815,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057947.833,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057948.84,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057949.856,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057950.875,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057951.888,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057952.9,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057953.918,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057954.937,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057955.951,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057956.965,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057957.979,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057958.996,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057960.007,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057961.028,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057962.037,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057963.045,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057964.055,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057965.067,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057966.087,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057967.1,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057968.118,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057969.129,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057970.139,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057971.149,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057972.173,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057973.183,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057974.2,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057975.205,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057976.222,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057977.227,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057978.244,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057979.25,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057980.257,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057981.269,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057982.292,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057983.307,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057984.323,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057985.336,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057986.344,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057987.351,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057988.369,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057989.38,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057990.402,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057991.41,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057992.417,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057993.444,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057994.468,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057995.501,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057996.522,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057997.535,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057998.549,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791057999.56,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058000.591,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058001.602,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058002.617,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058003.631,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058004.639,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058005.652,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058006.672,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058007.693,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058008.713,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058009.739,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058010.769,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058011.783,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058012.798,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058013.813,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058014.827,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058015.845,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058016.858,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058017.874,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058018.892,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058019.905,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058020.929,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058021.943,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058022.97,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058023.992,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058025.009,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058026.014,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058027.039,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058028.058,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058029.088,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058030.108,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058031.115,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058032.128,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058033.137,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058034.154,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058035.163,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058036.203,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058037.218,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058038.231,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058039.247,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058040.262,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058041.289,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058042.309,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058043.324,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058044.331,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058045.339,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058046.358,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058047.377,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058048.396,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058049.412,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058050.435,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058051.454,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058052.478,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058053.492,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058054.513,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058055.526,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 1
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058056.539,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058057.551,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058058.555,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058059.562,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058060.574,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058061.585,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058062.593,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058063.6,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058064.613,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058065.625,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058066.63,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058067.64,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058068.652,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058069.664,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058070.677,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058071.689,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058072.703,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058073.715,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058074.725,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058075.733,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058076.74,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058077.747,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058078.759,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058079.763,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058080.777,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058081.785,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058082.791,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058083.8,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058084.813,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058085.822,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058086.837,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058087.839,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058088.846,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058089.858,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058090.87,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058091.88,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058092.892,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058093.905,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058094.911,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058095.921,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058096.926,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058097.939,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058098.952,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058099.956,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058100.959,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058101.964,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058102.977,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058103.986,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058104.999,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058106.011,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058107.024,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058108.03,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058109.041,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 0
+  }
+ },
+ {
+  "t": 1791058110.053,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058111.065,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058112.075,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058113.086,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058114.09,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058115.103,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058116.116,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058117.119,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058118.127,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058119.14,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058120.152,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058121.157,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058122.167,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058123.179,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058124.192,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058125.205,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058126.218,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058127.223,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058128.236,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058129.24,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058130.253,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058131.265,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058132.275,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058133.287,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058134.297,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058135.309,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058136.322,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058137.326,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058138.334,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058139.341,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058140.349,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058141.357,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058142.367,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ },
+ {
+  "t": 1791058143.372,
+  "normal_8851": {
+   "slots": 4,
+   "busy": 0
+  },
+  "strong_8854": {
+   "slots": 2,
+   "busy": 1
+  }
+ }
+]

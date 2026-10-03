@@ -259,3 +259,76 @@ two rows that quietly measure the same condition.
 
 Verified locally: 15 tests in `tests/test_runtime_prefix_kv_cache.py` pass,
 including the real-model restore test.
+
+## Workload matrix — prompt and generation length
+
+`llamacpp_production_1ba5283/workload_matrix/`, harness `430c3aba9a49`,
+`dirty=false`. Hot config, 21-word stable prefix, 5 repetitions per cell,
+single agent.
+
+> **These cells are CONTENDED.** `:8854` was busy on **257 of 293**
+> telemetry samples across this window. Absolute throughput below is a
+> lower bound, consistent with the earlier contended run (~93–100 tok/s)
+> rather than the uncontended one (~245–272 tok/s). The *shape* of each
+> sweep is still informative because contention is roughly constant across
+> cells within a sweep, but the level is not capacity.
+
+### Prompt-length sweep (generation fixed at 256)
+
+| Prompt tokens | Prefill tok/s | TTFT p50 ms | Decode tok/s | p95 | p99 | Cache hit |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 186 | 75.3 | 15.8 | 139.84 | 182.97 | 182.97 | 185 |
+| 1085 | 76.3 | 17.7 | 121.72 | 133.15 | 133.15 | 1084 |
+| 4166 | 76.9 | 21.9 | 101.85 | 103.88 | 103.88 | 4165 |
+
+Decode degrades with context: **139.84 → 121.72 → 101.85 tok/s**, a **27%
+drop** from the shortest to the longest prompt, while aggregate throughput
+stays roughly flat. Reading a short-prompt result as a capacity number would
+overstate long-context behaviour by that margin.
+
+Prefill throughput is **flat at ~75–77 tok/s across a 22× prompt range**.
+A context-independent prefill rate is not what a cache-miss path should
+look like; it is consistent with the run being prefill-bound under GPU
+contention rather than with a property of the configuration. Treated as an
+observation to re-measure on a quiet lane, not as a finding.
+
+### Generation-length sweep (prompt fixed at ~1K)
+
+| Generated tokens | Decode tok/s | p95 | p99 | E2E s | E2E p95 s |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 108.48 | 111.74 | 111.74 | 1.188 | 1.200 |
+| 512 | 108.47 | 110.87 | 110.87 | 4.730 | 4.923 |
+| 1024 | 104.06 | 112.70 | 112.70 | 9.854 | 10.166 |
+
+Decode rate is essentially invariant to generation length (108.48 / 108.47 /
+104.06), and end-to-end time scales **linearly** with it (1.188 / 4.730 /
+9.854 s). 1024 tokens at ~104 tok/s should take ~9.8 s, which matches —
+so the rate reported is internally consistent with the wall clock, and
+`client_decode_tokens_per_second` agrees.
+
+p95 and p99 coincide throughout because each cell has 5 samples and
+percentiles use nearest rank. Tail behaviour is therefore **not yet
+resolved at this sample count**; 5 repetitions satisfies AC-PERF-031's
+minimum but cannot separate p95 from p99. Raising repetitions is the only
+way to make the tail meaningful.
+
+### ~16K prompt: not satisfiable on the current production config
+
+The required workload matrix includes a ~16K prompt. The NORMAL lane
+serves **8192 ctx per slot**, so the server rejects it outright:
+
+```
+HTTP 400 {"error":{"code":400,
+  "message":"request (9031 tokens) exceeds the available context size (8192 tokens), try increasing it",
+  "type":"exceed_context_size_error","n_prompt_tokens":9031,"n_ctx":8192}}
+```
+
+Recorded artifact: `context_16k_rejected_by_server.json`. The harness
+fail-closed — it recorded the 400 and the `server-published-no-timings`
+note rather than reporting a silent 0 tok/s.
+
+This is a **configuration limitation, not a measurement gap**, and it has
+exactly two resolutions: raise `--ctx-size` (which increases per-slot KV
+memory, and the host was already at 63.4/64 GB during the uncontended run),
+or record the row as not-applicable with this reason. Silently omitting it
+would leave the required table short a row.
