@@ -21,6 +21,7 @@ from oai2.agents import (
     default_tool_definitions,
 )
 from oai2.core import Status
+from oai2.protocols import ToolResult
 from oai2.runtime import (
     InferenceRequest,
     InferenceResponse,
@@ -260,3 +261,89 @@ def test_agent_loop_messages_history_includes_assistant_tool_calls(tmp_path: Pat
     assert assistant_msg["role"] == "assistant"
     assert assistant_msg["tool_calls"]  # non-empty
     assert assistant_msg["tool_calls"][0]["function"]["name"] == "Glob"
+
+
+# ---------------------------------------------------------------------------
+# Gate 5 budget boundary
+# ---------------------------------------------------------------------------
+
+
+def _always_call_script(target: Path, count: int) -> list[_Script]:
+    """``count`` turns that each emit one in-scope ``Read`` call."""
+    return [
+        _Script(
+            text="",
+            tool_calls=(_openai_call(f"c{i}", "Read", {"path": str(target)}),),
+            finish_reason="tool_calls",
+        )
+        for i in range(count)
+    ]
+
+
+def _budget_run(tmp_path: Path, budget: int) -> tuple[int, list[str]]:
+    """Run a loop with ``budget`` and report (calls executed, refusal errors)."""
+    target = tmp_path / "data.txt"
+    target.write_text("payload\n", encoding="utf-8")
+    policy = DispatchPolicy(
+        allow_capabilities=frozenset({"fs.read", "fs.write", "fs.list", "shell.exec"}),
+        deny_capabilities=frozenset(),
+        resource_scopes=frozenset({str(target)}),
+        budget_calls=budget,
+        high_impact_approved=True,
+    )
+    executed: list[str] = []
+
+    def _executor(call: Any) -> ToolResult:
+        executed.append(call.id)
+        return ToolResult(call_id=call.id, ok=True, output="payload")
+
+    # Far more turns than any budget under test, so the BUDGET is what stops
+    # the loop rather than the script or max_steps running out.
+    runtime = _StubRuntime(script=_always_call_script(target, 60))
+    loop = AgentLoop(
+        runtime=runtime,
+        cwd=tmp_path,
+        max_steps=60,
+        policy=policy,
+        executor=_executor,
+    )
+    run = loop.run("read repeatedly")
+    refusals = [
+        r.error or ""
+        for step in run.steps
+        for r in step.tool_results
+        if not r.ok
+    ]
+    return len(executed), refusals
+
+
+def test_agent_loop_budget_admits_exactly_budget_calls(tmp_path: Path) -> None:
+    """A budget of N must admit N calls, not N-1.
+
+    ``calls_used`` is the count already dispatched; gate 5 adds one for the
+    call it is judging. Advancing the loop's counter before the check made the
+    gate compare ``k + 1`` against the budget for the k-th call, so every
+    policy was one call short.
+    """
+    for budget in (1, 2, 3, 4, 8):
+        executed, _ = _budget_run(tmp_path, budget)
+        assert executed == budget, f"budget_calls={budget} admitted {executed}"
+
+
+def test_agent_loop_budget_of_one_still_executes_one_call(tmp_path: Path) -> None:
+    """The sharp end of the off-by-one: a budget of 1 used to execute nothing."""
+    executed, _ = _budget_run(tmp_path, 1)
+    assert executed == 1
+
+
+def test_agent_loop_over_budget_call_is_refused_not_executed(tmp_path: Path) -> None:
+    """Exhausting the budget stops execution but still reports the refusal.
+
+    The refused call must be visible as a failed tool result rather than
+    silently dropped, so a caller can tell a refusal from a step that never
+    happened.
+    """
+    executed, refusals = _budget_run(tmp_path, 3)
+    assert executed == 3
+    assert refusals, "the over-budget call must be recorded as a dispatch failure"
+    assert all("budget exceeded" in r for r in refusals)

@@ -377,8 +377,14 @@ class AgentLoop:
             converted_calls = _raw_tool_calls_to_models(raw_tool_calls)
             tool_results: list[ToolResult] = []
             for _raw_call, model_call in zip(raw_tool_calls, converted_calls, strict=True):
-                total_tool_calls += 1
+                # ``calls_used`` is the count of calls ALREADY dispatched --
+                # gate 5 adds one for the prospective call it is judging. The
+                # counter is therefore advanced after the check, not before:
+                # incrementing first makes the gate compare ``k + 1`` against
+                # the budget for the k-th call, so a policy of N admits N - 1
+                # and a budget of 1 executes nothing at all.
                 decision = self._dispatcher.check(model_call, calls_used=total_tool_calls)
+                total_tool_calls += 1
                 if decision.stage.value != "execute":
                     tool_results.append(
                         ToolResult(
