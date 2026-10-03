@@ -48,8 +48,12 @@
 #         missing-container grace window. Recreating it needs the image and the
 #         node's runtime secrets, which this process deliberately does not have,
 #         so retrying forever would be a hot loop that can never succeed.
-#    12   The owner-intent file exists but holds an unrecognised value. Fail
-#         CLOSED: nothing is started or restarted.
+#    12   The owner-intent file EXISTS but is unusable, so owner state is
+#         damaged: not a readable regular file, unreadable, empty (no non-blank
+#         line), an unrecognised value, or a half-written one. Fail CLOSED:
+#         nothing is started, stopped or restarted. This is a FAULT and is
+#         deliberately distinct from a requested `stop`, which is exit 0. Only
+#         an ABSENT sentinel defaults to run. See the resolution rule below.
 #    13   Owner intent was read and understood, but could not be carried out
 #         (for example intent=stop while dockerd is unreachable). Reported as a
 #         failure so it is retried and surfaced, instead of claiming a clean
@@ -62,12 +66,36 @@
 #   because exiting releases the WSL2 session and takes dockerd down with it -
 #   turning a recoverable runtime fault into an unrecoverable node outage.
 #
-# OWNER-INTENT SENTINEL (durable stop / pause / removal)
+# OWNER-INTENT SENTINEL (durable owner intent; the ONLY thing this script reads
+# as permission to act)
 #   Path:   /var/lib/worker/supervisor-intent   (dir overridable with
 #           --state-dir / WORKER_STATE_DIR)
-#   Values: first non-blank line only; surrounding spaces, CR and letter case
-#           are ignored. `run` is the default and may be written explicitly.
 #
+#   INTENT RESOLUTION RULE - this text is the specification, and read_intent()
+#   implements it. Numbered so a test can name the rule it is checking.
+#     1. ABSENT is the only case that means `run`. If the path does not exist -
+#        a genuine first start - the intent is `run`. This is the ONLY default
+#        in this script. `run` may also be written explicitly.
+#     2. PRESENT-BUT-UNUSABLE fails closed. A path that exists but is not a
+#        readable regular file (a directory, a socket, a dangling symlink) is
+#        UNREADABLE -> exit 12.
+#     3. PRESENT-BUT-EMPTY fails closed. Zero bytes, or no non-blank line
+#        anywhere in the file, is a DAMAGED file, not permission -> exit 12.
+#     4. Otherwise the FIRST NON-BLANK LINE is the value. Blank lines above it
+#        are skipped. That line is normalised: CR removed, leading and
+#        trailing spaces/tabs removed, ASCII letters lowercased.
+#     5. The normalised line must then equal run, stop, pause or remove
+#        EXACTLY. Any other token is UNRECOGNISED -> exit 12, including a
+#        truncated prefix such as `sto`, which is what an interrupted write
+#        leaves behind on disk. Interior spaces are NOT removed: `s top` is
+#        unrecognised, not `stop`.
+#
+#   So a damaged owner-state file NEVER resolves to `run`. Absent and damaged
+#   are different states with different outcomes, and only absence is benign.
+#   A `stop` is a requested shutdown (exit 0); a damaged file is a FAULT (exit
+#   12). The two are reported differently in the log and in the health file.
+#
+#   Values:
 #     run      supervise normally: keep dockerd up, keep the container running
 #     stop     the owner wants the worker down. The supervisor stops the
 #              container once, then exits 0. Exits 13 if that stop failed.
@@ -78,17 +106,88 @@
 #              container's real presence if it can observe it and exits 0. It
 #              does not delete anything.
 #
-#   Examples (run as root inside WSL):
-#     printf 'stop\n'   > /var/lib/worker/supervisor-intent
-#     printf 'pause\n'  > /var/lib/worker/supervisor-intent
-#     printf 'remove\n' > /var/lib/worker/supervisor-intent
-#     printf 'run\n'    > /var/lib/worker/supervisor-intent   # or: rm the file
-#
-#   Clearing the file, or writing `run`, restores automatic startup. The
+#   Clearing the sentinel, or writing `run`, restores automatic startup. The
 #   sentinel is durable: it lives on disk, so it still says `stop` after the
-#   supervisor, the task or the whole VM has been restarted. An unreadable or
-#   empty file is treated as `run`. An UNRECOGNISED value fails closed with
-#   exit 12 and starts nothing.
+#   supervisor, the task or the whole VM has been restarted. UNREADABLE, EMPTY
+#   and UNRECOGNISED all fail closed with exit 12 and start nothing.
+#
+# ATOMIC UPDATE (recommended owner procedure) - the exact commands
+#   The write matters as much as the read: the sentinel is durable owner state.
+#   A plain `printf 'stop\n' > <file>` truncates FIRST, so a reader arriving in
+#   that window sees a zero-byte or half-written file. Under rule 1-3 that now
+#   fails closed (exit 12) - safe, but still an outage.
+#
+#   Instead write a temp file in the SAME directory and rename it over the
+#   sentinel. rename(2) is atomic within a filesystem, so a concurrent reader
+#   sees either the whole old value or the whole new one, never a mixture.
+#   Same directory is not a style choice: a rename across filesystems is not
+#   atomic, and /var/lib/worker and /tmp usually are not the same one.
+#   write_intent_atomically() below does exactly this, and is exposed to the
+#   owner so there is one supported command rather than a recipe to re-derive:
+#
+#     bash worker-supervisor.sh --set-intent stop     # run|stop|pause|remove
+#     bash worker-supervisor.sh --set-intent pause
+#     bash worker-supervisor.sh --set-intent remove
+#     bash worker-supervisor.sh --set-intent run      # explicit
+#     bash worker-supervisor.sh --set-intent clear    # remove the sentinel
+#     bash worker-supervisor.sh --resolve-intent      # what would be honoured
+#
+#   Equivalent by hand, if an owner prefers not to use the flag:
+#     printf 'stop\n' > /var/lib/worker/.supervisor-intent.tmp \
+#       && mv -f /var/lib/worker/.supervisor-intent.tmp \
+#               /var/lib/worker/supervisor-intent
+#
+#   The supervisor's own read is resilient to a concurrent rename by
+#   construction: it opens the path ONCE, so the descriptor it reads through
+#   names one inode for the whole read. A rename swaps the directory entry, not
+#   that descriptor, so a read can return the entire old value or the entire
+#   new value and never a blend. It does not read the file twice and stitch
+#   results together, and it re-checks the path type after opening.
+#   What this does NOT cover: a machine-level crash (power loss) during the
+#   write. There is no fsync, so durability across that is out of scope.
+#
+# TEST SEAM: simulating an interrupted write
+#   WORKER_SIMULATE_TORN_INTENT=1 makes read_intent() behave as if an
+#   interrupted, half-completed owner write had been observed. It is TEST-ONLY
+#   and off unless that variable is exactly 1, and with it on the supervisor
+#   fails closed (exit 12, health state fatal-bad-intent-torn-write) exactly
+#   as a genuinely half-written file does. It exists so the failure path is
+#   executable in CI rather than asserted in prose. It never authorises
+#   anything: with the seam on, no container is started.
+#
+# WHAT `pause` HERE DOES NOT DO - read this before reaching for cluster controls
+#   This script can do exactly ONE kind of thing: stop itself from managing
+#   anything. That is "suspend supervisor management" and nothing more. Every
+#   value in the sentinel above is a statement about THIS process.
+#
+#   "Pause worker admissions" is a DIFFERENT control: the worker stays up and
+#   keeps its registration and heartbeat, but must not be handed new jobs. This
+#   script does not implement it, cannot implement it from here, and does not
+#   hold the credential or endpoint to implement it. Admission is a
+#   control-plane decision - see oai2/runtime/admission.py (AdmissionPolicy,
+#   AdmissionQueue, AdmissionDecision) together with the pipeline's own
+#   routing. It is owned there, not here. `pause` must not be described, in an
+#   incident note or a runbook, as a pause of worker admissions: it is not
+#   one, and the difference is the whole point of writing it down.
+#
+#   Plainly, for the end-to-end controls this script does NOT provide. A
+#   supervisor exit is NOT a cluster pause, drain, revoke or removal:
+#     - It releases THIS process and the WSL2 session that holds dockerd up. On
+#       WSL2 the runtime goes down with the session; it does not "settle".
+#     - It does not stop the worker from reconnecting or re-registering. That
+#       is requirement C and belongs to the worker client (see WHAT THIS
+#       PROCESS IS).
+#     - It does not hold, cancel or fail a job. Queued and running jobs belong
+#       to the pipeline.
+#     - It does not cordon, drain or evict node p50, and it deletes nothing.
+#     - It does not report node health upstream. It writes one local health
+#       file and nothing else.
+#     - It does not stop the scheduled task from launching it again; that is
+#       the task's own configuration.
+#   Status of those controls, from this script's point of view, is BLOCKED /
+#   NOT RUN: not attempted here, no evidence either way. Nothing in this file
+#   may be cited as evidence that they work, and none of them are covered by
+#   the exit-code contract above - that contract describes THIS process only.
 #
 # STATE FILES (all under --state-dir, default /var/lib/worker)
 #   supervisor-intent   owner sentinel, values above
@@ -102,7 +201,9 @@
 #                       (one generation, supervisor.log.1) - this process is
 #                       resident for weeks, an unbounded log is a real defect.
 #
-# DEFECTS THIS REWRITE FIXES (issue #251; all observed live, not hypothetical)
+# DEFECTS FIXED BY THE PREVIOUS REWRITE (issue #251; all observed live, not
+# hypothetical). Listed for history; the D numbers below are that revision's and
+# are unrelated to the D1-D4 owner-state list that follows.
 #   D1  The old script ran a bounded `for _ in $(seq 1 60)` dockerd start loop
 #       and then, when dockerd was still down, logged "continuing to retry".
 #       That was false: the loop had ended, and the following infinite loop
@@ -127,6 +228,37 @@
 #       lets start-worker.ps1 report a real failure to Task Scheduler instead of
 #       always claiming SUCCESS.
 #
+# OWNER-STATE DEFECTS FIXED IN THIS REVISION (the owner-intent sentinel; these
+# D1-D4 are a different list from the historical one above)
+#   D1  Absent was conflated with damaged. The old read_intent() did
+#       `[ ! -f ] -> run` and then folded an unreadable read into the same
+#       `''|run` case as a real `run`, so an owner-state file that was empty,
+#       zero bytes after a failed write, or unreadable all resolved to "run":
+#       permission manufactured out of a broken file. Absence is a legitimate
+#       first-start state; damage is not. Resolution now distinguishes the two,
+#       and only absence defaults to run (rules 1-3 above). Unreadable, empty
+#       and unrecognised each fail closed with exit 12 and their own health
+#       state, so a fault is never logged as a request to stop.
+#   D2  The parser and this header disagreed. The header promised "first
+#       non-blank line"; the code used `head -n 1`, i.e. the first LINE. A file
+#       whose first line was blank and whose second line was `stop` resolved to
+#       `run` - the exact opposite of the documented rule and of the owner's
+#       intent, and it did so by starting to supervise. One rule is now
+#       documented (rule 4) and implemented by the same code path that the tests
+#       and --resolve-intent exercise. Normalisation also stopped deleting
+#       INTERIOR whitespace, so `s top` is no longer accepted as `stop`.
+#   D3  There was no atomic update path, only a truncating `>` recipe, so a
+#       reader could observe a half-written file. write_intent_atomically()
+#       (temp file in the same directory, then rename) is now implemented and
+#       exposed as --set-intent, and the exact owner commands are documented
+#       above. The supervisor's read is single-open, so a concurrent rename
+#       yields a whole value and never a torn one.
+#   D4  An interruption mid-write could not be tested at all, so "fails closed
+#       on a partial value" was prose rather than a check. The exact-match rule
+#       in rule 5 means a truncated value such as `sto` is unrecognised and
+#       fails closed, and WORKER_SIMULATE_TORN_INTENT=1 makes the in-flight
+#       case executable in CI. Both paths are exercised, not asserted.
+#
 # USAGE
 #   wsl.exe -d Ubuntu-24.04 -u root -e bash /mnt/c/Users/P50/q-pipe/worker-supervisor.sh
 #
@@ -139,6 +271,10 @@
 #   --max-failures N           consecutive failures before escalation (default: 5)
 #   --missing-attempts N       grace before exit 11 (default: 3)
 #   --docker-unit NAME         container-runtime unit (default: docker)
+#   --set-intent VALUE         write the owner sentinel atomically and exit
+#                              (run|stop|pause|remove|clear); never supervises
+#   --resolve-intent           print the intent that would be honoured and exit
+#                              (0 if run/stop/pause/remove, 12 if unusable)
 #   -h, --help                 this text
 # ===========================================================================
 set -u
@@ -156,6 +292,11 @@ DEF_DOCKER_UNIT='docker'
 SLEEP_SLICE='5'            # owner intent is honoured within this many seconds
 DOCKER_READY_ATTEMPTS='15'
 LOG_MAX_BYTES='4194304'   # 4 MiB, then one rotation
+
+# Owner-side modes. Empty means "supervise", which is the whole point of
+# the script; these two exit immediately and never touch a container.
+set_intent=''
+resolve_intent=''
 
 container="${DEF_CONTAINER}"
 state_dir="${WORKER_STATE_DIR:-$DEF_STATE_DIR}"
@@ -283,12 +424,22 @@ Usage: worker-supervisor.sh [options]
   --max-failures N        consecutive failures before escalation (default: ${DEF_MAX_FAILURES})
   --missing-attempts N    grace before exit ${EXIT_NO_CONTAINER} (default: ${DEF_MISSING_ATTEMPTS})
   --docker-unit NAME      container-runtime unit (default: ${DEF_DOCKER_UNIT})
+  --set-intent VALUE      write the owner sentinel atomically and exit; never
+                          supervises (run|stop|pause|remove|clear)
+  --resolve-intent        print the intent that would be honoured and exit
   -h, --help              this text
 
 Exit codes: 0 intended owner shutdown, 2 invalid invocation/environment,
 ${EXIT_NO_DOCKERD} dockerd not active in the startup window, ${EXIT_NO_CONTAINER} worker
-container absent/unstartable, ${EXIT_BAD_INTENT} unreadable owner intent,
-${EXIT_INTENT_UNMET} owner intent could not be carried out.
+container absent/unstartable, ${EXIT_BAD_INTENT} owner intent file present but
+unreadable, empty or unrecognised, ${EXIT_INTENT_UNMET} owner intent could not be
+carried out.
+
+Owner intent: only an ABSENT sentinel defaults to run. A present-but-damaged
+sentinel fails closed with ${EXIT_BAD_INTENT} and starts nothing. See the header
+of this script for the full resolution rule, the atomic write commands
+(--set-intent) and for what this script does NOT do (it is not a cluster pause,
+drain, revoke or removal).
 EOF
 }
 
@@ -332,6 +483,9 @@ while [ "$#" -gt 0 ]; do
     --missing-attempts=*)  missing_attempts=${1#*=}; shift ;;
     --docker-unit)         need_value "$1" "$#"; docker_unit=$2; shift 2 ;;
     --docker-unit=*)       docker_unit=${1#*=}; shift ;;
+    --set-intent)          need_value "$1" "$#"; set_intent=$2; shift 2 ;;
+    --set-intent=*)        set_intent=${1#*=}; shift ;;
+    --resolve-intent)      resolve_intent=1; shift ;;
     -h|--help)             usage; exit "$EXIT_OK" ;;
     --)                    shift; break ;;
     -*)                    usage_error "unknown option: $1" ;;
@@ -371,9 +525,6 @@ if ! mkdir -p "$state_dir" 2>/dev/null || [ ! -w "$state_dir" ]; then
   printf 'error: state directory %s is not usable (cannot create or write); owner intent would be unreadable\n' "$state_dir" >&2
   exit "$EXIT_USAGE"
 fi
-
-trap 'on_signal SIGTERM' TERM
-trap 'on_signal SIGINT' INT
 
 # --------------------------------------------------------------- docker state
 have_systemctl() { command -v systemctl >/dev/null 2>&1; }
@@ -443,29 +594,179 @@ container_stop() {
 }
 
 # ------------------------------------------------------------- owner intent
-# Returns the normalised intent on stdout: run|stop|pause|remove, or
-# invalid:<verbatim>, or run when the file is absent/empty/unreadable.
+# Make an arbitrary owner-supplied byte sequence safe to put in one log line
+# and in the key=value health file: printable only, single line, bounded. The
+# old code interpolated the raw value straight into both.
+sanitise() {
+  printf '%s' "$1" | tr -cd '[:print:]' | tr -s ' \t' ' ' | cut -c1-80
+}
+
+# The single implementation of the rule documented in the header. Sets two
+# globals rather than printing, so the explanation survives into the log and
+# the health file instead of being lost in a subshell:
+#   INTENT     run | stop | pause | remove | bad:<kind>:<detail>
+#   INTENT_WHY one short line saying how that was arrived at
+# Only `run` is a benign default, and only for an absent sentinel.
+INTENT=''
+INTENT_WHY=''
+
 read_intent() {
-  if [ ! -f "$INTENT_FILE" ]; then
-    printf 'run'
+  INTENT=''
+  INTENT_WHY=''
+
+  # Test seam first, so it wins over whatever is actually on disk. Documented
+  # in the header: it can only ever make the supervisor fail closed.
+  if [ "${WORKER_SIMULATE_TORN_INTENT:-0}" = '1' ]; then
+    INTENT_WHY='test seam WORKER_SIMULATE_TORN_INTENT=1: simulated interrupted owner write'
+    INTENT='bad:torn:an owner write was interrupted part way through (simulated), so the value on disk may be half of a real intent'
     return 0
   fi
-  raw=$(tr -d '\r' <"$INTENT_FILE" 2>/dev/null | head -n 1 | tr -d ' \t' | tr 'A-Z' 'a-z')
+
+  # Rule 1: genuine absence is the ONLY default. A dangling symlink is not
+  # absence - the owner pointed at something that is not there - so it is
+  # caught by the -L test below instead of being read as "first start".
+  if [ ! -e "$INTENT_FILE" ] && [ ! -L "$INTENT_FILE" ]; then
+    INTENT_WHY='sentinel absent (first start), the one documented default'
+    INTENT='run'
+    return 0
+  fi
+
+  # Rule 2: present, but not a readable regular file.
+  if [ ! -f "$INTENT_FILE" ]; then
+    INTENT_WHY='sentinel is present but is not a regular file'
+    if [ -L "$INTENT_FILE" ]; then
+      INTENT="bad:unreadable:${INTENT_FILE} is a symlink whose target does not exist (dangling); that is a damaged owner-state file, not a first start"
+    elif [ -d "$INTENT_FILE" ]; then
+      INTENT="bad:unreadable:${INTENT_FILE} is a directory, not an intent file"
+    else
+      INTENT="bad:unreadable:${INTENT_FILE} exists but is not a regular file"
+    fi
+    return 0
+  fi
+  if [ ! -r "$INTENT_FILE" ]; then
+    INTENT_WHY='sentinel is present but not readable by this uid'
+    INTENT="bad:unreadable:${INTENT_FILE} is not readable by uid $(id -u 2>/dev/null || printf '?')"
+    return 0
+  fi
+
+  # One open, one inode. A concurrent rename swaps the directory entry, not
+  # this descriptor, so the value read here is always a WHOLE file: either the
+  # complete old intent or the complete new one. There is no second read to
+  # stitch against the first, which is where a torn value would come from.
+  if ! raw=$(cat -- "$INTENT_FILE" 2>/dev/null); then
+    INTENT_WHY='sentinel is present but could not be read'
+    INTENT="bad:unreadable:${INTENT_FILE} could not be opened or read"
+    return 0
+  fi
+
+  # Rule 4: the FIRST NON-BLANK LINE, not the first line. Blank lines above it
+  # are skipped rather than being taken as the value, so a leading empty line
+  # can no longer turn a `stop` into a `run`. `grep -m1 -v` prints nothing (and
+  # exits 1) when there is no non-blank line at all; that is rule 3 below, and
+  # it is deliberately not an error here.
+  raw=$(printf '%s' "$raw" | tr -d '\r' | grep -m1 -v '^[[:space:]]*$' 2>/dev/null)
+
+  # Rule 4 normalisation: CR already gone; strip SURROUNDING whitespace only
+  # (the old `tr -d ' \t'` deleted interior spaces too, so `s top` was
+  # accepted as `stop`); then ASCII lowercase.
+  raw=$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr 'A-Z' 'a-z')
+
   case "$raw" in
-    ''|run)        printf 'run' ;;
-    stop)          printf 'stop' ;;
-    pause)         printf 'pause' ;;
-    remove)        printf 'remove' ;;
-    *)             printf 'invalid:%s' "${raw:-<empty-but-not-run>}" ;;
+    '')
+      # Rule 3: the file is there but says nothing. Damaged, not permission.
+      INTENT_WHY='sentinel is present but holds no non-blank line'
+      INTENT="bad:empty:${INTENT_FILE} is present but empty (zero bytes, or nothing but blank lines); a damaged owner-state file is never treated as permission to run"
+      ;;
+    run|stop|pause|remove)
+      INTENT_WHY="sentinel present, first non-blank line normalised to '${raw}'"
+      INTENT=$raw
+      ;;
+    *)
+      # Rule 5: exact match only. A truncated prefix such as `sto` - exactly
+      # what an interrupted write leaves on disk - lands here and fails closed.
+      INTENT_WHY="sentinel present, first non-blank line normalised to an unrecognised token"
+      INTENT="bad:unrecognised:${INTENT_FILE} holds the unrecognised value '$(sanitise "$raw")'; allowed values are exactly run, stop, pause, remove"
+      ;;
   esac
+  return 0
 }
+
+# Write owner intent atomically: a temp file in the SAME directory, then a
+# rename over the sentinel. rename(2) is atomic within a filesystem, so a
+# reader sees either the whole old value or the whole new one. Same directory
+# is required for that, not stylistic - a cross-filesystem rename is not atomic.
+# $1 = run|stop|pause|remove, or 'clear' to remove the sentinel.
+# Returns 0 on success, 1 on failure. Never starts or stops anything itself.
+write_intent_atomically() {
+  wia_value=$1
+  case "$wia_value" in
+    clear)
+      rm -f "$INTENT_FILE" 2>/dev/null || return 1
+      return 0
+      ;;
+    run|stop|pause|remove) ;;
+    *) return 1 ;;
+  esac
+  mkdir -p "$state_dir" 2>/dev/null || return 1
+  [ -w "$state_dir" ] || return 1
+  wia_tmp="$state_dir/.supervisor-intent.tmp.$$"
+  if ! printf '%s\n' "$wia_value" >"$wia_tmp" 2>/dev/null; then
+    rm -f "$wia_tmp" 2>/dev/null || :
+    return 1
+  fi
+  chmod 0644 "$wia_tmp" 2>/dev/null || :
+  # The rename is the commit point. A temp file left behind by a killed run is
+  # harmless: the supervisor only ever reads supervisor-intent.
+  mv -f "$wia_tmp" "$INTENT_FILE" 2>/dev/null || {
+    rm -f "$wia_tmp" 2>/dev/null || :
+    return 1
+  }
+  return 0
+}
+
+# ------------------------------------------------- owner-side modes (no docker)
+# These two run the SAME read_intent / write_intent_atomically code the
+# supervisor uses, so what the owner is told is exactly what the supervisor
+# will do. They are placed after those definitions and before the traps, the
+# log and any docker call: neither mode can start, stop or inspect a container.
+if [ -n "$set_intent" ]; then
+  case "$set_intent" in
+    run|stop|pause|remove|clear) ;;
+    *) usage_error "--set-intent must be one of run, stop, pause, remove, clear; got '${set_intent}'" ;;
+  esac
+  if ! write_intent_atomically "$set_intent"; then
+    printf 'error: could not write owner intent %s atomically (state dir %s must be writable)\n' "$INTENT_FILE" "$state_dir" >&2
+    exit "$EXIT_USAGE"
+  fi
+  if [ "$set_intent" = 'clear' ]; then
+    printf 'owner intent cleared: %s removed; an absent sentinel is the one case that means run\n' "$INTENT_FILE"
+  else
+    read_intent
+    printf 'owner intent set: %s now resolves to %s (%s)\n' "$INTENT_FILE" "$INTENT" "$INTENT_WHY"
+  fi
+  exit "$EXIT_OK"
+fi
+
+if [ -n "$resolve_intent" ]; then
+  read_intent
+  printf '%s\n' "$INTENT"
+  printf '(%s)\n' "$INTENT_WHY"
+  case "$INTENT" in
+    bad:*) exit "$EXIT_BAD_INTENT" ;;
+    *)     exit "$EXIT_OK" ;;
+  esac
+fi
+
+trap 'on_signal SIGTERM' TERM
+trap 'on_signal SIGINT' INT
 
 # Called at the top of every loop iteration and every sleep slice, so an owner
 # stop takes effect within SLEEP_SLICE seconds even while the supervisor is
 # inside a backoff. Returns 0 only for `run`; every other value returns through
 # one of the documented exit codes.
 apply_intent() {
-  intent=$(read_intent)
+  read_intent
+  intent=$INTENT
   case "$intent" in
     run)
       return 0
@@ -508,10 +809,23 @@ apply_intent() {
         "owner intent=remove; not recreating it (${container} presence not verifiable: ${CONTAINER_ERR:-no error text})" \
         "stopped-intent-remove"
       ;;
-    invalid:*)
+    bad:*)
+      # A FAULT in owner state, not a request to stop. Exit 12, never 0, and a
+      # health state distinct from every intentional shutdown above, so the log
+      # and the health file say which of the two happened. Nothing is started,
+      # stopped or restarted on this path: it is reached before any docker call.
+      bad_rest=${intent#bad:}
+      bad_kind=${bad_rest%%:*}
+      bad_detail=${bad_rest#*:}
+      case "$bad_kind" in
+        torn)       bad_state='fatal-bad-intent-torn-write' ;;
+        unreadable) bad_state='fatal-bad-intent-unreadable' ;;
+        empty)      bad_state='fatal-bad-intent-empty' ;;
+        *)          bad_state='fatal-bad-intent-unrecognised' ;;
+      esac
       finish "$EXIT_BAD_INTENT" \
-        "owner intent file ${INTENT_FILE} holds an unrecognised value '${intent#invalid:}'; allowed: run, stop, pause, remove. Nothing was started or restarted." \
-        "fatal-bad-intent"
+        "owner intent FAULT, not a shutdown: ${bad_detail} (${INTENT_WHY:-no further detail}). An absent sentinel is the only thing that means run; a present but damaged one never authorises anything. Nothing was started, stopped or restarted. Repair or remove the sentinel, then let the task retry. Note this is NOT a cluster pause, drain, revoke or removal - see the header." \
+        "$bad_state"
       ;;
   esac
   return 0
@@ -712,10 +1026,11 @@ ensure_container() {
 # ---------------------------------------------------------------------- main
 log INFO "supervisor starting: container=${container} state_dir=${state_dir} interval=${interval}s unit=${docker_unit} pid=$$"
 log INFO "ownership: this process owns requirement A only (host/container runtime). Worker-process restart belongs to the container entrypoint; application reconnect belongs to the worker client."
-log INFO "exit contract: 0 intended owner shutdown | 2 invalid invocation | 10 dockerd unavailable | 11 worker container absent/unstartable | 12 unreadable owner intent | 13 owner intent unmet"
+log INFO "exit contract: 0 intended owner shutdown | 2 invalid invocation | 10 dockerd unavailable | 11 worker container absent/unstartable | 12 owner intent present but unreadable/empty/unrecognised | 13 owner intent unmet"
+log INFO "scope limit: this script only suspends ITS OWN supervision. It is not a cluster pause, drain, revoke or removal; worker admissions are owned by the control plane (oai2/runtime/admission.py)."
 
-intent_now=$(read_intent)
-log INFO "owner intent (${INTENT_FILE}): ${intent_now}"
+read_intent
+log INFO "owner intent (${INTENT_FILE}): ${INTENT} -- ${INTENT_WHY}"
 apply_intent
 
 if ! have_systemctl; then

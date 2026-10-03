@@ -4,6 +4,54 @@ Pure stdlib, no network, no docker, no ssh, no live host. Run it with:
 
     python3 -m unittest tests.test_worker_lifecycle -v
 
+=============================================================================
+TEST-ISOLATION INCIDENT -- recorded here so it cannot recur quietly
+=============================================================================
+WHAT HAPPENED
+    A validation of the worker supervisor that was SUPPOSED to be isolated
+    passed ``--container oai2-worker`` with owner intent ``stop``. That is the
+    LIVE production worker container on the P50 host. The new supervisor
+    correctly honoured the intent it was given and STOPPED THE LIVE PRODUCTION
+    WORKER CONTAINER. The run then "recovered" only because the already-running
+    supervisor happened to restart the container. That was luck, not a control.
+    A test that can reach production is worse than no test: it reports a green
+    result while having done damage.
+
+WHY THE "ISOLATED" TEST WAS NOT ISOLATED
+    Three concrete holes, all in this module, none of them the script's fault:
+
+    1. The fake environment PREPENDED the stub directory to the INHERITED
+       ``PATH``. Stubbed or not, the real ``docker`` and the real ``qpipe``
+       were still one PATH entry away. Any command the stubs did not shadow
+       reached the developer's real machine.
+    2. The suite's own default target WAS the production name. ``CONTAINER``
+       defaults to ``oai2-worker`` in both shipped probes, and this module
+       reused that string as its fixture constant, so "isolated" runs were
+       addressed at production by default and nothing anywhere refused them.
+    3. There was no isolation layer. Isolation was a claim in this docstring,
+       enforced by nothing. The stub logs made scope violations visible AFTER
+       the fact; they could not prevent one.
+
+WHAT NOW PREVENTS IT
+    ``assert_isolated_env`` (below) is the guard. A test's PATH is a single
+    entry -- the test's own temp stub dir -- and the guard raises
+    ``IsolationViolation`` if any real container runtime, service manager, host
+    escape hatch or q-pipe CLI resolves from it, if any PATH entry lies outside
+    the temp dir, or if a live cluster endpoint was inherited. The guard runs
+    in ``setUpModule`` (so a suite that cannot detect live infrastructure fails
+    before any test body) and again on every environment handed to a
+    subprocess, so a test that mutates its own PATH cannot slip past it.
+    ``isolated_target`` is the target layer: it refuses the production
+    container name and any state dir outside the test's temp root, and the only
+    way past that is the explicit, default-off ``OAI2_LIVE_TESTS=1`` opt-in.
+    ``FakeCluster.run`` is the ONLY way a probe is launched, and it routes every
+    invocation through both layers -- so a default run physically cannot name
+    the production container, because it is given the synthetic name
+    explicitly rather than inheriting the script's production default.
+    The regression tests at the bottom of this file pin each of those claims.
+
+=============================================================================
+
 How the scripts are exercised
 -----------------------------
 The two probes are treated as TEXT (source-level contracts) and as PROGRAMS
@@ -14,9 +62,15 @@ directory provides:
     ``inspect`` state, a simulated ``restart`` and a simulated entrypoint
     respawn loop. It runs the probe's own embedded python payload with the real
     interpreter, so the shipped matching logic executes for real.
-  * stub ``systemctl`` and ``wsl`` that log the call and fail. They exist so
-    that a probe reaching outside the worker scope fails loudly instead of
-    quietly reaching a real host.
+  * stubs for ``systemctl``, ``wsl`` and ``qpipe`` that log the call and fail.
+    They exist so that a probe reaching outside the worker scope fails loudly
+    instead of quietly reaching a real host.
+
+That temp directory is the test's ENTIRE ``PATH``. Alongside the stubs it
+carries symlinks to a declared list of real, non-infrastructure tools the
+probes genuinely need (bash, sh, env, cat, date, grep, sed, tr, head, cut,
+dirname, python3). They are the only real files in there, and none of them can
+name a container, a service or a node.
 
 No process is ever signalled: the probe's signal path only switches to
 "simulated" when its proc root is not ``/proc``.
@@ -51,6 +105,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from typing import NamedTuple
 
 REPO = Path(__file__).resolve().parent.parent
 PRB = REPO / "deploy" / "worker" / "process-recovery-probe.sh"
@@ -71,7 +126,347 @@ WORKER_ARGV = [
     "p50",
 ]
 
-CONTAINER_NAME = "oai2-worker"
+# ===========================================================================
+# TEST ISOLATION -- enforced, not asserted in a docstring
+# ===========================================================================
+# See the TEST-ISOLATION INCIDENT block in this module's docstring for the run
+# that stopped the live production worker container, and for why the previous
+# "isolation" did not prevent it. Everything below is the replacement.
+
+# The only way to reach live infrastructure: an explicit, default-off opt-in.
+# Nothing in this module uses it to launch anything.
+LIVE_ENV_VAR = "OAI2_LIVE_TESTS"
+LIVE_OPT_IN = "1"
+
+# The real production worker container. It is spelled out HERE so the isolation
+# layer can refuse it, and nowhere else in this module: no default test may be
+# addressed at it. Both shipped probes default --container to this same string,
+# which is precisely why every launch below passes the synthetic name
+# explicitly instead of inheriting the script default.
+PRODUCTION_CONTAINER = "oai2-worker"
+
+# The name every test in this module targets by default.
+SYNTHETIC_CONTAINER = "oai2-test-worker"
+
+# The fixture constant the tests already use. Deliberately NOT the production
+# name: the old value of this constant was the incident.
+CONTAINER_NAME = SYNTHETIC_CONTAINER
+
+# The infrastructure that must be unreachable from a test. A test's PATH must
+# resolve these to nothing but the temp stub dir.
+INFRA_BINARIES = (
+    # container runtimes -- the incident's owner intent was `stop` against the
+    # production container, which is a `docker <name> stop`.
+    "docker", "podman", "nerdctl", "ctr", "crictl",
+    # service managers
+    "systemctl", "service", "launchctl",
+    # host escape hatches
+    "wsl", "wslhost", "nsenter", "chroot",
+    # the q-pipe CLI / cluster controller
+    "qpipe",
+    # remote shells
+    "ssh", "scp", "rsync", "mosh",
+)
+
+# Must be shadowed by a stub in the isolated bin dir. A missing stub would be a
+# hole even if nothing resolves to a real binary, so the guard requires these
+# to be present as stubs.
+REQUIRED_STUBS = ("docker", "systemctl", "wsl", "qpipe")
+
+# Additional stubs this suite writes itself, for tools that are POSIX rather
+# than infrastructure but whose behaviour a test needs to be real and bounded.
+# `rm` is here because worker-supervisor.sh's `clear` path unlinks the owner
+# sentinel, and that path has to be tested for real. The ambient `rm` cannot be
+# trusted to that role: on a managed developer machine it may be a wrapper that
+# refuses to delete outside the workspace, which would make the test fail for a
+# reason that has nothing to do with the supervisor. The stub below performs a
+# genuine unlink, and only ever inside this cluster's own temp root.
+SUITE_STUBS = ("rm",)
+
+# Real, non-infrastructure executables the worker scripts legitimately need.
+# These are symlinked into the isolated bin dir, where they are the only entries
+# that are not stubs this suite writes itself. None of them can name a
+# container, a service, a namespace or a node: they are POSIX filesystem and
+# text utilities, scoped by the tests to their own temp root. The set is
+# derived from what the shipped scripts actually invoke -- a script that called
+# something absent from here would fail with a confusing 127, so the list is a
+# declaration of what the isolation layer considers non-infrastructure, not a
+# convenience.
+BENIGN_TOOLS = (
+    "bash", "sh", "env", "cat", "date", "grep", "sed", "tr", "head", "cut",
+    "dirname", "python3",
+    # required by worker-supervisor.sh: state-dir creation, the atomic
+    # intent/health update (write temp, chmod, rename, and unlink the temp or
+    # the sentinel on the `clear` path), log rotation, the poll sleep, and the
+    # uid the log reports. `rm` is here because the script uses it, and its
+    # reach is bounded by the same temp root as every other tool.
+    "mkdir", "mv", "sleep", "id", "chmod", "wc", "touch",
+)
+
+# Inherited environment that would point a test at live infrastructure even
+# with a clean PATH. Stripped from every test env and refused by the guard.
+CLUSTER_ENV_VARS = (
+    "QPIPE_CLUSTER_URL", "QPIPE_CLUSTER_TOKEN", "QPIPE_NODE_ID",
+    "QPIPE_WORK_ROOT", "QPIPE_PROFILES", "QPIPE_HEARTBEAT",
+    "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH",
+    "DOCKER_TLS_VERIFY", "DOCKER_API_VERSION",
+)
+
+# Known production state directories. Named so the refusal message can be
+# specific rather than merely "outside the temp root".
+PRODUCTION_STATE_DIRS = (
+    "/var/lib/worker", "/var/lib/oai2", "/srv/oai2", "/opt/oai2", "/etc/oai2",
+    "/run/worker", "/var/run/worker",
+)
+
+
+class IsolationViolation(AssertionError):
+    """A test tried to reach live infrastructure. Always a loud test failure.
+
+    Subclasses AssertionError on purpose: it must surface as a FAILING test
+    with the message attached, never as a skip, a warning or a silent fallback.
+    """
+
+
+def live_mode_enabled() -> bool:
+    """True only for an explicit ``OAI2_LIVE_TESTS=1``. Default: off."""
+    return os.environ.get(LIVE_ENV_VAR) == LIVE_OPT_IN
+
+
+def resolve_in_path(name: str, path: str) -> str | None:
+    """The executable ``name`` resolves to in ``path``, as a realpath, or None.
+
+    Empty PATH entries are skipped rather than treated as the current
+    directory, so a stray ``PATH=:/usr/bin`` cannot hide an entry from the
+    guard.
+    """
+    for directory in path.split(os.pathsep):
+        if not directory:
+            continue
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return os.path.realpath(candidate)
+    return None
+
+
+def is_within(path: Path | str, root: Path | str) -> bool:
+    """True if ``path`` is ``root`` or lives under it (after resolution)."""
+    try:
+        resolved = Path(path).resolve()
+        base = Path(root).resolve()
+    except OSError:
+        return False
+    return resolved == base or base in resolved.parents
+
+
+def assert_isolated_env(env: dict[str, str], *, bin_dir: Path, label: str) -> None:
+    """The guard. Raises IsolationViolation if a test's env can reach live infra.
+
+    Enforced properties, all of them structural rather than best-effort:
+
+    1. ``PATH`` is a single entry, and it is the test's own temp stub dir.
+    2. Every infrastructure binary resolves either to a stub INSIDE that dir
+       (realpath included, so a symlink to the real ``docker`` is rejected) or
+       to nothing at all.
+    3. ``docker``/``systemctl``/``wsl``/``qpipe`` are present as stubs, so a
+       probe reaching out gets a loud failure instead of a silent no-op.
+    4. No live cluster endpoint or docker context was inherited.
+    """
+    path = env.get("PATH", "")
+    entries = [entry for entry in path.split(os.pathsep) if entry]
+    stub_root = Path(bin_dir).resolve()
+    problems: list[str] = []
+
+    if not entries:
+        problems.append("PATH is empty, so nothing is pinned to the stub dir")
+    for entry in entries:
+        if not is_within(entry, stub_root):
+            problems.append(
+                "PATH entry %r is outside the isolated bin dir %s, so a real "
+                "executable on this host is reachable" % (entry, stub_root)
+            )
+
+    for name in INFRA_BINARIES:
+        found = resolve_in_path(name, path)
+        if found is None:
+            continue
+        if not is_within(found, stub_root):
+            problems.append(
+                "infrastructure executable %r resolves to %s, which is a REAL "
+                "binary and not a stub in %s" % (name, found, stub_root)
+            )
+    for name in REQUIRED_STUBS:
+        if resolve_in_path(name, path) is None:
+            problems.append(
+                "no stub for %r: a probe reaching for it would get a silent "
+                "'command not found' instead of a loud, logged failure" % name
+            )
+
+    for name in CLUSTER_ENV_VARS:
+        if name in env:
+            problems.append(
+                "%s is set in the test env (%r): a test must not inherit a live "
+                "cluster endpoint or docker context" % (name, env[name])
+            )
+
+    if problems:
+        raise IsolationViolation(
+            "test isolation violated (%s):\n  - %s"
+            % (label, "\n  - ".join(problems))
+        )
+
+
+class IsolatedTarget(NamedTuple):
+    """An authorised target: a non-production container and a scratch state dir."""
+
+    container: str
+    state_dir: Path
+    live: bool
+
+
+def isolated_target(
+    container: str = SYNTHETIC_CONTAINER,
+    state_dir: Path | str | None = None,
+    *,
+    root: Path,
+    live: bool = False,
+) -> IsolatedTarget:
+    """Authorise a (container, state dir) pair, or refuse it loudly.
+
+    In isolated mode (the default, and the only mode any test here uses):
+
+    * the production container name is refused outright;
+    * a state dir outside the test's own temp root is refused, and the known
+      production state dirs are refused by name with a specific message.
+
+    ``live=True`` is the single documented way past either refusal, and it is
+    refused too unless the caller has set ``OAI2_LIVE_TESTS=1``. The opt-in is
+    therefore required, and it is off by default.
+    """
+    if live and not live_mode_enabled():
+        raise IsolationViolation(
+            "live mode refused: it requires %s=%s, which is not set. Isolated "
+            "mode is the default and the only mode this suite runs in."
+            % (LIVE_ENV_VAR, LIVE_OPT_IN)
+        )
+
+    if not live:
+        if container == PRODUCTION_CONTAINER:
+            raise IsolationViolation(
+                "isolated mode REFUSES the production container %r. This is the "
+                "exact target that was stopped in the test-isolation incident "
+                "(see this module's docstring). A test must use %r, or opt in "
+                "with %s=%s." % (container, SYNTHETIC_CONTAINER, LIVE_ENV_VAR, LIVE_OPT_IN)
+            )
+        if state_dir is not None:
+            candidate = str(state_dir)
+            for production in PRODUCTION_STATE_DIRS:
+                if candidate == production or candidate.startswith(production + "/"):
+                    raise IsolationViolation(
+                        "isolated mode REFUSES the production state dir %r. A test "
+                        "state dir must live under its own temp root %s."
+                        % (candidate, root)
+                    )
+            if Path(state_dir).is_absolute() and not is_within(state_dir, root):
+                raise IsolationViolation(
+                    "isolated mode REFUSES the state dir %r: it is outside the "
+                    "test's own temp root %s, so it is not a scratch dir."
+                    % (candidate, root)
+                )
+
+    return IsolatedTarget(container, Path(state_dir) if state_dir is not None else None, live)
+
+
+def require_benign_tools_present() -> None:
+    """Fail loudly here rather than mysteriously in every probe run.
+
+    The isolated bin dir is the stub dir PLUS symlinks to these real tools. A
+    host missing one cannot be isolated properly, and the suite must say so
+    once, clearly, instead of producing mysterious exit 127s.
+    """
+    ambient = os.environ.get("PATH", "")
+    missing = [name for name in BENIGN_TOOLS if resolve_in_path(name, ambient) is None]
+    if missing:
+        raise IsolationViolation(
+            "cannot build an isolated bin dir: these real, non-infrastructure "
+            "tools are absent from this host's PATH: %s" % ", ".join(missing)
+        )
+
+
+def enforce_module_isolation() -> None:
+    """The module-level guard. Runs from setUpModule, before any test body.
+
+    A suite that cannot DETECT live infrastructure must not be trusted to be
+    isolated, so this first proves the guard bites. Then it checks the layer's
+    own defaults: the default target must be a legal non-production target, the
+    production container must be refused, and the live gate must be shut unless
+    the operator opened it on purpose.
+    """
+    require_benign_tools_present()
+
+    # 1. The guard must reject a PATH with a real infrastructure binary on it.
+    #    Built synthetically so the check is identical on a host with no docker
+    #    and a host with one. If this ever stops raising, the suite is not
+    #    isolated and must not be believed.
+    with tempfile.TemporaryDirectory() as scratch:
+        hostile_bin = Path(scratch) / "hostile-bin"
+        hostile_bin.mkdir()
+        decoy = hostile_bin / "docker"
+        decoy.write_text("#!/bin/sh\nexit 0\n")
+        decoy.chmod(0o755)
+        try:
+            assert_isolated_env(
+                {"PATH": str(hostile_bin)}, bin_dir=Path(scratch) / "elsewhere",
+                label="module self-test",
+            )
+        except IsolationViolation:
+            pass
+        else:  # pragma: no cover - the guard is broken, which is the failure
+            raise IsolationViolation(
+                "the isolation guard accepted a PATH resolving a real `docker`. "
+                "This suite cannot prove it is isolated, so it must not be run."
+            )
+
+    # 2. The default target must be authorised, and must not be production.
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        default_target = isolated_target(root=root)
+        if default_target.container == PRODUCTION_CONTAINER:  # pragma: no cover
+            raise IsolationViolation("the default test target is the production container")
+        if default_target.live:  # pragma: no cover
+            raise IsolationViolation("the default test target is a live target")
+        for container, state_dir in (
+            (PRODUCTION_CONTAINER, root / "scratch"),
+            (SYNTHETIC_CONTAINER, "/var/lib/worker"),
+        ):
+            try:
+                isolated_target(container, state_dir, root=root)
+            except IsolationViolation:
+                continue
+            raise IsolationViolation(  # pragma: no cover
+                "the isolation layer did not refuse container=%r state_dir=%r"
+                % (container, state_dir)
+            )
+
+    # 3. The live gate must be shut unless the operator opened it on purpose.
+    #    Nothing here launches anything either way; this only records intent.
+    if not live_mode_enabled():
+        with tempfile.TemporaryDirectory() as scratch:
+            try:
+                isolated_target(PRODUCTION_CONTAINER, root=Path(scratch), live=True)
+            except IsolationViolation:
+                pass
+            else:  # pragma: no cover
+                raise IsolationViolation(
+                    "live mode is open without %s=%s" % (LIVE_ENV_VAR, LIVE_OPT_IN)
+                )
+
+
+def setUpModule() -> None:
+    """Module-level guard: the suite fails before any test if it is not isolated."""
+    enforce_module_isolation()
+
+
 WORKER_PID = 100
 WORKER_PGID = 100
 SELF_PID = 4242          # the probe helper's own pid inside the synthetic tree
@@ -218,7 +613,9 @@ import sys
 
 STATE = pathlib.Path(os.environ["FAKE_DOCKER_STATE"])
 PROC = STATE / "proc"
-CONTAINER = os.environ.get("FAKE_CONTAINER", "oai2-worker")
+# No fallback: a missing container name must be loud, and the fallback must not
+# be the production container this suite refuses to target.
+CONTAINER = os.environ["FAKE_CONTAINER"]
 
 argv = sys.argv[1:]
 verb = argv[0] if argv else ""
@@ -392,19 +789,85 @@ FORBIDDEN_STUB = (
     "sys.exit(1)\n"
 )
 
+# A real unlink, bounded to this cluster's own temp root. Deliberately NOT a
+# symlink to the host's `rm`: see SUITE_STUBS for why the ambient one cannot be
+# trusted to fill this role.
+RM_STUB = r'''#!/usr/bin/env python3
+"""rm, restricted to this cluster's temp root. Never deletes anything else."""
+import os
+import pathlib
+import shutil
+import sys
+
+ROOT = pathlib.Path(os.environ["FAKE_CLUSTER_ROOT"]).resolve()
+
+targets = []
+for arg in sys.argv[1:]:
+    if arg.startswith("-"):
+        continue
+    targets.append(arg)
+
+if not targets:
+    sys.stderr.write("rm: refusing to run with no target\n")
+    sys.exit(1)
+
+for raw in targets:
+    path = pathlib.Path(raw)
+    try:
+        resolved = path.resolve()
+    except OSError:
+        sys.stderr.write("rm: cannot resolve %s\n" % raw)
+        sys.exit(1)
+    if resolved != ROOT and ROOT not in resolved.parents:
+        sys.stderr.write(
+            "rm: refusing to remove %s: outside this cluster's root %s\n"
+            % (resolved, ROOT)
+        )
+        sys.exit(1)
+
+for raw in targets:
+    path = pathlib.Path(raw)
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass  # -f semantics: a missing target is not an error
+        except IsADirectoryError:
+            sys.stderr.write("rm: %s is a directory\n" % raw)
+            sys.exit(1)
+sys.exit(0)
+'''
+
 
 class FakeCluster:
-    """A temporary tree with stub executables and a synthetic /proc."""
+    """A temporary tree with stub executables and a synthetic /proc.
+
+    Everything a test can reach is inside ``root``, a temp directory: the stub
+    bin dir, the synthetic /proc, and the scratch state dir. The test's PATH is
+    that stub dir and nothing else, and every launch goes through the guard.
+    """
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self.state = root / "state"
         self.proc = self.state / "proc"
         self.bin = root / "bin"
+        self.scratch_state = root / "scratch-state"
         self.state.mkdir(parents=True)
         self.proc.mkdir(parents=True)
         self.bin.mkdir(parents=True)
         self.docker_env: dict[str, str] = {}
+
+        # The scratch state dir this cluster is allowed to use. Authorised
+        # through the isolation layer, so a production state dir cannot be
+        # substituted for it. `live` is False and is not a constructor
+        # argument: no test in this module can opt a cluster into live mode.
+        self.scratch_state.mkdir(parents=True, exist_ok=True)
+        self.target = isolated_target(
+            SYNTHETIC_CONTAINER, self.scratch_state, root=root, live=False
+        )
 
         # The real /proc/stat carries `btime`, which is how a process start time
         # (stat field 22) is turned into an age. Without it, age is unprovable
@@ -424,8 +887,12 @@ class FakeCluster:
         self.state.joinpath("worker_pid").write_text(str(WORKER_PID))
 
         self._install("docker", DOCKER_STUB)
-        for tool in ("systemctl", "wsl"):
+        for tool in ("systemctl", "wsl", "qpipe"):
             self._install(tool, FORBIDDEN_STUB.replace("@@TOOL@@", tool))
+        for tool in SUITE_STUBS:
+            self._install(tool, RM_STUB)
+        self._link_benign_tools()
+        self.assert_isolated()
 
         # The intended worker, old enough that a replacement is unmistakable.
         # The start time is recorded here so tests can reuse the EXACT value the
@@ -451,6 +918,29 @@ class FakeCluster:
         path = self.bin / name
         path.write_text(body)
         path.chmod(0o755)
+
+    def _link_benign_tools(self) -> None:
+        """Symlink the real, non-infrastructure tools the probes need.
+
+        The bin dir is the test's ENTIRE PATH, so the interpreter and the
+        handful of POSIX utilities the scripts call have to be in there. They
+        are symlinks to the host's real copies -- the only real files in the
+        dir, and none of them can name a container, a service or a node. The
+        guard resolves symlinks, so a symlink out to the real ``docker`` is
+        rejected rather than trusted.
+        """
+        ambient = os.environ.get("PATH", "")
+        for name in BENIGN_TOOLS:
+            source = resolve_in_path(name, ambient)
+            if source is None:
+                raise IsolationViolation(
+                    "cannot build the isolated bin dir: %r is absent from this "
+                    "host's PATH" % name
+                )
+            link = self.bin / name
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            link.symlink_to(source)
 
     def enable_respawn(self, pid: int, age: float = 1.0, pgrp: int | None = None) -> None:
         self.state.joinpath("respawn").touch()
@@ -483,10 +973,18 @@ class FakeCluster:
         return [l for l in self.state.joinpath("calls.log").read_text().splitlines() if l]
 
     def env(self) -> dict[str, str]:
-        env = dict(os.environ)
-        env["PATH"] = "%s%s%s" % (self.bin, os.pathsep, env.get("PATH", ""))
+        """The environment a test's subprocess sees. Guarded, not merely careful."""
+        env = self._raw_env()
+        self.assert_isolated(env)
+        return env
+
+    def _raw_env(self) -> dict[str, str]:
+        env = {k: v for k, v in os.environ.items() if k not in CLUSTER_ENV_VARS}
+        env["PATH"] = str(self.bin)
         env["FAKE_DOCKER_STATE"] = str(self.state)
-        env["FAKE_CONTAINER"] = CONTAINER_NAME
+        env["FAKE_CLUSTER_ROOT"] = str(self.root)
+        env["FAKE_CONTAINER"] = self.target.container
+        env["OAI2_TEST_SCRATCH_STATE"] = str(self.target.state_dir)
         env.pop("OAI2_PRB_PROC_ROOT", None)
         env.pop("OAI2_PRB_SELF_PID", None)
         env.pop("OAI2_PRB_SELF_PGID", None)
@@ -494,13 +992,57 @@ class FakeCluster:
         env.update(self.docker_env)
         return env
 
+    def assert_isolated(self, env: dict[str, str] | None = None) -> None:
+        """The guard, applied to this cluster. Raises on any live-reachable PATH.
+
+        Called at construction, on every ``env()``, and again immediately
+        before every launch, so a test that edits the environment (including via
+        ``extra_env``) cannot get a subprocess past the guard.
+        """
+        assert_isolated_env(
+            self._raw_env() if env is None else env,
+            bin_dir=self.bin,
+            label="FakeCluster %s" % self.root,
+        )
+
+    def authorize(self, args: tuple[str, ...]) -> list[str]:
+        """The target layer, applied to one launch's arguments.
+
+        Refuses an explicit production ``--container``, and supplies the
+        synthetic one when a test omits it, so no run can inherit either
+        probe's production default. Then re-checks the authorised target
+        through ``isolated_target`` so there is exactly one place that decides.
+        """
+        argv = list(args)
+        for index, token in enumerate(argv):
+            if token != "--container":
+                continue
+            if index + 1 >= len(argv):
+                raise IsolationViolation("--container with no value")
+            requested = argv[index + 1]
+            if requested != self.target.container:
+                raise IsolationViolation(
+                    "refusing --container %r: this isolated cluster may only "
+                    "target %r. %r is the production container that the "
+                    "test-isolation incident stopped; it is never a test target."
+                    % (requested, self.target.container, PRODUCTION_CONTAINER)
+                )
+        if "--container" not in argv:
+            argv += ["--container", self.target.container]
+        isolated_target(
+            self.target.container, self.target.state_dir, root=self.root, live=False
+        )
+        return argv
+
     def run(self, script: Path, *args: str, extra_env: dict[str, str] | None = None,
             timeout: int = 120) -> subprocess.CompletedProcess[str]:
+        argv = self.authorize(args)
         env = self.env()
         if extra_env:
             env.update(extra_env)
+        self.assert_isolated(env)   # after extra_env, not before
         return subprocess.run(
-            ["bash", str(script), *args],
+            ["bash", str(script), *argv],
             env=env,
             capture_output=True,
             text=True,
@@ -539,6 +1081,315 @@ class _ClusterCase(unittest.TestCase):
 
     def output(self, result: subprocess.CompletedProcess[str]) -> str:
         return result.stdout + result.stderr
+
+    def fresh_cluster(self) -> "FakeCluster":
+        """An independent isolated cluster, for a test that must drive two."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return FakeCluster(Path(tmp.name))
+
+
+# ===========================================================================
+# ISOLATION -- the regressions that pin the test-isolation incident closed
+# ===========================================================================
+# Each test name states the requirement it enforces. Read them together with
+# the TEST-ISOLATION INCIDENT block in this module's docstring: every one of
+# them describes a way the incident could happen again.
+class TestIsolationEnforcement(_ClusterCase):
+    # --- requirement 1: default runs cannot reach live infrastructure ---
+
+    def test_iso_r1_every_worker_script_launch_uses_a_single_entry_stub_only_path(self) -> None:
+        """Req 1: a real run's PATH is the test's own temp stub dir, alone.
+
+        The old env PREPENDED the stub dir to the inherited PATH, so the real
+        `docker` and the real `qpipe` stayed reachable. This asserts the
+        replacement on a real launch, not on a constructed dict.
+        """
+        result = self.cluster.run(PRB, "--deadline", "10")
+        self.assertEqual(result.returncode, EX_OK, self.output(result))
+
+        env = self.cluster.env()
+        self.assertEqual(
+            env["PATH"].split(os.pathsep),
+            [str(self.cluster.bin)],
+            "a test PATH must be the stub dir and nothing else",
+        )
+        self.assertTrue(
+            is_within(self.cluster.bin, self.cluster.root),
+            "the stub dir must live inside the test's own temp root",
+        )
+        # Stubs are the only thing on the PATH that can name a container.
+        for name in REQUIRED_STUBS:
+            resolved = resolve_in_path(name, env["PATH"])
+            self.assertIsNotNone(resolved, "%s must be stubbed" % name)
+            self.assertTrue(
+                is_within(resolved, self.cluster.bin),
+                "%s must resolve to the stub dir, not to %s" % (name, resolved),
+            )
+        # Everything else in the class has no stub and must not resolve at all.
+        for name in INFRA_BINARIES:
+            if name in REQUIRED_STUBS:
+                continue
+            with self.subTest(binary=name):
+                self.assertIsNone(resolve_in_path(name, env["PATH"]), name)
+        # The bin dir holds nothing but declared stubs and declared benign
+        # tools. Every symlink is a tool on the allowlist; every regular file is
+        # a stub. A real infrastructure binary cannot hide in here.
+        for entry in sorted(self.cluster.bin.iterdir()):
+            if entry.is_symlink():
+                self.assertIn(
+                    entry.name, BENIGN_TOOLS,
+                    "undeclared symlink in the isolated bin dir: %s" % entry.name,
+                )
+            else:
+                self.assertIn(
+                    entry.name, REQUIRED_STUBS + SUITE_STUBS,
+                    "undeclared real file in the isolated bin dir: %s" % entry.name,
+                )
+
+    def test_iso_r2_default_test_target_is_never_the_production_container(self) -> None:
+        """Req 1: no default run targets the container the incident stopped.
+
+        Read from the stub's call log, i.e. from what really ran, across BOTH
+        probes, including the launches that pass no --container at all and so
+        would otherwise inherit each script's production default.
+        """
+        recovery = self.cluster.run(PRB, "--deadline", "10")
+        self.assertEqual(recovery.returncode, EX_OK, self.output(recovery))
+
+        # A second, independent cluster for the other probe: the two probes
+        # mutate the same synthetic respawn/restart state, so they must not
+        # share a cluster.
+        lifecycle_cluster = self.fresh_cluster()
+        lifecycle = lifecycle_cluster.run(
+            LP, "--deadline-a", "5", "--deadline-b", "5", "--poll-interval", "1"
+        )
+        self.assertEqual(lifecycle.returncode, 0, self.output(lifecycle))
+
+        calls = self.cluster.calls() + lifecycle_cluster.calls()
+        self.assertTrue(calls, "the log must be non-empty for this to prove anything")
+        for call in calls:
+            self.assertNotIn(
+                PRODUCTION_CONTAINER,
+                call,
+                "a default run addressed the production container: %s" % call,
+            )
+            self.assertIn(SYNTHETIC_CONTAINER, call, "expected the synthetic target: %s" % call)
+        self.assertNotEqual(SYNTHETIC_CONTAINER, PRODUCTION_CONTAINER)
+        self.assertFalse(self.cluster.target.live, "a default cluster must not be a live target")
+
+    def test_iso_r3_every_launch_uses_a_scratch_state_dir_inside_the_temp_root(self) -> None:
+        """Req 1: the state dir is a scratch dir, under the test's temp root.
+
+        A production-looking state dir is not a scratch dir, and passing one is
+        how an isolated run ends up writing into /var/lib/worker.
+        """
+        env = self.cluster.env()
+        scratch = Path(env["OAI2_TEST_SCRATCH_STATE"])
+        self.assertEqual(scratch, self.cluster.scratch_state)
+        self.assertTrue(scratch.is_dir(), "the scratch state dir must exist")
+        self.assertTrue(
+            is_within(scratch, self.cluster.root),
+            "the scratch state dir must be inside the test's own temp root, got %s" % scratch,
+        )
+        for production in PRODUCTION_STATE_DIRS:
+            self.assertFalse(
+                is_within(scratch, production),
+                "the scratch state dir must not be %s" % production,
+            )
+        self.assertEqual(
+            self.cluster.target.state_dir, self.cluster.scratch_state,
+            "the authorised target must be the cluster's own scratch dir",
+        )
+
+    def test_iso_r4_a_test_env_carrying_a_live_cluster_endpoint_is_refused(self) -> None:
+        """Req 1: a clean PATH is not enough; the endpoint must not be inherited.
+
+        Simulates the developer's shell leaking a real control plane or docker
+        context into a test. The guard must refuse it rather than let a probe
+        with a stub PATH still address a live cluster.
+        """
+        for variable, value in (
+            ("QPIPE_CLUSTER_URL", "http://192.168.100.39:10534"),
+            ("QPIPE_CLUSTER_TOKEN", "production-token"),
+            ("DOCKER_HOST", "tcp://192.168.100.39:2375"),
+        ):
+            with self.subTest(variable=variable):
+                env = self.cluster._raw_env()
+                self.assertNotIn(variable, env, "the inherited value must be stripped")
+                env[variable] = value
+                with self.assertRaises(IsolationViolation) as caught:
+                    self.cluster.assert_isolated(env)
+                self.assertIn(variable, str(caught.exception))
+
+    # --- requirement 2: the production target is rejected, loudly ---
+
+    def test_iso_r5_isolated_mode_refuses_the_production_container_name(self) -> None:
+        """Req 2: the isolation layer REFUSES the real production container.
+
+        The exact name from the incident. The refusal must be an exception
+        naming the target, not a warning and not a silent substitution.
+        """
+        with self.assertRaises(IsolationViolation) as caught:
+            isolated_target(PRODUCTION_CONTAINER, self.cluster.scratch_state, root=self.cluster.root)
+        message = str(caught.exception)
+        self.assertIn(PRODUCTION_CONTAINER, message, "the refusal must name the target")
+        self.assertIn("REFUSES", message)
+        self.assertTrue(
+            issubclass(IsolationViolation, AssertionError),
+            "an isolation breach must surface as a failing test, never a skip",
+        )
+
+    def test_iso_r6_isolated_mode_refuses_a_production_state_dir(self) -> None:
+        """Req 2: a production-looking state dir is refused even for a safe name."""
+        for state_dir in ("/var/lib/worker", "/var/lib/worker/root", "/srv/oai2/state"):
+            with self.subTest(state_dir=state_dir):
+                with self.assertRaises(IsolationViolation) as caught:
+                    isolated_target(
+                        SYNTHETIC_CONTAINER, state_dir, root=self.cluster.root
+                    )
+                self.assertIn(state_dir, str(caught.exception))
+        # And a state dir that is merely absolute is refused too: only a dir
+        # under the test's own temp root is a scratch dir.
+        with self.assertRaises(IsolationViolation):
+            isolated_target(SYNTHETIC_CONTAINER, "/tmp/somewhere-else", root=self.cluster.root)
+
+    def test_iso_r7_a_refused_production_target_executes_nothing_and_fails_loudly(self) -> None:
+        """Req 2: the refusal happens BEFORE anything runs.
+
+        This is the incident's shape exactly -- a launch addressed at
+        `oai2-worker` -- run through the only launch path this suite has. It
+        must raise, and the stub's call log must stay empty, proving no probe
+        and no docker call was made on the way to the refusal.
+        """
+        self.assertEqual(self.cluster.calls(), [], "precondition: nothing has run yet")
+        with self.assertRaises(IsolationViolation) as caught:
+            self.cluster.run(PRB, "--deadline", "3", "--container", PRODUCTION_CONTAINER)
+        self.assertIn(PRODUCTION_CONTAINER, str(caught.exception))
+        self.assertEqual(
+            self.cluster.calls(),
+            [],
+            "a refused target must not have executed the probe or any docker verb",
+        )
+        # The same refusal for the other probe, and for an empty value.
+        with self.assertRaises(IsolationViolation):
+            self.cluster.run(LP, "--deadline-a", "3", "--deadline-b", "3",
+                             "--container", PRODUCTION_CONTAINER)
+        with self.assertRaises(IsolationViolation):
+            self.cluster.run(PRB, "--deadline", "3", "--container")
+        self.assertEqual(self.cluster.calls(), [], "still nothing may have run")
+
+    def test_iso_r8_production_container_is_reachable_only_via_the_default_off_opt_in(self) -> None:
+        """Req 2: the genuine production name needs the explicit, default-off opt-in.
+
+        OAI2_LIVE_TESTS unset (the default) refuses it twice over: as a target,
+        and as a request for live mode. Only OAI2_LIVE_TESTS=1 admits it, and
+        even then it authorises a name -- it never launches anything, because
+        no test in this module passes live=True to a launch path.
+        """
+        self.assertFalse(
+            live_mode_enabled(),
+            "live mode must be OFF by default; the suite is running with %s set"
+            % LIVE_ENV_VAR,
+        )
+        with self.assertRaises(IsolationViolation):
+            isolated_target(PRODUCTION_CONTAINER, self.cluster.scratch_state, root=self.cluster.root)
+        with self.assertRaises(IsolationViolation) as caught:
+            isolated_target(
+                PRODUCTION_CONTAINER, self.cluster.scratch_state,
+                root=self.cluster.root, live=True,
+            )
+        self.assertIn(LIVE_ENV_VAR, str(caught.exception))
+
+        previous = os.environ.pop(LIVE_ENV_VAR, None)
+        try:
+            os.environ[LIVE_ENV_VAR] = LIVE_OPT_IN
+            self.assertTrue(live_mode_enabled())
+            target = isolated_target(
+                PRODUCTION_CONTAINER, self.cluster.scratch_state,
+                root=self.cluster.root, live=True,
+            )
+            self.assertEqual(target.container, PRODUCTION_CONTAINER)
+            self.assertTrue(target.live)
+        finally:
+            os.environ.pop(LIVE_ENV_VAR, None)
+            if previous is not None:
+                os.environ[LIVE_ENV_VAR] = previous
+
+        # Opting in changes what the layer AUTHORISES, never what a default
+        # test launches: the cluster's own target stays non-production.
+        self.assertNotEqual(self.cluster.target.container, PRODUCTION_CONTAINER)
+        self.assertFalse(self.cluster.target.live)
+
+    # --- requirement 3: the guard trips on a stub-less environment ---
+
+    def test_iso_r9_guard_trips_on_a_stubless_path_resolving_a_real_docker(self) -> None:
+        """Req 3: a PATH with a real `docker` on it is rejected, and never run.
+
+        Builds the stub-less environment the old suite effectively had, points
+        PATH at a `docker` that would leave a trace if it ever executed, and
+        asserts the guard raises. Then it demonstrates the hazard is real (that
+        same PATH really would execute it) and that the guard is what stops the
+        suite from doing so.
+        """
+        hostile = Path(self._tmp.name) / "hostile-bin"
+        hostile.mkdir()
+        trace = Path(self._tmp.name) / "real-docker-ran"
+        decoy = hostile / "docker"
+        decoy.write_text("#!/bin/sh\n: > '%s'\nexit 0\n" % trace)
+        decoy.chmod(0o755)
+
+        # The hazard is real: without the guard this PATH executes `docker`.
+        subprocess.run(["docker", "ps"], env={"PATH": str(hostile)},
+                       capture_output=True, text=True, check=False)
+        self.assertTrue(trace.exists(), "precondition: this PATH really is live")
+
+        trace.unlink()
+        with self.assertRaises(IsolationViolation) as caught:
+            self.cluster.assert_isolated({"PATH": str(hostile)})
+        message = str(caught.exception)
+        self.assertIn("docker", message, "the guard must name the binary it caught")
+        self.assertFalse(trace.exists(), "the guard must stop execution, not merely warn")
+
+    def test_iso_r10_guard_trips_on_this_hosts_real_path(self) -> None:
+        """Req 3: the guard also rejects the host's real PATH.
+
+        This is the hole itself: the suite used to inherit this PATH. Whatever
+        infrastructure this host really has installed, the guard must catch it
+        if it is ever handed to a test.
+        """
+        ambient = os.environ.get("PATH", "")
+        present = [name for name in INFRA_BINARIES if resolve_in_path(name, ambient)]
+        if not present:
+            self.skipTest(
+                "this host has no infrastructure binary on PATH, so there is "
+                "nothing for the guard to catch here"
+            )
+        with self.assertRaises(IsolationViolation) as caught:
+            self.cluster.assert_isolated({"PATH": ambient})
+        message = str(caught.exception)
+        for name in present:
+            self.assertIn(name, message, "the guard must name %s" % name)
+
+    def test_iso_r11_module_level_guard_runs_before_any_test_and_is_satisfiable(self) -> None:
+        """Req 3: the module-level guard is real, not a no-op that always raises.
+
+        It is what setUpModule runs, so it must pass on a healthy host. That it
+        is satisfiable AND that it rejects the hostile cases above (enforced in
+        enforce_module_isolation itself, and by the other tests here) is what
+        makes it a control rather than decoration.
+        """
+        enforce_module_isolation()   # must not raise
+        self.assertEqual(
+            self.cluster.authorize(("--deadline", "10")),
+            ["--deadline", "10", "--container", SYNTHETIC_CONTAINER],
+            "an unsupplied container must be filled in with the synthetic name",
+        )
+        # A cluster can be built and used only because the guard passed.
+        self.assertEqual(
+            self.cluster.run(PRB, "--deadline", "10").returncode, EX_OK,
+            "an isolated run must still work after the guard passed",
+        )
 
 
 # ===========================================================================
@@ -1066,6 +1917,305 @@ class LifecycleProbeTests(_ClusterCase):
         # And it really does read /proc: the selector's proc root is the only
         # source of process information.
         self.assertIn('"--proc-root"', helper_source())
+
+
+# ===========================================================================
+# OWNER STATE -- the supervisor's owner-intent resolution contract
+# ===========================================================================
+# worker-supervisor.sh is the one worker script whose owner-state handling was
+# changed without a regression test: the four defects below (absent conflated
+# with damaged, a parser that disagreed with its own header, a non-atomic
+# update, and an untestable interruption) were each real, and each was fixed in
+# place. A fix with no test is a comment, not a fix, so they are pinned here.
+#
+# These tests run the REAL script against the isolated cluster, but only in the
+# two owner-side modes that cannot start, stop or inspect anything
+# (--resolve-intent, --set-intent) plus bounded resident attempts whose
+# container-runtime start is guaranteed to fail against the stub. Every launch
+# names the synthetic container and a scratch state dir inside the temp root,
+# exactly like the probe tests, so none of this can reach the live worker.
+SUP = REPO / "deploy" / "worker" / "worker-supervisor.sh"
+
+# Exit codes the script's own header documents. Hard-coded here on purpose: a
+# test that read them out of the script could not detect a change to them.
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_NO_DOCKERD = 10
+EXIT_BAD_INTENT = 12
+
+DAMAGED_SENTINELS = {
+    "empty": b"",
+    "whitespace_only": b"   \n\t\n",
+    "garbage": b"definitely-not-an-intent\n",
+    "truncated_prefix": b"sto",
+    "truncated_run_no_newline": b"ru",
+    "interior_space": b"s top\n",
+    "trailing_token": b"stop please\n",
+}
+
+
+class SupervisorOwnerStateTests(_ClusterCase):
+    """Owner-intent resolution, pinned as a regression suite."""
+
+    def sentinel(self) -> Path:
+        return self.cluster.scratch_state / "supervisor-intent"
+
+    def write_sentinel(self, payload: bytes, mode: int = 0o644) -> Path:
+        path = self.sentinel()
+        path.write_bytes(payload)
+        path.chmod(mode)
+        return path
+
+    def run_supervisor(self, *args: str, extra_env: dict[str, str] | None = None,
+                       timeout: int = 60) -> subprocess.CompletedProcess[str]:
+        """Launch the real supervisor, isolated and bounded.
+
+        ``--state-dir`` is ALWAYS the cluster's scratch dir, so a missing or
+        mistyped flag cannot fall through to the production ``/var/lib/worker``.
+        The dockerd start attempts are pinned to one, so a `run` intent fails
+        fast against the refusing systemctl stub instead of looping for two
+        minutes.
+        """
+        return self.cluster.run(
+            SUP,
+            "--state-dir", str(self.cluster.scratch_state),
+            "--dockerd-attempts", "1",
+            "--dockerd-sleep", "1",
+            *args,
+            extra_env=extra_env,
+            timeout=timeout,
+        )
+
+    def resolved(self) -> tuple[int, str]:
+        result = self.run_supervisor("--resolve-intent")
+        return result.returncode, self.output(result).splitlines()[0].strip() if self.output(result).splitlines() else ""
+
+    # --- the resolution rule -------------------------------------------------
+
+    def test_sup_r1_absent_sentinel_is_the_only_run_default(self) -> None:
+        """No sentinel is a genuine first start and means run. Nothing else does."""
+        self.assertFalse(self.sentinel().exists())
+        code, token = self.resolved()
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(token, "run")
+
+    def test_sup_r2_damaged_sentinel_fails_closed_with_exit_12(self) -> None:
+        """Present-but-unusable owner state is a FAULT, never permission to run.
+
+        This is the defect that mattered most: the old code resolved an empty,
+        whitespace-only and unreadable file to `run`, so a damaged file silently
+        granted permission and the supervisor then went on to fail elsewhere
+        with a completely misleading reason.
+        """
+        for name, payload in DAMAGED_SENTINELS.items():
+            with self.subTest(sentinel=name):
+                self.sentinel().unlink(missing_ok=True)
+                self.write_sentinel(payload)
+                code, token = self.resolved()
+                self.assertEqual(code, EXIT_BAD_INTENT,
+                                 "sentinel %r resolved to %r with exit %d; damaged "
+                                 "owner state must fail closed with %d"
+                                 % (name, token, code, EXIT_BAD_INTENT))
+                self.assertTrue(token.startswith("bad:"),
+                                "sentinel %r must be reported as damaged, got %r"
+                                % (name, token))
+
+    def test_sup_r3_a_sentinel_that_is_not_a_readable_regular_file_is_damaged(self) -> None:
+        """A directory or a dangling symlink in the sentinel's place is damage."""
+        path = self.sentinel()
+        path.mkdir(parents=True, exist_ok=True)
+        code, token = self.resolved()
+        self.assertEqual(code, EXIT_BAD_INTENT)
+        self.assertTrue(token.startswith("bad:"), token)
+        path.rmdir()
+
+        link = self.sentinel()
+        link.symlink_to(self.cluster.scratch_state / "does-not-exist")
+        code, token = self.resolved()
+        self.assertEqual(code, EXIT_BAD_INTENT)
+        self.assertTrue(token.startswith("bad:"), token)
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0,
+                     "root bypasses file permissions, so mode 000 is not unreadable")
+    def test_sup_r4_unreadable_sentinel_fails_closed(self) -> None:
+        """An unreadable file is damaged, not a first start.
+
+        The specific REASON is asserted, not just the exit code. There are two
+        independent ways an unreadable sentinel is caught -- the explicit -r
+        test, and the failure of the read that follows -- and either alone is
+        enough to fail closed. Asserting only the code would let one of them
+        be deleted without the suite noticing, so the branch under test is
+        named here.
+        """
+        path = self.write_sentinel(b"run\n", mode=0o000)
+        self.addCleanup(path.chmod, 0o644)
+        result = self.run_supervisor("--resolve-intent")
+        self.assertEqual(result.returncode, EXIT_BAD_INTENT, self.output(result))
+        self.assertIn("bad:unreadable", self.output(result))
+        self.assertIn("not readable by this uid", self.output(result))
+
+    def test_sup_r5_first_non_blank_line_is_the_value(self) -> None:
+        """The parser now does what the header always said it did.
+
+        The header documented "first non-blank line" while the code read
+        `head -n 1`, so a sentinel written with a leading blank line resolved to
+        run -- the opposite of the owner's instruction, on the one input a
+        hand-written sentinel is most likely to have.
+        """
+        for payload, expected in ((b"\nstop\n", "stop"), (b"  STOP \r\n", "stop"),
+                                  (b"\n\n\t pause \n", "pause"), (b"remove\n", "remove"),
+                                  (b"run", "run")):
+            with self.subTest(payload=payload):
+                self.sentinel().unlink(missing_ok=True)
+                self.write_sentinel(payload)
+                code, token = self.resolved()
+                self.assertEqual(code, EXIT_OK, self.output(self.run_supervisor("--resolve-intent")))
+                self.assertEqual(token, expected)
+
+    def test_sup_r6_normalisation_strips_edges_but_not_interior_characters(self) -> None:
+        """`  STOP \\r` is stop; `s top` is garbage.
+
+        The old normaliser used `tr -d`, which deleted interior spaces as well
+        as the surrounding ones, so a corrupted value could be repaired into a
+        valid instruction. Normalisation is now edge-only.
+        """
+        self.sentinel().unlink(missing_ok=True)
+        self.write_sentinel(b"  STOP \r\n")
+        self.assertEqual(self.resolved(), (EXIT_OK, "stop"))
+        self.sentinel().unlink(missing_ok=True)
+        self.write_sentinel(b"s top\n")
+        code, token = self.resolved()
+        self.assertEqual(code, EXIT_BAD_INTENT)
+        self.assertTrue(token.startswith("bad:"), token)
+
+    # --- atomic update, and the interruption it has to survive ---------------
+
+    def test_sup_r7_set_intent_round_trips_and_clear_restores_the_run_default(self) -> None:
+        """The documented owner command works, and `clear` is a true clear."""
+        for value in ("run", "stop", "pause", "remove"):
+            with self.subTest(intent=value):
+                result = self.run_supervisor("--set-intent", value)
+                self.assertEqual(result.returncode, EXIT_OK, self.output(result))
+                self.assertEqual(self.resolved(), (EXIT_OK, value))
+        result = self.run_supervisor("--set-intent", "clear")
+        self.assertEqual(result.returncode, EXIT_OK, self.output(result))
+        self.assertFalse(self.sentinel().exists(),
+                         "clear must remove the sentinel, leaving the run default")
+        self.assertEqual(self.resolved(), (EXIT_OK, "run"))
+
+    def test_sup_r8_set_intent_writes_a_single_complete_line(self) -> None:
+        """A reader that opens the sentinel at any instant sees a whole value.
+
+        The update is a temp file in the same directory plus a rename, so there
+        is no window in which the sentinel is truncated. A zero-byte or
+        multi-value sentinel would mean a reader could still observe damage.
+        """
+        self.run_supervisor("--set-intent", "stop")
+        raw = self.sentinel().read_bytes()
+        self.assertTrue(raw.endswith(b"\n"), raw)
+        self.assertEqual(len(raw.splitlines()), 1, raw)
+        self.assertEqual(raw.decode().strip(), "stop")
+
+    def test_sup_r9_set_intent_rejects_an_unknown_value_without_writing(self) -> None:
+        """A typo'd owner command fails loudly and leaves no sentinel behind."""
+        result = self.run_supervisor("--set-intent", "stopp")
+        self.assertEqual(result.returncode, EXIT_USAGE, self.output(result))
+        self.assertFalse(self.sentinel().exists())
+
+    def test_sup_r10_an_interrupted_write_is_executable_and_fails_closed(self) -> None:
+        """The torn-write seam is runnable, and it fails closed.
+
+        Previously "fails closed on a partial value" was prose: there was no way
+        to interrupt a write and therefore no way to test the claim. The exact
+        -match rule is also what makes a genuinely truncated on-disk value
+        (`sto`) unrecognised rather than silently honoured.
+        """
+        self.write_sentinel(b"run\n")
+        result = self.run_supervisor(extra_env={"WORKER_SIMULATE_TORN_INTENT": "1"})
+        self.assertEqual(result.returncode, EXIT_BAD_INTENT, self.output(result))
+        self.assertIn("FAULT", self.output(result))
+        self.assertIn("bad:torn", self.output(result))
+        health = (self.cluster.scratch_state / "supervisor-health").read_text()
+        self.assertIn("fatal-bad-intent-torn-write", health, health)
+        # And it started nothing: the seam never authorises work.
+        self.assertNotIn("FORBIDDEN systemctl", (self.cluster.state / "calls.log").read_text())
+
+    # --- what the resolution actually gates ----------------------------------
+
+    def test_sup_r11_damage_never_reaches_the_supervision_path(self) -> None:
+        """A damaged sentinel stops the run BEFORE any container-runtime work.
+
+        The refusal is observable in two independent ways: the exit code is the
+        intent fault, and the refusing runtime was never invoked at all.
+        """
+        self.write_sentinel(b"")
+        before = (self.cluster.state / "calls.log").read_text()
+        result = self.run_supervisor()
+        self.assertEqual(result.returncode, EXIT_BAD_INTENT, self.output(result))
+        after = (self.cluster.state / "calls.log").read_text()
+        self.assertEqual(after, before,
+                         "a damaged sentinel must be refused before the container "
+                         "runtime is touched, but calls were logged:\n%s" % after)
+
+    def test_sup_r12_an_absent_sentinel_reaches_the_supervision_path(self) -> None:
+        """The other half of the pair: `run` really does proceed.
+
+        Without this, a supervisor that refused everything would pass the whole
+        suite above. `systemctl` is the refusing stub here, so the run is
+        bounded and fails with the dockerd code -- which is itself the proof
+        that intent resolution was satisfied and execution continued.
+        """
+        code, token = self.resolved()
+        self.assertEqual((code, token), (EXIT_OK, "run"))
+        result = self.run_supervisor()
+        self.assertEqual(result.returncode, EXIT_NO_DOCKERD, self.output(result))
+        self.assertIn("FORBIDDEN systemctl", (self.cluster.state / "calls.log").read_text())
+
+    def test_sup_r13_damage_is_a_fault_and_stop_is_an_intended_shutdown(self) -> None:
+        """The two are not the same event and must not share a code or wording.
+
+        Collapsing them is how a damaged file gets reported as an owner
+        shutdown: an operator reads "stopped" and assumes they asked for it.
+        """
+        self.sentinel().unlink(missing_ok=True)
+        self.write_sentinel(b"stop\n")
+        stop = self.run_supervisor()
+        self.assertIn(stop.returncode, (EXIT_OK, 13),
+                      "stop must not be a fault: %d\n%s" % (stop.returncode, self.output(stop)))
+        self.assertNotIn("FAULT", self.output(stop))
+
+        self.sentinel().unlink(missing_ok=True)
+        self.write_sentinel(b"nonsense\n")
+        damaged = self.run_supervisor()
+        self.assertEqual(damaged.returncode, EXIT_BAD_INTENT, self.output(damaged))
+        self.assertIn("FAULT", self.output(damaged))
+
+    def test_sup_r14_supervisor_exit_is_not_a_cluster_pause_or_drain(self) -> None:
+        """The script must not present its own exit as cluster-side control.
+
+        Exiting is a host-local event. The cluster's view of a node -- pause,
+        drain, revoke, removal -- is owned by the control plane, and claiming
+        otherwise here is how a reader concludes a drill happened when it did
+        not. The boundary is asserted in the script's own text.
+        """
+        source = SUP.read_text(encoding="utf-8")
+        self.assertIn("not a cluster pause", source)
+        for forbidden in ("drains the node", "revokes the node", "pauses the cluster"):
+            self.assertNotIn(forbidden, source)
+
+    def test_sup_r15_no_launch_ever_touches_a_production_state_dir(self) -> None:
+        """Every launch in this class is pinned to the scratch dir.
+
+        The supervisor's own default is /var/lib/worker, so a test that forgot
+        --state-dir would write real owner state on a developer machine. This
+        asserts the pinning rather than trusting each call site.
+        """
+        self.assertTrue(str(self.cluster.scratch_state).startswith(str(self.cluster.root)))
+        for production in PRODUCTION_STATE_DIRS:
+            self.assertNotEqual(str(self.cluster.scratch_state), production)
+        self.run_supervisor("--resolve-intent")
+        self.assertFalse(Path("/var/lib/worker").exists(),
+                         "a supervisor run created the production state dir")
 
 
 # ===========================================================================
