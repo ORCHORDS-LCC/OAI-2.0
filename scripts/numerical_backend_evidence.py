@@ -163,9 +163,18 @@ def main() -> int:
     rev = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()
+    # Dirtiness is measured over TRACKED files only. Including untracked
+    # paths would be circular: the artifact being written is itself
+    # untracked at the moment this runs, so a full `git status --porcelain`
+    # reports dirty=True for every run and the field can never mean
+    # anything. What matters is whether the CODE that produced the number
+    # was modified, which is exactly what `--untracked-files=no` asks.
     dirty = bool(
         subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True, check=True
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
     )
 

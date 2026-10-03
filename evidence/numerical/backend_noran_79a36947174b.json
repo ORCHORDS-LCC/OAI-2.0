@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-10-03T20:02:37.247750+00:00",
+  "generated_at": "2026-10-03T20:03:10.523918+00:00",
   "harness": {
     "script": "scripts/numerical_backend_evidence.py",
-    "source_sha": "a2fd2be124dbef3c24c81ce1b95ef001b3b85b39",
+    "source_sha": "79a36947174bbaaaca3aa778e398f60feb557580",
     "dirty": true,
     "gate": "oai2.model.numerical_promotion.evaluate_numerical_candidate"
   },
