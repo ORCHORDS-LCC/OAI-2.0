@@ -14,6 +14,7 @@ requiring a live llama-server:
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -89,4 +90,19 @@ def test_committed_artifact_identifies_model_runtime_backend_and_config() -> Non
         )
         assert data["serving_identity"].get("weights_sha256"), (
             f"{path.name}: no weights hash, so the model is unidentified"
+        )
+        # The named SHA must be an ANCESTOR of HEAD, not merely present.
+        # `git cat-file -e` is not enough: a rebase leaves the pre-rebase
+        # commit reachable as an unreferenced object, so the artifact would
+        # still "exist" while naming code that is no longer on main. That is
+        # exactly what happened to the first version of this artifact.
+        sha = harness["source_sha"]
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            capture_output=True,
+            cwd=root,
+        )
+        assert ancestor.returncode == 0, (
+            f"{path.name}: source_sha {sha} is not an ancestor of HEAD, so it "
+            "names code that is no longer on main; regenerate the artifact"
         )
