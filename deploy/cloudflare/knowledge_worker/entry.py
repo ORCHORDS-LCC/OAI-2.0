@@ -47,16 +47,23 @@ from oai2.knowledge import (
 from oai2.knowledge.admission import (
     DEFAULT_ADMISSION_LIMIT,
     ISOLATE_ADMISSION,
+    KnowledgeSaturatedError,
     acquire_admission,
     validate_limit,
 )
 from oai2.knowledge.observability import (
     emit_completed,
-    emit_dependency_failure,
+    emit_internal_failure,
     emit_request_started,
     emit_saturated,
 )
-from oai2.observability import EventSink, NullEventSink, TraceRecorder, new_request_recorder
+from oai2.observability import EventSink, TraceRecorder, new_request_recorder
+from oai2.observability.health import ISOLATE_RECORDER_HEALTH
+from oai2.observability.isolate import (
+    DEFAULT_METRICS_RECENT_EVENTS,
+    ISOLATE_METRICS,
+    clamp_recent_events,
+)
 
 #: Env var carrying the per-isolate knowledge admission limit. Read and
 #: validated on EVERY request, then passed into the module-scope admission
@@ -65,18 +72,40 @@ from oai2.observability import EventSink, NullEventSink, TraceRecorder, new_requ
 #: isolate recycle.
 ADMISSION_LIMIT_ENV = "KNOWLEDGE_MAX_IN_FLIGHT"
 
+#: Env vars controlling local, bounded, in-process metrics.
+#:
+#: Read on EVERY request for the same reason the admission limit is: Cloudflare
+#: can reuse an isolate across a binding-only change, so a value resolved once
+#: and pinned would leave the isolate running under whatever the first request
+#: happened to see. Turning metrics off has to actually turn them off.
+#:
+#: Neither value is a secret, and neither becomes a metric dimension. The
+#: aggregator's dimensions come from closed vocabularies in the event schema;
+#: configuration is an input to whether counting happens at all, never a label
+#: on what was counted.
+METRICS_ENABLED_ENV = "KNOWLEDGE_METRICS_ENABLED"
+METRICS_RETENTION_ENV = "KNOWLEDGE_METRICS_MAX_RECENT"
+
+#: Exact, closed truthy vocabulary. Anything else is OFF.
+#:
+#: Falling back to OFF for an unrecognised value is the safe direction: a typo
+#: in configuration must not silently start retaining request activity that
+#: nobody asked to retain, and must certainly not fail the request.
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
 
 class Default(WorkerEntrypoint):
-    #: Injectable event sink, class-level.
+    #: Explicitly installed event sink, class-level. ``None`` means "none was
+    #: installed", and the sink is then resolved from configuration per
+    #: request — see :func:`_resolve_sink`.
     #:
-    #: The Worker runtime constructs ``Default(env)`` itself and passes no
-    #: collaborators, so a sink cannot arrive through the constructor. A class
-    #: attribute is configuration, not per-request state: unlike admission
-    #: counters, a sink holds nothing that must be shared or must NOT be
-    #: shared between invocations. ``NullEventSink`` is the default because
-    #: there is no metrics backend in the Worker yet, and instrumentation must
-    #: never be a prerequisite for serving a request.
-    event_sink: ClassVar[EventSink] = NullEventSink()
+    #: It is a CLASS attribute because a sink is configuration, not per-request
+    #: state: unlike admission counters, a sink holds nothing that must be
+    #: shared or must NOT be shared between invocations. Setting it is an
+    #: escape hatch for an embedding host and for tests; the SHIPPED path
+    #: configures metrics through the environment, which is what makes the
+    #: instrumentation reachable without anyone editing this file.
+    event_sink: ClassVar[EventSink | None] = None
 
     async def fetch(self, request):
         # ---- Cheap validation. None of this consumes an admission slot. ----
@@ -154,15 +183,23 @@ class Default(WorkerEntrypoint):
         # which is what makes the entrypoint/admission/transport/runtime events
         # one correlated trace instead of four unrelated ones.
         #
-        # scope is narrow on purpose: only requests that got as far as a valid
+        # Scope is narrow on purpose: only requests that got as far as a valid
         # KnowledgeTransportRequest are traced. A malformed body or a failed
         # auth is a transport-boundary reject, not a knowledge operation, and
         # counting it as one would make "requests started" disagree with what
         # the runtime actually attempted.
+        #
+        # The operation is set HERE so every knowledge event in the trace is
+        # groupable by it without any layer having to remember to pass it.
         recorder: TraceRecorder = new_request_recorder(
-            sink=self.event_sink,
+            sink=_resolve_sink(self.env, type(self)),
             request_id=transport_request.request_id,
+            operation=transport_request.operation.value,
+            # So a sink that breaks is counted somewhere that outlives the
+            # request. Never routed back through the sink itself.
+            health=ISOLATE_RECORDER_HEALTH,
         )
+        recorder.start_clock()
         emit_request_started(
             recorder,
             operation=transport_request.operation.value,
@@ -173,16 +210,35 @@ class Default(WorkerEntrypoint):
         # Acquiring here means an unauthenticated, malformed or invalid
         # request never occupies a knowledge-operation slot, while everything
         # genuinely expensive is inside the bound.
+        #
+        # The exception taxonomy below is EXACT. A previous revision caught
+        # `Exception` and reported every outcome as a retryable SATURATED 503,
+        # which is how a broken admission primitive would be advertised to
+        # callers as routine backpressure. Only KnowledgeSaturatedError is
+        # saturation; everything else is an internal fault.
         try:
             lease = acquire_admission(_admission_limit(self.env))
+        except KnowledgeSaturatedError as exc:
+            emit_saturated(
+                recorder, timestamp=_now(), snapshot=ISOLATE_ADMISSION.snapshot()
+            )
+            emit_completed(
+                recorder,
+                timestamp=_now(),
+                ok=False,
+                outcome=TransportErrorCode.SATURATED.value,
+                retryable=True,
+            )
+            saturated = _saturated_response(transport_request.request_id, exc)
+            return Response.json(
+                saturated.model_dump(mode="json"),
+                status=_status_for_error(saturated),
+            )
         except ValueError:
-            # A misconfigured limit is an operator error, not caller error, and
-            # it is not a saturation: the isolate is not full, it is
-            # misconfigured. Fail closed without pretending to be backpressure.
-            #
-            # Completion is still emitted: the request WAS accepted and it DID
-            # finish, with an internal outcome. Lifecycle ownership does not
-            # stop at the admission door.
+            # A misconfigured limit is an OPERATOR error: the isolate is not
+            # full, it is misconfigured. Fail closed, and say so without
+            # pretending to be backpressure. This is not a runtime fault, so
+            # no internal-failure event — the completion outcome carries it.
             emit_completed(
                 recorder,
                 timestamp=_now(),
@@ -198,53 +254,79 @@ class Default(WorkerEntrypoint):
                 ),
                 status=500,
             )
-        except Exception as exc:  # KnowledgeSaturatedError
-            # The refusal is reported, and the sanitized admission snapshot is
-            # recorded. The snapshot is TELEMETRY ONLY: the response body
-            # below still carries the fixed generic message and no counts.
-            emit_saturated(recorder, timestamp=_now(), snapshot=ISOLATE_ADMISSION.snapshot())
-            saturated = _saturated_response(transport_request.request_id, exc)
+        except Exception:
+            # The admission primitive itself failed. That is a bug here, not
+            # backpressure and not a caller error. Reported as internal and
+            # explicitly NOT as saturation.
+            emit_internal_failure(
+                recorder, timestamp=_now(), request_id=transport_request.request_id
+            )
             emit_completed(
                 recorder,
                 timestamp=_now(),
                 ok=False,
-                outcome=TransportErrorCode.SATURATED.value,
-                retryable=True,
+                outcome=TransportErrorCode.INTERNAL.value,
+                retryable=False,
             )
             return Response.json(
-                saturated.model_dump(mode="json"),
-                status=_status_for_error(saturated),
+                _error_payload(
+                    transport_request.request_id,
+                    TransportErrorCode.INTERNAL,
+                    "knowledge Worker admission failed",
+                ),
+                status=500,
             )
 
-        # ---- Everything below is inside the bound, and must release. ----
-        # `finally`, so success, NOT_FOUND, conflict, integrity failure,
-        # dependency exception, internal exception and cancellation all return
-        # the slot. Admission is only a bound if slots actually come back.
+        # ---- Inside the bound. Build and execution are SEPARATE boundaries. ----
+        # `lease.release()` in `finally` on every path: success, NOT_FOUND,
+        # conflict, integrity failure, dependency exception, internal
+        # exception and cancellation all return the slot. Admission is only a
+        # bound if slots actually come back.
+        #
+        # The two boundaries have DIFFERENT taxonomies, and conflating them was
+        # a real defect:
+        #
+        # * `_components()` runs with ensure_schema=False, which is local
+        #   object assembly and validation. It makes NO remote dependency call,
+        #   so there is nothing that could be "unavailable". An exception from
+        #   it is an operator or configuration fault -> INTERNAL.
+        # * `transport.handle()` converts KNOWN dependency, conflict and
+        #   integrity errors into typed responses itself. So an exception
+        #   ESCAPING it is by definition not one of those: it is an unexpected
+        #   local fault -> INTERNAL, never UNAVAILABLE_DEPENDENCY. Labelling
+        #   it a dependency outage sends an operator to D1 for a bug here.
+        #
+        # A typed UNAVAILABLE_DEPENDENCY *response* is already correct and
+        # already emitted a dependency event inside the transport, so this
+        # branch adds nothing for it — otherwise one outage counts twice.
         try:
             try:
                 components = await self._components()
-                response = await components.transport.handle(
-                    transport_request, trace=recorder
-                )
             except Exception:
-                # The transport was never reached, so it emitted no detail
-                # event. A failure to build components IS a dependency
-                # failure and is reported as one here, rather than
-                # fabricating a transport invocation that never happened.
-                emit_dependency_failure(
-                    recorder, timestamp=_now(), request_id=transport_request.request_id
-                )
-                response = KnowledgeTransportResponse(
+                emit_internal_failure(
+                    recorder,
+                    timestamp=_now(),
                     request_id=transport_request.request_id,
-                    ok=False,
-                    error=TransportError(
-                        code=TransportErrorCode.UNAVAILABLE_DEPENDENCY,
-                        message=(
-                            "knowledge Worker dependency initialization failed"
-                        ),
-                        retryable=True,
-                    ),
                 )
+                response = _internal_response(
+                    transport_request.request_id,
+                    "knowledge Worker component initialization failed",
+                )
+            else:
+                try:
+                    response = await components.transport.handle(
+                        transport_request, trace=recorder
+                    )
+                except Exception:
+                    emit_internal_failure(
+                        recorder,
+                        timestamp=_now(),
+                        request_id=transport_request.request_id,
+                    )
+                    response = _internal_response(
+                        transport_request.request_id,
+                        "knowledge Worker transport failed unexpectedly",
+                    )
         finally:
             lease.release()
 
@@ -290,6 +372,66 @@ class Default(WorkerEntrypoint):
         )
         self._knowledge_components = components
         return components
+
+
+def _resolve_sink(env: object, owner: type) -> EventSink:
+    """The sink for this request: explicit installation, else configuration.
+
+    An explicitly installed class sink wins and configuration is not even
+    consulted, so a host that installs one is never surprised by a Worker
+    variable quietly taking it over. With nothing installed — the shipped
+    shape — the sink comes from configuration, and the default is OFF.
+    """
+    installed = getattr(owner, "event_sink", None)
+    if installed is not None:
+        return installed
+    enabled, max_recent = _metrics_config(env)
+    return ISOLATE_METRICS.sink_for(enabled=enabled, max_recent_events=max_recent)
+
+
+def _metrics_config(env: object) -> tuple[bool, int]:
+    """Read the local metrics configuration for THIS request.
+
+    Two independent decisions, and both are resolved defensively:
+
+    * enabled — a closed truthy vocabulary. An unrecognised value is OFF,
+      because a typo must not start retaining request activity nobody asked
+      to retain, and must never fail the request.
+    * retention — an integer, clamped to the range this build supports, so no
+      configuration value turns a bounded store into an unbounded one. An
+      unusable value falls back to the default rather than guessing.
+
+    Neither value is retained as a dimension and neither is a secret.
+    """
+    raw_enabled = getattr(env, METRICS_ENABLED_ENV, None)
+    enabled = (
+        isinstance(raw_enabled, str)
+        and raw_enabled.strip().lower() in _TRUTHY_ENV_VALUES
+    )
+
+    raw_recent = getattr(env, METRICS_RETENTION_ENV, None)
+    try:
+        max_recent = clamp_recent_events(
+            int(str(raw_recent).strip())
+            if raw_recent not in (None, "")
+            else DEFAULT_METRICS_RECENT_EVENTS
+        )
+    except (TypeError, ValueError):
+        max_recent = DEFAULT_METRICS_RECENT_EVENTS
+    return enabled, max_recent
+
+
+def _internal_response(request_id: str, message: str) -> KnowledgeTransportResponse:
+    """A non-retryable INTERNAL response. Used by both inner boundaries."""
+    return KnowledgeTransportResponse(
+        request_id=request_id,
+        ok=False,
+        error=TransportError(
+            code=TransportErrorCode.INTERNAL,
+            message=message,
+            retryable=False,
+        ),
+    )
 
 
 def _now() -> float:

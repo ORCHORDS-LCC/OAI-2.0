@@ -42,17 +42,40 @@ The recorder does not wrap request code; request code calls it.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from typing import Any
 
 from .events import EventCategory, EventType, Trace, TraceEvent, new_trace_id
+from .health import RecorderHealth
 from .sink import EventSink, NullEventSink
+
+
+class _Inherit:
+    """Sentinel distinguishing "not supplied" from an explicit ``None``.
+
+    Without it, ``operation=None`` and "leave it alone" are the same value, and
+    a producer can never opt an event OUT of inheriting the recorder's
+    operation. That opt-out is needed: a non-knowledge event recorded on a
+    knowledge recorder must not be labelled with the knowledge operation.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<inherit>"
+
+
+_INHERIT: Any = _Inherit()
 
 
 class TraceRecorder:
     """One recorder per accepted request. Owns ordering and delivery."""
 
     __slots__ = (
+        "_health",
+        "_monotonic_start",
+        "_operation",
         "_request_id",
         "_sink",
         "_sink_errors",
@@ -66,12 +89,44 @@ class TraceRecorder:
         sink: EventSink | None = None,
         trace_id: str | None = None,
         request_id: str | None = None,
+        operation: str | None = None,
+        health: RecorderHealth | None = None,
     ) -> None:
         self._trace = Trace(trace_id)
         self._sink: EventSink = sink if sink is not None else NullEventSink()
         self._request_id = request_id
+        self._operation = operation
+        # A MONOTONIC start, taken once. Everything that needs an elapsed time
+        # derives it from this, never from a wall clock. See TraceEvent's
+        # duration_ms docstring for why the difference matters.
+        self._monotonic_start: float | None = None
         self._sink_errors = 0
         self._trace_errors = 0
+        # OPTIONAL and passed in explicitly, never reached for as a global.
+        # The per-instance counters below die with this recorder, so without an
+        # isolate-scoped accumulator a sink failure would be counted somewhere
+        # that only a test can read. With one, it is counted somewhere an
+        # operator can read — and still never reported THROUGH the sink.
+        self._health = health
+
+    @property
+    def operation(self) -> str | None:
+        return self._operation
+
+    def start_clock(self) -> None:
+        """Begin measuring, for producers that report a duration.
+
+        Separate from construction because a recorder may be built well before
+        the measured work begins, and because starting an unused clock is free
+        while reporting a duration that was never measured is not.
+        """
+        self._monotonic_start = time.monotonic()
+
+    def elapsed_ms(self) -> float | None:
+        """Milliseconds since :meth:`start_clock`, or None if not started."""
+        if self._monotonic_start is None:
+            return None
+        return max(0.0, (time.monotonic() - self._monotonic_start) * 1000.0)
 
     @property
     def trace_id(self) -> str:
@@ -109,13 +164,16 @@ class TraceRecorder:
         event_type: EventType | str,
         timestamp: float,
         request_id: str | None = None,
+        operation: str | None | Any = _INHERIT,
         **fields: Any,
     ) -> TraceEvent | None:
         """Append and deliver one event. Never raises.
 
-        ``request_id`` defaults to the recorder's, so a deep layer emits a
-        correlated event without threading the wire identifier down to it.
-        Pass an explicit value only to override.
+        ``request_id`` and ``operation`` default to the recorder's, so a deep
+        layer emits a correlated, groupable event without threading the wire
+        identifier or the operation name down to it. Pass a value to override,
+        and ``None`` explicitly to opt OUT of inheriting — which is how a
+        non-knowledge event on a knowledge recorder stays unlabelled.
 
         Returns the event, or ``None`` if the trace rejected it — the counters
         carry the reason.
@@ -128,12 +186,19 @@ class TraceRecorder:
                 request_id=(
                     self._request_id if request_id is None else request_id
                 ),
+                operation=(
+                    self._operation
+                    if isinstance(operation, _Inherit)
+                    else operation
+                ),
                 **fields,
             )
         except Exception:
             # Our own invariant broke. Counted separately from a sink fault so
             # #57 can tell an observer problem from a corrupt-trace problem.
             self._trace_errors += 1
+            if self._health is not None:
+                self._health.note_trace_error()
             return None
 
         try:
@@ -141,7 +206,14 @@ class TraceRecorder:
         except Exception:
             # The observer misbehaved. The event is still in the local trace,
             # so ordering and in-process inspection are unaffected.
+            #
+            # The count goes to an accumulator no sink owns. It is NEVER handed
+            # back to this sink: a sink that raises on every call would be given
+            # an event describing its own failure, raise again, and be given
+            # another. Containment that recurses is not containment.
             self._sink_errors += 1
+            if self._health is not None:
+                self._health.note_sink_error()
         return event
 
     def snapshot(self) -> Mapping[str, object]:
@@ -159,14 +231,29 @@ def new_request_recorder(
     *,
     sink: EventSink | None = None,
     request_id: str | None = None,
+    operation: str | None = None,
+    health: RecorderHealth | None = None,
 ) -> TraceRecorder:
     """Mint the single trace identity for one accepted request.
 
     Called ONCE, at the transport boundary after validation. Every layer below
     receives this recorder; none of them mints a trace. Minting per layer would
     produce one trace per layer, which is the opposite of correlation.
+
+    ``operation`` is set here so every knowledge event in the trace is
+    groupable by it without any layer having to remember to pass it.
+
+    ``health`` is the isolate-scoped accumulator for faults in the telemetry
+    path itself. It is passed here, next to the sink, rather than reached for
+    as a global — the same explicit-plumbing rule the trace itself follows.
     """
-    return TraceRecorder(sink=sink, trace_id=new_trace_id(), request_id=request_id)
+    return TraceRecorder(
+        sink=sink,
+        trace_id=new_trace_id(),
+        request_id=request_id,
+        operation=operation,
+        health=health,
+    )
 
 
 __all__ = [

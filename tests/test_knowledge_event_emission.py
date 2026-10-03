@@ -56,6 +56,7 @@ from oai2.observability import (
     TraceRecorder,
     new_request_recorder,
 )
+from oai2.observability.isolate import ISOLATE_METRICS
 from tests._worker_entrypoint_fixtures import (
     Components,
     Env,
@@ -253,7 +254,9 @@ def test_a_successful_request_emits_started_then_completed(
         "knowledge.request.started",
         "knowledge.request.completed",
     )
-    assert sink.events[0].detail == "get", "the operation is recorded on STARTED"
+    assert sink.events[0].operation == "get", (
+        "the operation is a structured field, not prose in `detail`"
+    )
     assert sink.events[1].outcome == "ok"
     assert sink.events[1].retryable is False
 
@@ -342,15 +345,22 @@ def test_a_refused_request_never_reaches_any_dependency(
     assert builds == [], "the refused request built components"
 
 
-def test_component_initialisation_failure_emits_dependency_failure_then_completed(
+def test_component_initialisation_failure_emits_internal_then_completed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """``_components()`` runs with ensure_schema=False: local assembly, no
+    remote call. An exception from it is not a dependency outage.
+
+    The earlier version reported UNAVAILABLE_DEPENDENCY here, which told a
+    caller a dependency was down and an operator to go and look at D1 when the
+    fault was local construction.
+    """
     sink = CollectingEventSink()
     with entrypoint() as entry:
         entry.Default.event_sink = sink
 
         async def exploding_build(**_kwargs: object) -> Components:
-            raise RuntimeError("d1 binding unavailable")
+            raise ValueError("embedding_version must be a non-empty string")
 
         response = asyncio.run(
             drive(
@@ -359,11 +369,12 @@ def test_component_initialisation_failure_emits_dependency_failure_then_complete
             )
         )
 
-    assert response.status == 503
-    assert response.payload["error"]["code"] == "unavailable_dependency"
+    assert response.status == 500
+    assert response.payload["error"]["code"] == "internal"
+    assert response.payload["error"]["retryable"] is False
     assert sink.event_types() == (
         "knowledge.request.started",
-        "knowledge.dependency.failure",
+        "knowledge.internal.failure",
         "knowledge.request.completed",
     )
 
@@ -635,23 +646,37 @@ def test_a_kv_get_that_raises_emits_degraded() -> None:
     recorder = new_request_recorder(sink=sink, request_id="req-kv")
     runtime = _runtime(_Kv(get_error=RuntimeError("kv namespace gone")))
 
-    assert asyncio.run(runtime._cache_get("key", trace=recorder)) is None
+    lookup = asyncio.run(runtime._cache_get("key", trace=recorder))
 
+    assert lookup.degraded is True, (
+        "an unavailable cache and an empty one are different operational "
+        "problems and must not reach the caller as the same value"
+    )
+    assert lookup.raw is None
     assert sink.event_types() == ("knowledge.kv.degraded",)
     event = sink.events[0]
-    assert event.detail == KV_OPERATION_GET
+    assert event.operation == KV_OPERATION_GET, (
+        "the cache operation is a structured label, not prose"
+    )
     assert event.retryable is True
     assert event.trace_id == recorder.trace_id
 
 
-def test_a_kv_get_miss_emits_nothing() -> None:
-    """A miss is the cache working. Calling it an outage would be a lie."""
+def test_a_kv_get_that_raises_is_not_reported_as_a_miss() -> None:
+    """A miss is the cache working; an exception is the cache failing to answer.
+
+    Reporting the second as the first is how a permanently broken KV namespace
+    survives unnoticed: nothing errors and nothing alerts, every request is
+    just slower, and the hit rate looks like a cold cache rather than a fault.
+    """
     sink = CollectingEventSink()
     recorder = new_request_recorder(sink=sink, request_id="req-kv")
-    runtime = _runtime(_Kv(get_error=None))
+    runtime = _runtime(_Kv(get_error=RuntimeError("kv namespace gone")))
 
-    assert asyncio.run(runtime._cache_get("key", trace=recorder)) is None
-    assert sink.events == ()
+    asyncio.run(runtime._cache_get("key", trace=recorder))
+
+    assert sink.event_types() == ("knowledge.kv.degraded",)
+    assert "knowledge.cache.miss" not in sink.event_types()
 
 
 def test_the_kv_detail_is_a_fixed_vocabulary() -> None:
@@ -806,7 +831,7 @@ def test_the_started_event_records_the_operation_not_the_topic(
         }
         asyncio.run(drive(monkeypatch, entry, Env(), body))
 
-    assert sink.events[0].detail == "retrieve"
+    assert sink.events[0].operation == "retrieve"
     for event in sink.events:
         assert SENTINEL not in str(event.model_dump(mode="json"))
 
@@ -815,8 +840,8 @@ def test_the_event_model_has_exactly_the_declared_fields() -> None:
     """A new field is a review event; this pins the surface."""
     assert set(TraceEvent.model_fields) == {
         "schema_version", "trace_id", "seq", "category", "event_type",
-        "timestamp", "request_id", "evidence_ids", "admission", "outcome",
-        "retryable", "attempt", "detail",
+        "timestamp", "operation", "duration_ms", "request_id", "evidence_ids",
+        "admission", "outcome", "retryable", "attempt", "detail",
     }
 
 
@@ -890,8 +915,8 @@ def test_a_throwing_sink_does_not_change_a_failure_response(
             )
             results.append((response.status, response.payload))
     assert results[0] == results[1]
-    assert results[0][0] == 503
-    assert results[0][1]["error"]["code"] == "unavailable_dependency"
+    assert results[0][0] == 500
+    assert results[0][1]["error"]["code"] == "internal"
 
 
 @pytest.fixture(autouse=True)
@@ -909,9 +934,22 @@ def _isolate_entry_module():
 
 
 def test_the_entrypoint_default_sink_is_the_no_op() -> None:
-    """Instrumentation must never be a prerequisite for serving."""
+    """Instrumentation must never be a prerequisite for serving.
+
+    Asserted on the RESOLVED sink rather than on the class attribute, because
+    the attribute stopped being the answer when metrics became configurable.
+    What matters is that an UNCONFIGURED Worker still drops every event — not
+    what the default happens to be spelled as.
+    """
     with entrypoint() as entry:
-        assert isinstance(entry.Default.event_sink, NullEventSink)
+        ISOLATE_METRICS._reset_for_tests()
+        assert entry.Default.event_sink is None, (
+            "nothing is installed by default; the sink is resolved from "
+            "configuration per request"
+        )
+        assert isinstance(
+            entry._resolve_sink(Env(), entry.Default), NullEventSink
+        )
 
 
 def test_no_domain_model_gained_a_trace_field() -> None:

@@ -16,17 +16,20 @@ EMITTER OWNERSHIP
 -----------------
 Fixed, so lifecycle events cannot be duplicated:
 
-============================  ==================================
-``knowledge.request.started`` entrypoint, after validation
-``knowledge.saturated``       entrypoint, on admission refusal
-``knowledge.conflict``        transport
-``knowledge.integrity.failure`` transport
-``knowledge.dependency.failure`` transport, and entrypoint for a
-                               pre-transport component-init failure
-``knowledge.internal.failure`` transport, unexpected exception
-``knowledge.kv.degraded``     runtime, where the KV exception exists
-``knowledge.request.completed`` entrypoint, ALWAYS
-============================  ==================================
+===================================  ==================================
+``knowledge.request.started``     entrypoint, after validation
+``knowledge.saturated``           entrypoint, on admission refusal
+``knowledge.conflict``            transport
+``knowledge.integrity.failure``   transport
+``knowledge.dependency.failure``  transport, and entrypoint for a
+                                  pre-transport component-init failure
+``knowledge.internal.failure``    transport, unexpected exception
+``knowledge.kv.degraded``         runtime, where the KV exception exists
+``knowledge.cache.hit``           runtime, retrieval served from cache
+``knowledge.cache.miss``          runtime, cache consulted and empty
+``knowledge.cache.stale``         runtime, cache answered unusably
+``knowledge.request.completed``   entrypoint, ALWAYS
+===================================  ==================================
 
 The entrypoint owns the lifecycle, so COMPLETED is emitted exactly once no
 matter which layer observed the failure. The transport emits detail only, and
@@ -53,6 +56,15 @@ from ..observability import (
 #: operations that exist is the whole information content here.
 KV_OPERATION_GET = "get"
 KV_OPERATION_PUT = "put"
+
+#: Outcome vocabulary for the three cache events. Namespaced with a ``cache_``
+#: prefix on purpose: these land in the same bounded ``by_outcome`` dimension
+#: as request outcomes, and a bare ``miss`` there would be indistinguishable
+#: from a request that failed to find something. A reader who sees
+#: ``cache_hit: 41`` knows immediately it is not a request outcome.
+CACHE_OUTCOME_HIT = "cache_hit"
+CACHE_OUTCOME_MISS = "cache_miss"
+CACHE_OUTCOME_STALE = "cache_stale"
 
 
 def _counter(snapshot: Mapping[str, int | None], key: str) -> int:
@@ -110,16 +122,23 @@ def admission_counters(snapshot: Mapping[str, int | None]) -> AdmissionCounters:
 def emit_request_started(
     recorder: TraceRecorder | None,
     *,
-    operation: str,
     timestamp: float,
+    operation: str | None = None,
 ) -> None:
+    """The operation name normally comes from the RECORDER.
+
+    ``operation`` is optional and exists so the STARTED event can state it
+    explicitly if a caller wants the event correct in isolation. Omitting it
+    inherits the recorder's, which is the normal path and the reason every
+    later event in the trace is groupable without being told.
+    """
     if recorder is None:
         return
     recorder.record(
         category=EventCategory.KNOWLEDGE,
         event_type=EventType.KNOWLEDGE_REQUEST_STARTED,
         timestamp=timestamp,
-        detail=operation,
+        **({} if operation is None else {"operation": operation}),
     )
 
 
@@ -149,6 +168,11 @@ def emit_completed(
     outcome: str,
     retryable: bool | None = None,
 ) -> None:
+    """End of the lifecycle, and the only event that carries a duration.
+
+    The duration comes from the recorder's MONOTONIC clock. It is never
+    derived from two wall-clock timestamps, which can go backwards.
+    """
     if recorder is None:
         return
     recorder.record(
@@ -157,6 +181,7 @@ def emit_completed(
         timestamp=timestamp,
         outcome=outcome,
         retryable=retryable,
+        duration_ms=recorder.elapsed_ms(),
     )
 
 
@@ -260,6 +285,12 @@ def emit_kv_degraded(
     telemetry. The dependency class is ``kv`` and the operation is the whole
     fact worth keeping.
 
+    It OVERRIDES the recorder's inherited operation deliberately. On a
+    ``retrieve`` request the knowledge operation is ``retrieve`` and the cache
+    operation is ``get``; for this event the useful question is which cache
+    call failed, so the cache operation is what the label says. Every other
+    knowledge event in the same trace still carries ``retrieve``.
+
     A cache MISS emits nothing. A miss is the cache working.
     """
     if recorder is None:
@@ -274,14 +305,103 @@ def emit_kv_degraded(
         timestamp=timestamp,
         outcome="degraded",
         retryable=True,
-        detail=operation,
+        operation=operation,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cache outcome — runtime, where the lookup actually happens
+# ---------------------------------------------------------------------------
+
+
+def _emit_cache(
+    recorder: TraceRecorder | None,
+    *,
+    event_type: EventType,
+    outcome: str,
+    timestamp: float,
+) -> None:
+    if recorder is None:
+        return
+    recorder.record(
+        category=EventCategory.KNOWLEDGE,
+        event_type=event_type,
+        timestamp=timestamp,
+        outcome=outcome,
+        # A cache outcome is not a request failure, so it carries no retryable
+        # flag. The request's own completion event carries the outcome that
+        # actually decides whether a caller should retry.
+        retryable=None,
+    )
+
+
+def emit_cache_hit(
+    recorder: TraceRecorder | None, *, timestamp: float
+) -> None:
+    """The retrieval was SERVED from the cache.
+
+    Emitted only when the cached result was actually returned to the caller.
+    A lookup that produced a candidate and was then invalidated by a
+    concurrent write is a conflict, not a hit — the caller got nothing, and
+    putting it in the numerator of a hit rate would credit a success that did
+    not happen.
+    """
+    _emit_cache(
+        recorder,
+        event_type=EventType.KNOWLEDGE_CACHE_HIT,
+        outcome=CACHE_OUTCOME_HIT,
+        timestamp=timestamp,
+    )
+
+
+def emit_cache_miss(
+    recorder: TraceRecorder | None, *, timestamp: float
+) -> None:
+    """The cache was consulted and held nothing. This is the cache working.
+
+    A MISS is never reported for a lookup that RAISED. That is
+    ``knowledge.kv.degraded``: an exception is the cache failing to answer, not
+    answering "no", and reporting it as a miss is how a permanently broken KV
+    namespace survives unnoticed — nothing errors, every request is just
+    slower.
+    """
+    _emit_cache(
+        recorder,
+        event_type=EventType.KNOWLEDGE_CACHE_MISS,
+        outcome=CACHE_OUTCOME_MISS,
+        timestamp=timestamp,
+    )
+
+
+def emit_cache_stale(
+    recorder: TraceRecorder | None, *, timestamp: float
+) -> None:
+    """The cache returned an envelope the runtime REFUSED to use.
+
+    Corrupt, the wrong corpus revision, the wrong embedding digest, or naming
+    a row that no longer exists. This is a third state, not a miss and not a
+    hit: it means the cache is being read and its contents are no longer
+    usable, which is a different operational problem from an empty cache and
+    calls for a different fix.
+    """
+    _emit_cache(
+        recorder,
+        event_type=EventType.KNOWLEDGE_CACHE_STALE,
+        outcome=CACHE_OUTCOME_STALE,
+        timestamp=timestamp,
     )
 
 
 __all__ = [
+    "CACHE_OUTCOME_HIT",
+    "CACHE_OUTCOME_MISS",
+    "CACHE_OUTCOME_STALE",
     "KV_OPERATION_GET",
     "KV_OPERATION_PUT",
     "admission_counters",
+    "emit_cache_hit",
+    "emit_cache_miss",
+    "emit_cache_stale",
     "emit_completed",
     "emit_conflict",
     "emit_dependency_failure",

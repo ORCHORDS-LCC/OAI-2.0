@@ -44,12 +44,25 @@ THE FOUR DECISIONS THAT MATTER
    and this is the telemetry surface. :class:`AdmissionCounters` is the one
    sanctioned way to carry them; the error path never reads it.
 
-PUBLIC SAFETY
--------------
-No account ids, database ids, bucket names, index names, endpoints or
-credentials. Every free-form string is length-bounded, and ``extra="forbid"``
-throughout, so a widened payload cannot smuggle extra state — the same rule
-``oai2/knowledge/transport.py`` states for the wire contract.
+PUBLIC SAFETY — A PRODUCER CONTRACT, NOT A STRUCTURAL ONE
+---------------------------------------------------------
+Length bounds and ``extra="forbid"`` prevent STRUCTURAL expansion: a widened
+payload cannot attach new state. They do NOT redact content, and this module
+does not claim to. An earlier revision said "public-safe by construction",
+which was false — ``detail``, ``request_id``, ``outcome`` and ``evidence_ids``
+are all caller-influenced free text inside length bounds.
+
+This module itself emits no account ids, database ids, bucket or index names,
+endpoints or credentials. PRODUCERS MUST NOT put into an event:
+
+* prompt bodies, source document content, or retrieval topics/queries;
+* tool input or output bodies;
+* raw exception text;
+* secrets or credentials;
+* private binding, resource or namespace identifiers.
+
+The enforcement is a minimization contract plus a sanitized retention boundary
+in :mod:`oai2.observability.metrics`, not a type.
 
 WHAT DOES NOT EXIST YET
 -----------------------
@@ -72,8 +85,20 @@ from typing import Final, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 #: Schema version of this envelope. Bump the MAJOR when a field changes
-#: meaning; bump the MINOR when a field is added.
-OBSERVABILITY_SCHEMA_VERSION: Final[str] = "1.0"
+#: meaning or is removed; bump the MINOR when a field is ADDED.
+#:
+#: 1.1 added the structured ``operation`` field. That is additive: a stored
+#: 1.0 event simply has no ``operation``, and this build still reads it. A
+#: MAJOR bump would have been wrong twice over — it would reject traces this
+#: build can read perfectly well, and it would imply a meaning change that did
+#: not happen.
+#:
+#: Note the contrast with ``EventType.KNOWLEDGE_INTERNAL_FAILURE``, which
+#: added a value to the AUTHORING vocabulary and needed no version change at
+#: all, because ``event_type`` is deliberately an open string. Adding a
+#: vocabulary value and adding a field are different kinds of change, and
+#: conflating them is how a schema ends up with a major bump nobody needed.
+OBSERVABILITY_SCHEMA_VERSION: Final[str] = "1.1"
 
 #: Majors this build can read. See decision 3 in the module docstring.
 SUPPORTED_SCHEMA_MAJORS: Final[frozenset[str]] = frozenset({"1"})
@@ -87,6 +112,7 @@ TRACE_ID_PREFIX: Final[str] = "trc_"
 MAX_TRACE_ID_LENGTH: Final[int] = 128
 MAX_EVENT_TYPE_LENGTH: Final[int] = 64
 MAX_IDENTIFIER_LENGTH: Final[int] = 128
+MAX_OPERATION_LENGTH: Final[int] = 32
 MAX_DETAIL_LENGTH: Final[int] = 1000
 
 #: Dotted lowercase path, e.g. ``knowledge.request.started``. Constrained so a
@@ -99,6 +125,11 @@ _EVENT_TYPE_PATTERN: Final[re.Pattern[str]] = re.compile(
 _TRACE_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"^{re.escape(TRACE_ID_PREFIX)}[0-9a-f]{{8,48}}$"
 )
+
+#: An operation is a NAME, not content. Lowercase identifier only, so a metric
+#: can group by it, and so a caller cannot smuggle a topic or a query string
+#: into a field that a dashboard would then treat as a label.
+_OPERATION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class EventCategory(StrEnum):
@@ -148,6 +179,26 @@ class EventType(StrEnum):
     # existing trace, so the cost of the ninth type is one entry in a tuple.
     KNOWLEDGE_INTERNAL_FAILURE = "knowledge.internal.failure"
 
+    # A cache lookup has THREE outcomes, not two, and collapsing them is the
+    # specific over-report this vocabulary exists to prevent.
+    #
+    # `cache_key_for` embeds the corpus revision, so under any real write load
+    # every stored envelope is stale by construction and the cache can only
+    # ever report a low hit rate while working perfectly. If "the envelope came
+    # back and the runtime refused it" were counted as a MISS, a busy corpus
+    # would be indistinguishable from an empty KV namespace — two opposite
+    # diagnoses, with opposite fixes, and no signal to tell them apart.
+    #
+    # Counting it as a HIT is worse. It is the over-report that would put
+    # unusable data in the numerator of a hit rate.
+    #
+    # A fourth state exists and is NOT in this list: a KV read that RAISED.
+    # That is `knowledge.kv.degraded`, it is a dependency fault rather than a
+    # cache outcome, and it deliberately contributes to no hit rate at all.
+    KNOWLEDGE_CACHE_HIT = "knowledge.cache.hit"
+    KNOWLEDGE_CACHE_MISS = "knowledge.cache.miss"
+    KNOWLEDGE_CACHE_STALE = "knowledge.cache.stale"
+
     # --- model ----------------------------------------------------------
     MODEL_REQUEST = "model.request"
     MODEL_RESPONSE = "model.response"
@@ -176,6 +227,11 @@ class EventType(StrEnum):
 
 #: The eight event types the CFOPS knowledge contract requires. Pinned as a
 #: module constant so a rename has to be deliberate and is visible in review.
+#:
+#: This tuple is the CONTRACT, and it is exactly eight. Types added later for
+#: reasons of this repository's own correctness — the internal-failure
+#: extension, and the three cache outcomes below — are NOT in it, and adding
+#: them here would misstate what the contract asked for.
 KNOWLEDGE_EVENT_TYPES: Final[tuple[EventType, ...]] = (
     EventType.KNOWLEDGE_REQUEST_STARTED,
     EventType.KNOWLEDGE_REQUEST_COMPLETED,
@@ -185,6 +241,14 @@ KNOWLEDGE_EVENT_TYPES: Final[tuple[EventType, ...]] = (
     EventType.KNOWLEDGE_CONFLICT,
     EventType.KNOWLEDGE_KV_DEGRADED,
     EventType.KNOWLEDGE_RETRY,
+)
+
+#: The three cache outcomes, kept as their own tuple so a consumer can ask
+#: "did the cache answer, and how?" without pattern-matching on strings.
+KNOWLEDGE_CACHE_EVENT_TYPES: Final[tuple[EventType, ...]] = (
+    EventType.KNOWLEDGE_CACHE_HIT,
+    EventType.KNOWLEDGE_CACHE_MISS,
+    EventType.KNOWLEDGE_CACHE_STALE,
 )
 
 _KNOWN_EVENT_TYPE_VALUES: Final[frozenset[str]] = frozenset(
@@ -227,6 +291,25 @@ class TraceEvent(BaseModel):
     event_type: str = Field(min_length=1, max_length=MAX_EVENT_TYPE_LENGTH)
     timestamp: float = Field(ge=0)
 
+    # --- structured operation ------------------------------------------
+    #: The operation being performed, as a NAME: "put", "get", "retrieve".
+    #:
+    #: Added in schema 1.1. It is a first-class field rather than something
+    #: re-derived from ``detail`` because a metric has to GROUP by operation,
+    #: and parsing prose to recover a label is both fragile and impossible to
+    #: enforce. ``detail`` remains free text for humans and is explicitly NOT a
+    #: metric dimension.
+    operation: str | None = Field(default=None, min_length=1,
+                                  max_length=MAX_OPERATION_LENGTH)
+    #: Duration of a completed operation, in milliseconds, from a MONOTONIC
+    #: clock. ``None`` where the event is not an end-of-operation marker.
+    #:
+    #: Never computed by subtracting wall-clock timestamps: ``time.time()`` can
+    #: step backwards (NTP, leap smear), and a negative latency is worse than
+    #: no latency. The lifecycle owner measures with ``time.monotonic()`` and
+    #: converts once, here, at the boundary.
+    duration_ms: float | None = Field(default=None, ge=0.0)
+
     # --- optional correlation ------------------------------------------
     #: Correlates the events of one logical request. Reuses the transport's
     #: own ``request_id`` rather than minting a second identity, so an event
@@ -255,6 +338,13 @@ class TraceEvent(BaseModel):
             raise ValueError(
                 f"unsupported trace schema major version {major!r}; this build "
                 f"reads {sorted(SUPPORTED_SCHEMA_MAJORS)}"
+            )
+        if self.operation is not None and not _OPERATION_PATTERN.match(
+            self.operation
+        ):
+            raise ValueError(
+                "operation must be a lowercase name such as 'get'; it is a "
+                "label, not content"
             )
         if not _EVENT_TYPE_PATTERN.match(self.event_type):
             raise ValueError(
@@ -536,12 +626,14 @@ def knowledge_retry(
 __all__ = [
     "MAX_EVENT_TYPE_LENGTH",
     "MAX_IDENTIFIER_LENGTH",
+    "MAX_OPERATION_LENGTH",
     "OBSERVABILITY_SCHEMA_VERSION",
     "SUPPORTED_SCHEMA_MAJORS",
     "TRACE_ID_PREFIX",
     "AdmissionCounters",
     "EventCategory",
     "EventType",
+    "KNOWLEDGE_CACHE_EVENT_TYPES",
     "KNOWLEDGE_EVENT_TYPES",
     "Trace",
     "TraceEvent",

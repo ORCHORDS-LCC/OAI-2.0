@@ -366,12 +366,75 @@ def test_every_required_metric_name_exists() -> None:
         "requests_started", "requests_completed", "successful_requests",
         "failed_requests", "saturated_count", "dependency_failure_count",
         "integrity_failure_count", "conflict_count", "kv_degraded_count",
+        "cache_hit_count", "cache_miss_count", "cache_stale_count",
         "retryable_failure_count", "retry_events_observed",
         "admission_in_flight_last", "admission_in_flight_peak",
         "admission_peak_in_flight", "admission_admitted_count",
         "admission_refused_count",
     }
     assert required <= present, required - present
+
+
+def test_the_latency_block_is_aggregated_and_bounded() -> None:
+    """Four numbers, constant memory. No percentile, because no honest one."""
+    metrics = MetricsAggregator()
+    for index in range(200):
+        recorder = new_request_recorder(
+            sink=metrics, request_id=f"req-{index}", operation="retrieve"
+        )
+        recorder.record(
+            category=EventCategory.KNOWLEDGE,
+            event_type=EventType.KNOWLEDGE_REQUEST_COMPLETED,
+            timestamp=float(index),
+            outcome="ok",
+            duration_ms=float(index),
+        )
+    latency = metrics.snapshot()["request_latency"]
+    assert latency["count"] == 200
+    assert latency["min_ms"] == 0.0
+    assert latency["max_ms"] == 199.0
+    assert "p95" not in repr(metrics.snapshot())
+
+
+# ---------------------------------------------------------------------------
+# The cardinality guard must itself be able to fail
+# ---------------------------------------------------------------------------
+
+
+def test_the_cardinality_guard_rejects_a_dimension_keyed_by_an_identifier() -> None:
+    """A guard that cannot fail is decoration.
+
+    Without this, relaxing the guard into a no-op would turn every other
+    cardinality test green while the hazard it exists to catch walked in
+    through a new dimension.
+    """
+    from oai2.observability import assert_no_identifier_cardinality
+
+    with pytest.raises(AssertionError, match="identifier"):
+        assert_no_identifier_cardinality(
+            {"by_event_type": {f"req-{index}": 1 for index in range(3)}}
+        )
+    with pytest.raises(AssertionError, match="identifier"):
+        assert_no_identifier_cardinality({"by_outcome": {"trc_abc": 1}})
+
+
+def test_the_cardinality_guard_ignores_scalar_block_names() -> None:
+    """A counter called ``requests_started`` is a counter, not a dimension.
+
+    Checking every nested mapping would make the guard fail on its own
+    snapshot the moment a block was added whose NAMES contain a word like
+    "request" or "trace" — and a guard that cries wolf gets switched off.
+    """
+    from oai2.observability import assert_no_identifier_cardinality
+
+    assert_no_identifier_cardinality(
+        {
+            "counters": {"requests_started": 3, "trace_errors": 0},
+            "recorder_health": {"sink_errors": 0, "trace_errors": 0},
+            "request_latency": {"count": 3, "sum_ms": 1.0},
+            "by_category": {"knowledge": 3},
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

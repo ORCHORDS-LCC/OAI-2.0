@@ -356,10 +356,19 @@ def test_a_dependency_exception_releases_the_slot(
 
         response_a, response_b = asyncio.run(scenario())
 
-        # A's dependency failure was reported as a retryable dependency fault,
-        # not swallowed and not a crash.
-        assert response_a.status == 503
-        assert response_a.payload["error"]["code"] == "unavailable_dependency"
+        # A raised, and the raise was contained: not swallowed, not a crash.
+        #
+        # The classification is INTERNAL, not unavailable_dependency, and that
+        # is deliberate. The REAL KnowledgeWorkerTransport.handle converts
+        # RuntimeError into a typed UNAVAILABLE_DEPENDENCY response itself, so
+        # an exception ESCAPING handle means the conversion did not happen --
+        # an unexpected local fault. This fake bypasses that contract by
+        # raising, so it exercises the escape path, not the dependency path.
+        # (The dependency path is covered in test_knowledge_event_emission.py
+        # and test_knowledge_failure_taxonomy.py with a typed response.)
+        assert response_a.status == 500
+        assert response_a.payload["error"]["code"] == "internal"
+        assert response_a.payload["error"]["retryable"] is False
 
         # The slot came back, so B got a real refusal-free path... but B ran
         # while A was still held, so B is saturated. The point is that AFTER A

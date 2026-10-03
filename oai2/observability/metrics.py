@@ -50,9 +50,16 @@ would make the number wrong in the one direction nobody checks.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Final
 
-from .events import AdmissionCounters, EventType, TraceEvent
+from .events import (
+    MAX_OPERATION_LENGTH,
+    AdmissionCounters,
+    EventType,
+    TraceEvent,
+)
+from .health import RecorderHealth, health_snapshot
 from .sink import EventSink
 
 #: Cap on distinct values per dimension. Beyond this, new keys land in the
@@ -64,12 +71,137 @@ UNKNOWN_OUTCOME: Final[str] = "unknown"
 
 #: Outcomes this build recognises. A value outside this set is bucketed, not
 #: trusted, so a caller-influenced string cannot create a time series.
+#:
+#: The ``cache_*`` entries are namespaced deliberately. Cache outcomes share
+#: this dimension with request outcomes, and a bare ``miss`` sitting next to a
+#: request-level ``not_found`` would be a genuine misreading waiting to happen.
 KNOWN_OUTCOMES: Final[frozenset[str]] = frozenset({
     "ok", "saturated", "degraded",
     "not_found", "conflict", "integrity",
     "unavailable_dependency", "internal",
     "authorization", "validation",
+    "cache_hit", "cache_miss", "cache_stale",
 })
+
+
+class RequestLatency:
+    """Count / sum / min / max of observed request durations. Constant memory.
+
+    WHY NOT A PERCENTILE
+    ---------------------
+    An exact p95 needs the samples, the samples are unbounded, and the moment
+    you bound them the number silently stops describing the window it claims
+    to describe. So this reports four numbers that are exactly right for the
+    whole lifetime of the aggregator, and refuses to report a percentile it
+    cannot compute honestly.
+
+    ``min``/``max`` are ``None`` until the first observation rather than
+    ``0.0``. A count of zero with a min of zero reads as "a request completed
+    in 0ms", which is a measurement and a fiction at the same time; ``None``
+    reads as "nothing has been observed", which is the truth.
+    """
+
+    __slots__ = ("_count", "_max_ms", "_min_ms", "_sum_ms")
+
+    def __init__(self) -> None:
+        self._count = 0
+        self._sum_ms = 0.0
+        self._min_ms: float | None = None
+        self._max_ms: float | None = None
+
+    def observe(self, duration_ms: float) -> None:
+        # The schema already refuses a negative duration, so this cannot go
+        # backwards; the clamp is a guard on the invariant, not a repair.
+        value = max(0.0, float(duration_ms))
+        self._count += 1
+        self._sum_ms += value
+        if self._min_ms is None or value < self._min_ms:
+            self._min_ms = value
+        if self._max_ms is None or value > self._max_ms:
+            self._max_ms = value
+
+    def reset(self) -> None:
+        self._count = 0
+        self._sum_ms = 0.0
+        self._min_ms = None
+        self._max_ms = None
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "count": self._count,
+            "sum_ms": self._sum_ms,
+            "min_ms": self._min_ms,
+            "max_ms": self._max_ms,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MetricRecord:
+    """A REDACTED, metrics-shaped view of one event.
+
+    REQ-OBS-021 says prompt, source and tool bodies must be excluded or
+    redacted BY DEFAULT from metrics, and the defence cannot be "every future
+    producer will remember to be careful" — that is a promise, not a boundary.
+
+    So the metrics store does not retain ``TraceEvent`` objects at all. It
+    retains THIS, and this has no field that can carry caller content:
+
+    ================== ===========================================
+    retained            never retained
+    ================== ===========================================
+    ``timestamp``       ``trace_id``, ``request_id``
+    ``category``        ``detail`` (free text, by definition)
+    ``event_type``      ``evidence_ids`` (an identifier list)
+    ``operation``       ``retryable``-adjacent prose
+    ``outcome``         any future free-form or payload field
+    ``duration_ms``     (bucketed outcomes, not raw values)
+    ``admission``       — counters only, no identity
+    ================== ===========================================
+
+    If correlation or debug trace retention is wanted later, it belongs in a
+    SEPARATE trace sink with its own explicit privacy and retention policy —
+    not as a side effect of turning on metrics.
+    """
+
+    timestamp: float
+    category: str
+    event_type: str
+    operation: str | None
+    outcome: str
+    known_type: bool
+    duration_ms: float | None
+    admission: AdmissionCounters | None
+
+    @classmethod
+    def from_event(cls, event: TraceEvent) -> MetricRecord:
+        """Project an event down to what metrics may keep.
+
+        The single place the reduction happens, so a field added to
+        ``TraceEvent`` later is excluded by default rather than silently
+        retained.
+        """
+        outcome = event.outcome
+        return cls(
+            timestamp=event.timestamp,
+            category=event.category.value,
+            event_type=event.event_type,
+            operation=_bounded_operation(event.operation),
+            outcome=(
+                outcome
+                if outcome is not None
+                and outcome in KNOWN_OUTCOMES
+                else UNKNOWN_OUTCOME
+            ),
+            known_type=event.is_known_type,
+            duration_ms=event.duration_ms,
+            admission=event.admission,
+        )
+
+
+def _bounded_operation(operation: str | None) -> str | None:
+    if operation is None or len(operation) > MAX_OPERATION_LENGTH:
+        return None
+    return operation
 
 
 class _Dimension:
@@ -130,12 +262,18 @@ class MetricsAggregator(EventSink):
         "_by_event_type",
         "_by_outcome",
         "_counters",
+        "_health",
+        "_latency",
         "_max_events",
         "_recent",
     )
 
     #: Single scalar counters. Named to match the required metric list so a
     #: reviewer can check the list against this tuple.
+    #:
+    #: Latency is NOT here: count/sum/min/max are floats-or-None and live in
+    #: :class:`RequestLatency`, so there is one source of truth for them rather
+    #: than a count in this tuple that could drift from the sum next to it.
     _COUNTER_NAMES: Final[tuple[str, ...]] = (
         "events_observed",
         "unknown_event_types",
@@ -149,6 +287,9 @@ class MetricsAggregator(EventSink):
         "conflict_count",
         "internal_failure_count",
         "kv_degraded_count",
+        "cache_hit_count",
+        "cache_miss_count",
+        "cache_stale_count",
         "retryable_failure_count",
         "retry_events_observed",
         "admission_in_flight_last",
@@ -158,7 +299,12 @@ class MetricsAggregator(EventSink):
         "admission_refused_count",
     )
 
-    def __init__(self, *, max_recent_events: int = 256) -> None:
+    def __init__(
+        self,
+        *,
+        max_recent_events: int = 256,
+        health: RecorderHealth | None = None,
+    ) -> None:
         if isinstance(max_recent_events, bool) or not isinstance(
             max_recent_events, int
         ):
@@ -169,8 +315,13 @@ class MetricsAggregator(EventSink):
         self._by_category = _Dimension()
         self._by_event_type = _Dimension()
         self._by_outcome = _Dimension()
+        self._latency = RequestLatency()
+        # READ when a snapshot is taken, never written by an emit. That
+        # distinction is the whole design: a sink that is itself broken must
+        # not be the thing asked to report that it is broken.
+        self._health = health
         self._max_events = max_recent_events
-        self._recent: list[TraceEvent] = []
+        self._recent: list[MetricRecord] = []
 
     # -- EventSink ------------------------------------------------------
 
@@ -182,6 +333,7 @@ class MetricsAggregator(EventSink):
             self._counters["unknown_event_types"] += 1
         self._count_outcome(event)
         self._count_admission(event)
+        self._count_latency(event)
         self._retain(event)
 
     # -- internals ------------------------------------------------------
@@ -221,6 +373,15 @@ class MetricsAggregator(EventSink):
             self._counters["internal_failure_count"] += 1
         elif kind == EventType.KNOWLEDGE_KV_DEGRADED.value:
             self._counters["kv_degraded_count"] += 1
+        elif kind == EventType.KNOWLEDGE_CACHE_HIT.value:
+            self._counters["cache_hit_count"] += 1
+        elif kind == EventType.KNOWLEDGE_CACHE_MISS.value:
+            self._counters["cache_miss_count"] += 1
+        elif kind == EventType.KNOWLEDGE_CACHE_STALE.value:
+            # A distinct counter, not a miss. Folding it in would make a corpus
+            # under write load — where every envelope is stale BY CONSTRUCTION
+            # — look identical to a KV namespace holding nothing.
+            self._counters["cache_stale_count"] += 1
         elif kind == EventType.KNOWLEDGE_RETRY.value:
             # Only an actual retry event counts. Never a retryable flag.
             self._counters["retry_events_observed"] += 1
@@ -249,17 +410,35 @@ class MetricsAggregator(EventSink):
         self._counters["admission_admitted_count"] = counters.admitted_count
         self._counters["admission_refused_count"] = counters.refused_count
 
+    def _count_latency(self, event: TraceEvent) -> None:
+        """Aggregate a duration, from the completion that carries one.
+
+        Only a completion has a ``duration_ms``, and only because the
+        lifecycle owner measured it from a monotonic clock. A ``None`` is
+        skipped rather than counted as zero: a zero would drag the mean toward
+        0 and make a fast service look broken, which is the one direction an
+        operator cannot afford to be wrong in.
+        """
+        if event.event_type != EventType.KNOWLEDGE_REQUEST_COMPLETED.value:
+            return
+        duration = event.duration_ms
+        if duration is None:
+            return
+        self._latency.observe(duration)
+
     def _retain(self, event: TraceEvent) -> None:
+        """Keep a REDACTED projection, never the event itself."""
         if self._max_events == 0:
             return
-        self._recent.append(event)
+        self._recent.append(MetricRecord.from_event(event))
         if len(self._recent) > self._max_events:
             del self._recent[: len(self._recent) - self._max_events]
 
     # -- reading --------------------------------------------------------
 
     @property
-    def recent_events(self) -> tuple[TraceEvent, ...]:
+    def recent_events(self) -> tuple[MetricRecord, ...]:
+        """Sanitized records. NOT TraceEvents — see :class:`MetricRecord`."""
         return tuple(self._recent)
 
     def counter(self, name: str) -> int:
@@ -272,6 +451,8 @@ class MetricsAggregator(EventSink):
             "by_category": self._by_category.snapshot(),
             "by_event_type": self._by_event_type.snapshot(),
             "by_outcome": self._by_outcome.snapshot(),
+            "request_latency": self._latency.snapshot(),
+            "recorder_health": health_snapshot(self._health),
             "retained_event_count": len(self._recent),
             "retained_event_capacity": self._max_events,
         }
@@ -281,36 +462,82 @@ class MetricsAggregator(EventSink):
         self._by_category.reset()
         self._by_event_type.reset()
         self._by_outcome.reset()
+        self._latency.reset()
         self._recent.clear()
+
+
+#: The only snapshot keys that are LABEL DIMENSIONS.
+#:
+#: Checked by an allowlist rather than a skip list, deliberately. A skip list
+#: grows every time a new scalar block is added, and the failure mode is that
+#: someone adds a real dimension and puts it on the skip list without reading
+#: why it is there. An allowlist means adding a dimension requires a decision,
+#: which is the only moment the decision is worth making.
+DIMENSION_KEYS: Final[frozenset[str]] = frozenset({
+    "by_category",
+    "by_event_type",
+    "by_outcome",
+})
 
 
 def assert_no_identifier_cardinality(snapshot: Mapping[str, Any]) -> None:
     """Guard against a dimension that is actually a per-request id.
 
-    Cheap and deliberately blunt: any dimension key or value that looks like an
+    Cheap and deliberately blunt: a dimension whose key or value looks like an
     identifier this module has no business labelling by fails. Called by the
     tests, and available to a readiness probe.
+
+    Both halves are checked, and the VALUE half is the one that matters most.
+    The hazard is a dimension keyed ``{"req-0": 1, "req-1": 1, ...}`` — one
+    time series per request, unbounded growth, no metric at all — and that
+    hazard is invisible to a check that only reads key NAMES.
+
+    Only :data:`DIMENSION_KEYS` is checked. Scalar blocks such as ``counters``
+    and ``recorder_health`` legitimately contain words like "request" and
+    "trace" in their NAMES — ``requests_started``, ``trace_errors`` — and
+    conflating a counter's name with a label is exactly the confusion this
+    guard exists to prevent elsewhere.
     """
     import re
 
-    suspicious = re.compile(r"(?:^|_)(id|ids|trace|request|topic|query)(?:$|_)")
+    # A dimension NAME that reads like a field we must never group by.
+    suspicious_name = re.compile(
+        r"(?:^|_)(id|ids|trace|request|topic|query)(?:$|_)"
+    )
+    # Identifier prefixes this codebase actually mints: knowledge ids, request
+    # ids, trace ids, generation-specific vector ids. Matching the shape
+    # rather than any 32-hex string keeps a legitimate dotted event type like
+    # ``knowledge.request.started`` out of the net.
+    identifier_value = re.compile(r"(?:^|[^a-z0-9])(?:req-|trc_|ko_|oai2v1-)")
+
     for name, value in snapshot.items():
-        if name in ("counters", "retained_event_count", "retained_event_capacity"):
+        if name not in DIMENSION_KEYS:
             continue
         if not isinstance(value, Mapping):
             continue
-        for key in value:
-            assert not suspicious.search(key), (
-                f"metric dimension {name!r} is keyed by what looks like an "
-                f"identifier: {key!r}"
+        for key, count in value.items():
+            assert not suspicious_name.search(key), (
+                f"metric dimension {name!r} is named like an identifier this "
+                f"module must never group by: {key!r}"
+            )
+            assert not identifier_value.search(str(key)), (
+                f"metric dimension {name!r} is keyed by an identifier: {key!r} "
+                f"(one time series per request is unbounded growth, not a metric)"
+            )
+            assert not identifier_value.search(str(count)), (
+                f"metric dimension {name!r} carries an identifier as a value: "
+                f"{count!r}"
             )
 
 
 __all__ = [
+    "DIMENSION_KEYS",
     "KNOWN_OUTCOMES",
     "MAX_DIMENSION_KEYS",
     "OVERFLOW_KEY",
     "UNKNOWN_OUTCOME",
+    "MetricRecord",
     "MetricsAggregator",
+    "RequestLatency",
     "assert_no_identifier_cardinality",
 ]

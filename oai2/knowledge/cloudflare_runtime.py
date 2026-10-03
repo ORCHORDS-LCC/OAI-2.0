@@ -31,7 +31,14 @@ from .cloudflare_bindings_runtime import (
     CloudflareVectorizeStore,
 )
 from .knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
-from .observability import KV_OPERATION_GET, KV_OPERATION_PUT, emit_kv_degraded
+from .observability import (
+    KV_OPERATION_GET,
+    KV_OPERATION_PUT,
+    emit_cache_hit,
+    emit_cache_miss,
+    emit_cache_stale,
+    emit_kv_degraded,
+)
 from .transport import (
     KnowledgeCacheRef,
     QueryCacheEnvelope,
@@ -51,6 +58,21 @@ class KnowledgeConflictError(KnowledgeRuntimeError):
 
 class KnowledgeIntegrityError(KnowledgeRuntimeError):
     """Authoritative metadata and external storage disagree."""
+
+
+class _CacheLookup:
+    """What one KV read actually produced.
+
+    Two independent facts, and the reason they are not collapsed into a single
+    ``str | None`` is that both halves can be ``None`` for completely
+    different reasons: the key was absent, or the read raised.
+    """
+
+    __slots__ = ("degraded", "raw")
+
+    def __init__(self, *, raw: str | None, degraded: bool = False) -> None:
+        self.raw = raw
+        self.degraded = degraded
 
 
 class AsyncCloudflareKnowledgeRuntime:
@@ -179,21 +201,38 @@ class AsyncCloudflareKnowledgeRuntime:
         )
 
         if query_vector is None:
-            cached = await self._cache_get(cache_key, trace=trace)
-            if cached is not None:
-                cached_result = await self._try_cached_result(
-                    request,
-                    cache_key,
-                    start_revision,
-                    cached,
-                )
-                if cached_result is not None:
-                    end_revision = await self._writer.corpus_revision()
-                    if end_revision != start_revision:
-                        raise KnowledgeConflictError(
-                            "corpus revision changed during cached retrieval; retry against fresh state"
-                        )
-                    return cached_result
+            lookup = await self._cache_get(cache_key, trace=trace)
+            # A degraded read reports itself already and contributes to NO
+            # cache outcome, so the degraded rate is never diluted by hits
+            # that never happened.
+            if not lookup.degraded:
+                if lookup.raw is None:
+                    emit_cache_miss(trace, timestamp=time.time())
+                else:
+                    cached_result = await self._try_cached_result(
+                        request,
+                        cache_key,
+                        start_revision,
+                        lookup.raw,
+                    )
+                    if cached_result is not None:
+                        end_revision = await self._writer.corpus_revision()
+                        if end_revision != start_revision:
+                            # A concurrent write invalidated the candidate we
+                            # were about to serve. The caller gets a conflict,
+                            # not a cached answer, so this is deliberately NOT
+                            # a hit: crediting it would put a success in the
+                            # numerator of a hit rate for a failed request.
+                            raise KnowledgeConflictError(
+                                "corpus revision changed during cached "
+                                "retrieval; retry against fresh state"
+                            )
+                        # Emitted last, and only here, so a hit means exactly
+                        # "this retrieval was served from the cache".
+                        emit_cache_hit(trace, timestamp=time.time())
+                        return cached_result
+                    # The cache answered, and the answer was unusable.
+                    emit_cache_stale(trace, timestamp=time.time())
 
         semantic_scores: dict[KnowledgeId, float] = {}
         if query_vector is None:
@@ -372,24 +411,28 @@ class AsyncCloudflareKnowledgeRuntime:
 
     async def _cache_get(
         self, cache_key: str, *, trace: TraceRecorder | None = None
-    ) -> str | None:
+    ) -> _CacheLookup:
+        """Read the cache, keeping "empty" and "unavailable" distinguishable.
+
+        Returns a :class:`_CacheLookup` rather than a bare ``str | None``
+        because those two ``None``s mean opposite things. Collapsing them is
+        what let a KV outage present as a perfectly healthy empty cache: no
+        request failed, nothing alerted, and every retrieval quietly got slower
+        until someone noticed the latency chart.
+        """
         try:
-            return await self._kv.get_text(cache_key)
+            return _CacheLookup(raw=await self._kv.get_text(cache_key))
         except Exception:
-            # A KV read that RAISED is not a cache miss. Collapsing the two
-            # made a KV outage look like a perfectly healthy empty cache, which
-            # is how a silent cache failure survives for a long time: nothing
-            # errors, every request is just slower. The operation continues
-            # against authoritative D1 either way, so this stays a degraded
-            # signal and never a request failure.
-            #
             # The recorder is a PARAMETER, never stored on self. Self is
             # rebuilt per request today, so a stored recorder would appear to
             # work; that is exactly the shape that leaks a stale request's
             # trace the moment anything caches the runtime. A parameter cannot
             # outlive the call it was given to.
+            #
+            # The request continues against authoritative D1 either way, so
+            # this stays a degraded signal and never a request failure.
             emit_kv_degraded(trace, operation=KV_OPERATION_GET, timestamp=time.time())
-            return None
+            return _CacheLookup(raw=None, degraded=True)
 
     async def _try_cached_result(
         self,
