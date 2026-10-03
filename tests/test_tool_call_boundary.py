@@ -338,3 +338,81 @@ def test_glob_scoped_tool_is_denied_when_the_root_is_out_of_scope(workspace) -> 
                            arguments={"pattern": "*", "path": str(workspace / "outside")}),
                   calls_used=0)
     assert out.stage.value == "deny"
+
+
+def test_executor_grep_cannot_read_through_a_symlinked_escape(workspace) -> None:
+    """Grep of an in-scope root must not surface content from outside it.
+
+    The requested path (``inside``) is in scope, so the dispatcher's scope gate
+    passes. The match lives behind a symlink whose name is inside the root, so
+    only a resolved-containment check in the executor can stop the read.
+    """
+    inside = workspace / "work"
+    call = ToolCall(id="c1", tool_id=ToolId("Grep"),
+                    arguments={"pattern": "TOP SECRET", "path": str(inside)})
+    result = execute_tool(call, cwd=inside)
+    assert "TOP SECRET" not in (result.output or "")
+
+
+def test_grep_naming_a_symlinked_file_escape_is_denied_by_the_policy(workspace) -> None:
+    """Naming the escaping symlink directly is stopped at the scope gate.
+
+    This is the dispatcher's job, not the executor's: a directly-named file is
+    validated by the scope check before ``execute_tool`` is ever reached.
+    """
+    inside = workspace / "work"
+    d = _dispatcher(inside, {str(inside)})
+    out = d.check(ToolCall(id="c1", tool_id=ToolId("Grep"),
+                           arguments={"pattern": "TOP SECRET",
+                                      "path": str(inside / "secret-link.txt")}),
+                  calls_used=0)
+    assert out.stage.value == "deny"
+    assert "resource out of scope" in out.reason
+
+
+def test_executor_grep_still_finds_matches_in_the_authorized_root(workspace) -> None:
+    """Containment must not over-block: real in-scope matches are still returned."""
+    inside = workspace / "work"
+    call = ToolCall(id="c1", tool_id=ToolId("Grep"),
+                    arguments={"pattern": "fine", "path": str(inside)})
+    result = execute_tool(call, cwd=inside)
+    assert result.ok is True
+    assert "ok.txt:1:" in (result.output or "")
+
+
+def test_executor_grep_include_glob_still_filters(workspace) -> None:
+    inside = workspace / "work"
+    call = ToolCall(id="c1", tool_id=ToolId("Grep"),
+                    arguments={"pattern": "fine", "path": str(inside),
+                               "include_glob": "*.txt"})
+    result = execute_tool(call, cwd=inside)
+    assert result.ok is True
+    assert "ok.txt:1:" in (result.output or "")
+
+
+def test_executor_grep_on_a_single_in_scope_file_still_works(workspace) -> None:
+    inside = workspace / "work"
+    call = ToolCall(id="c1", tool_id=ToolId("Grep"),
+                    arguments={"pattern": "fine", "path": str(inside / "ok.txt")})
+    result = execute_tool(call, cwd=inside)
+    assert result.ok is True
+    assert "ok.txt:1:" in (result.output or "")
+
+
+def test_executor_grep_no_match_is_reported_as_no_match(workspace) -> None:
+    inside = workspace / "work"
+    call = ToolCall(id="c1", tool_id=ToolId("Grep"),
+                    arguments={"pattern": "nothing_matches_this", "path": str(inside)})
+    result = execute_tool(call, cwd=inside)
+    assert result.ok is True
+    assert "ok.txt" not in (result.output or "")
+
+
+def test_grep_scoped_tool_is_denied_when_the_root_is_out_of_scope(workspace) -> None:
+    inside = workspace / "work"
+    d = _dispatcher(inside, {str(inside)})
+    out = d.check(ToolCall(id="c1", tool_id=ToolId("Grep"),
+                           arguments={"pattern": "TOP SECRET",
+                                      "path": str(workspace / "outside")}),
+                  calls_used=0)
+    assert out.stage.value == "deny"

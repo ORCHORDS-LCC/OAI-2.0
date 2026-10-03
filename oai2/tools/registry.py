@@ -334,22 +334,45 @@ def _glob(pattern: str, *, cwd: Path, root: str | None = None) -> ExecutionOutco
 
 
 def _grep(pattern: str, *, path_str: str, include_glob: str | None, cwd: Path) -> ExecutionOutcome:
+    """Search file contents under ``path_str``.
+
+    Every candidate is resolved and checked to be inside the search root before
+    its contents are read. The requested path being in scope says nothing about
+    where a match actually lives: a symlink whose *name* sits inside the root can
+    point anywhere, and reading it would return content from outside the scope
+    the host authorised. The dispatcher validates the requested path only, so the
+    containment check belongs here too -- the same invariant ``_glob`` applies
+    for the same reason.
+    """
     try:
         rx = re.compile(pattern)
         root = _resolve(path_str, cwd=cwd)
         if not root.exists():
             return ExecutionOutcome(False, "", f"path not found: {root}")
-        files: Iterable[Path]
+        base = root.resolve()
         if root.is_file():
-            files = [root]
+            # A single explicitly-targeted file: the caller already named it and
+            # the dispatcher's scope gate validated it.
+            files: Iterable[Path] = [root]
         else:
+            # Walk the *unresolved* root so reported paths stay relative to the
+            # caller's cwd exactly as before; only the containment decision uses
+            # the resolved form.
             files = list(root.rglob(include_glob)) if include_glob else list(root.rglob("*"))
         lines: list[str] = []
         for fp in files:
             if not fp.is_file():
                 continue
             try:
-                content = fp.read_text(encoding="utf-8", errors="replace")
+                resolved = fp.resolve()
+            except OSError:  # pragma: no cover - broken symlink
+                continue
+            if resolved != base and base not in resolved.parents:
+                # Containment is checked on the RESOLVED path, so a symlink
+                # pointing outside the root cannot smuggle its contents out.
+                continue
+            try:
+                content = resolved.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 continue
             for lineno, line in enumerate(content.splitlines(), start=1):
