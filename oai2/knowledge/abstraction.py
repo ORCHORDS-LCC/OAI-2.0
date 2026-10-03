@@ -18,10 +18,20 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import KnowledgeId, Status
+
+MAX_CLAIM_KEY_LENGTH: Final[int] = 128
+MAX_CONTENT_VERSION_LENGTH: Final[int] = 128
+MAX_SOURCE_VERSION_LENGTH: Final[int] = 128
+# A supersession link is a *derived* identifier: producers such as the q-pipe
+# importer build it as ``<prefix>:<external_id>``. It is bounded here so a
+# producer can refuse to emit an unrepresentable link at its own gate, instead
+# of constructing one that its own model then rejects.
+MAX_SUPERSEDED_BY_LENGTH: Final[int] = 128
 
 
 class KnowledgeObject(BaseModel):
@@ -48,11 +58,15 @@ class KnowledgeObject(BaseModel):
     # content_hash, which is what makes supersession and conflict
     # reconciliation possible at all. Conflating the two would make every
     # reworded revision look like an unrelated claim.
-    claim_key: str | None = Field(default=None, max_length=128)
-    content_version: str | None = Field(default=None, max_length=128)
-    source_version: str | None = Field(default=None, max_length=128)
+    claim_key: str | None = Field(default=None, max_length=MAX_CLAIM_KEY_LENGTH)
+    content_version: str | None = Field(
+        default=None, max_length=MAX_CONTENT_VERSION_LENGTH
+    )
+    source_version: str | None = Field(
+        default=None, max_length=MAX_SOURCE_VERSION_LENGTH
+    )
     effective_at: float | None = None
-    superseded_by: str | None = Field(default=None, max_length=128)
+    superseded_by: str | None = Field(default=None, max_length=MAX_SUPERSEDED_BY_LENGTH)
     superseded_at: float | None = None
 
     # --- Trust and isolation (OAI-2.0 #185) ---

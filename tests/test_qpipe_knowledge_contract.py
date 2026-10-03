@@ -17,6 +17,7 @@ import json
 import pytest
 
 from oai2.core import Status
+from oai2.knowledge.abstraction import MAX_SUPERSEDED_BY_LENGTH
 from oai2.knowledge.qpipe_import import (
     DEFAULT_SOURCES,
     EXPORTABLE_SCOPES,
@@ -124,6 +125,80 @@ class TestSupersessionIsLinkedNotRetired:
         assert len(rep.imported) == 1
         assert rep.imported[0].superseded_by is None
         assert rep.unresolved_supersession == [("orphan", 999)]
+
+    def test_link_at_the_exact_field_bound_is_still_resolved(self):
+        """Opposite-direction guard: the fix must not refuse a representable link.
+
+        ``MAX_SUPERSEDED_BY_LENGTH`` is 128 and the
+        ``qpipe:recipe_candidates:`` prefix is 24 chars, so a winner
+        external_id of exactly 104 produces a ref of exactly 128. That is
+        representable and must still be linked; only 105 must be refused.
+        """
+        winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len("qpipe:recipe_candidates:"))
+        assert len(f"qpipe:recipe_candidates:{winner_ext}") == MAX_SUPERSEDED_BY_LENGTH
+        rows = [
+            _row(ext=winner_ext, rid=1, steps=[STEP_A]),
+            _row(ext="old", rid=2, steps=[STEP_A, STEP_B], superseded_by=1),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 2
+        assert rep.unresolved_supersession == []
+        linked = [o for o in rep.imported if o.superseded_by is not None]
+        assert len(linked) == 1
+        assert linked[0].superseded_by == f"qpipe:recipe_candidates:{winner_ext}"
+        assert len(linked[0].superseded_by) == MAX_SUPERSEDED_BY_LENGTH
+
+    def test_unrepresentable_link_is_reported_and_the_rest_of_the_batch_survives(self):
+        """An over-long derived link must cost one link, not the whole import.
+
+        ``_validate_row`` admits an external_id of up to 160 chars, so a legal
+        winner can make a ``superseded_by`` ref longer than the model field
+        allows. Before this was gated, that single row raised out of
+        ``import_qpipe_rows`` and discarded every other row in the batch.
+        """
+        prefix = "qpipe:recipe_candidates:"
+        winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len(prefix) + 1)
+        rows = [
+            _row(ext=winner_ext, rid=1, steps=[STEP_A]),
+            _row(ext="old", rid=2, steps=[STEP_A, STEP_B], superseded_by=1),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        # Both rows still import; only the unlinkable link is reported.
+        assert len(rep.imported) == 2
+        assert rep.unresolved_supersession == [("old", 1)]
+        loser = next(o for o in rep.imported if o.source_uri.endswith("/old"))
+        assert loser.superseded_by is None
+        # The refusal must not silently invent a truncated link either.
+        assert not any(
+            o.superseded_by and "w" * 40 in o.superseded_by for o in rep.imported
+        )
+
+    def test_one_unrepresentable_link_does_not_discard_unrelated_rows(self):
+        """Blast radius: unrelated good rows must survive a poison supersession row."""
+        prefix = "qpipe:recipe_candidates:"
+        winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len(prefix) + 1)
+        rows = [
+            _row(ext=f"good-{i}", rid=100 + i, steps=[STEP_A]) for i in range(8)
+        ]
+        rows += [
+            _row(ext=winner_ext, rid=1, steps=[STEP_A]),
+            _row(ext="old", rid=2, steps=[STEP_A, STEP_B], superseded_by=1),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 10
+        assert rep.unresolved_supersession == [("old", 1)]
+        # total_seen counts the 10 imported rows plus the 1 reported link.
+        assert rep.total_seen == 11
+
+    def test_qpipe_row_external_id_bound_does_not_imply_a_representable_link(self):
+        """Document the mismatch that made this reachable.
+
+        The importer admits external_id up to 160 chars while the derived
+        superseded_by ref is capped at 128, so the two bounds disagree by
+        construction. This test exists so the gap stays visible if either
+        bound is changed in isolation.
+        """
+        assert 160 > MAX_SUPERSEDED_BY_LENGTH
 
 
 class TestIsolationGatesOnAStoreThatServesEveryone:

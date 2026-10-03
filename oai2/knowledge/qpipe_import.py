@@ -43,7 +43,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from ..core import KnowledgeId, Status
-from .abstraction import KnowledgeObject, now_epoch, sha256_hex
+from .abstraction import (
+    MAX_SUPERSEDED_BY_LENGTH,
+    KnowledgeObject,
+    now_epoch,
+    sha256_hex,
+)
 
 # Exact public q-pipe source revision used to verify this compatibility gate.
 # Update this marker only after re-reading q-pipe's export/memory contracts and
@@ -538,7 +543,20 @@ def import_qpipe_rows(
                     (row.external_id, int(row.superseded_by))
                 )
             else:
-                ref = f"qpipe:{row.source}:{winner_external}"
+                candidate_ref = f"qpipe:{row.source}:{winner_external}"
+                # `superseded_by` is a bounded field on KnowledgeObject. The
+                # prefix is ours and the winner's external_id is only bounded
+                # at 160 by _validate_row, so a legal row can produce a link
+                # this model cannot represent. That is a fact about THIS link,
+                # not a reason to discard the row or the rest of the batch, so
+                # it is reported through the same unresolved channel used above
+                # and the link is omitted rather than silently truncated.
+                if len(candidate_ref) > MAX_SUPERSEDED_BY_LENGTH:
+                    report.unresolved_supersession.append(
+                        (row.external_id, int(row.superseded_by))
+                    )
+                else:
+                    ref = candidate_ref
         report.imported.append(
             row_to_knowledge_object(row, superseded_by_ref=ref)
         )
