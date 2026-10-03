@@ -119,6 +119,18 @@ def compare_numerical_paths(
     failures: list[str] = []
     if profile.require_finite_state_match and not finite_match:
         failures.append("finite_state_mismatch")
+    # NO COMPARABLE SAMPLES IS NOT A PASS. Non-finite samples are skipped
+    # above, so when EVERY sample is non-finite the error lists are empty and
+    # the `default=0.0` above reports a PERFECT match for a comparison that
+    # never happened. `finite_state_match` does not catch this: two NaNs
+    # agree on being non-finite, so `finite_match` stays True.
+    #
+    # This matters because a NaN-producing kernel is not "numerically
+    # identical" — it is broken, and the evidence artifact would otherwise be
+    # indistinguishable from a genuinely good one (both report
+    # max_abs_error=0.0 and passed=True), which is what REQ-NUM-024 forbids.
+    if not abs_errors:
+        failures.append("no_comparable_samples")
     if max_abs > profile.max_abs_error:
         failures.append("absolute_error")
     if max_rel > profile.max_rel_error:

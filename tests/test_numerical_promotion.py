@@ -159,3 +159,66 @@ def test_numerical_promotion_exports_from_model_package() -> None:
     from oai2.model.numerical_promotion import NumericalPromotionEvidence
     assert ExportedEvidence is NumericalPromotionEvidence
     assert ExportedEvaluate is evaluate_numerical_candidate
+
+
+def test_a_kernel_producing_only_nan_is_not_promoted() -> None:
+    """REQ-NUM-024: speed cannot promote a path never shown equivalent.
+
+    This is the consequence that matters. Pre-fix, an all-NaN optimized path
+    reported `max_abs_error=0.0`, `passed=True` and `eligible=True` with a
+    10x speedup -- an evidence artifact indistinguishable from a genuinely
+    good kernel, which is the false-success shape the promotion gate exists
+    to prevent.
+    """
+    evidence = evaluate_numerical_candidate(
+        [1.0, 2.0, 3.0],
+        [float("nan")] * 3,
+        candidate_kind=NumericalCandidateKind.KERNEL,
+        profile=_profile(),
+        identity=_identity("llamacpp"),
+        optimized_path="llamacpp:q4",
+        reference_path="mlx:fp16",
+        speedup_ratio=10.0,
+    )
+    assert not evidence.eligible
+    assert evidence.selection.used_fallback
+    assert "no_comparable_samples" in evidence.comparison.failures
+
+
+def test_both_sides_nonfinite_is_not_promoted() -> None:
+    """The exact boundary: a NaN reference AND a NaN optimized path.
+
+    `finite_state_match` stays True here (two NaNs agree on being
+    non-finite), so the finite-state gate cannot catch this case on its own.
+    """
+    nan = [float("nan")] * 3
+    evidence = evaluate_numerical_candidate(
+        nan,
+        nan,
+        candidate_kind=NumericalCandidateKind.KERNEL,
+        profile=_profile(),
+        identity=_identity("llamacpp"),
+        optimized_path="llamacpp:q4",
+        reference_path="mlx:fp16",
+        speedup_ratio=10.0,
+    )
+    assert not evidence.eligible
+
+
+def test_a_genuinely_good_kernel_is_still_promoted() -> None:
+    """Opposite-direction guard at the gate itself.
+
+    The fix must reject only the unmeasured comparison, never a real one.
+    """
+    evidence = evaluate_numerical_candidate(
+        [1.0, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
+        candidate_kind=NumericalCandidateKind.KERNEL,
+        profile=_profile(),
+        identity=_identity("llamacpp"),
+        optimized_path="llamacpp:q4",
+        reference_path="mlx:fp16",
+        speedup_ratio=10.0,
+    )
+    assert evidence.eligible
+    assert not evidence.selection.used_fallback

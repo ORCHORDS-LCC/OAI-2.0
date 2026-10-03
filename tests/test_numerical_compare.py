@@ -179,3 +179,75 @@ def test_numerical_comparison_exports_from_model_package() -> None:
     assert ExportedToleranceProfile is SourceToleranceProfile
     assert ExportedCompare is SourceCompare
     assert ExportedSelect is SourceSelect
+
+
+# ---------------------------------------------------------------------------
+# An absent measurement is not a clean measurement.
+# ---------------------------------------------------------------------------
+
+
+def test_all_nonfinite_samples_do_not_report_a_perfect_match() -> None:
+    """Every sample non-finite compared nothing and must not pass.
+
+    Non-finite samples are skipped, so the error lists stay empty and
+    `max(abs_errors, default=0.0)` reports a PERFECT match for a comparison
+    that never happened. `finite_state_match` does not catch it: two NaNs
+    agree on being non-finite, so it stays True.
+    """
+    result = compare_numerical_paths(
+        [float("nan")] * 3,
+        [float("nan")] * 3,
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert not result.passed
+    assert "no_comparable_samples" in result.failures
+    # The reported errors are still 0.0 — which is exactly why the failure
+    # list has to carry this, and why the artifact must not be read as
+    # "numerically identical" on its numbers alone.
+    assert result.max_abs_error == 0.0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_no_comparable_samples_is_reported_for_any_nonfinite_value(value: float) -> None:
+    result = compare_numerical_paths(
+        [value] * 2,
+        [value] * 2,
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert not result.passed
+    assert "no_comparable_samples" in result.failures
+
+
+def test_mixed_finite_and_nonfinite_still_passes() -> None:
+    """Opposite-direction guard: the fix must not fail a real comparison.
+
+    A fixture containing some non-finite samples and some real ones DOES
+    compare the real ones, so it must still be eligible. A blanket
+    "any non-finite input is rejected" fix would pass the test above and
+    break this one.
+    """
+    result = compare_numerical_paths(
+        [1.0, 2.0, 3.0, float("nan")],
+        [1.0, 2.0, 3.0, float("nan")],
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert result.passed
+    assert result.failures == ()
+    assert result.sample_count == 4
+
+
+def test_a_perfect_real_match_is_still_reported_as_zero_error() -> None:
+    """The 0.0 error of a real perfect match must remain distinguishable
+    from the 0.0 error of a comparison that never happened — by the failure
+    list, since the numbers alone cannot tell them apart."""
+    perfect = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 2.0], profile=_profile(), identity=_identity()
+    )
+    vacuous = compare_numerical_paths(
+        [float("nan")], [float("nan")], profile=_profile(), identity=_identity()
+    )
+    assert perfect.max_abs_error == vacuous.max_abs_error == 0.0
+    assert perfect.passed and not vacuous.passed
