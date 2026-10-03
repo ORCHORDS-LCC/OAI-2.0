@@ -112,7 +112,8 @@ two revisions behind and must be re-staged before any activation.**
 | --- | --- |
 | Pinned revision | `2983c5ccbfeb4364c41d73ff2aecb19d438939da` |
 | Work identity | `work_argv_sha256` `66c8faead5ce10ae…` — identical in both cells |
-| Jobs | 77, 78, 79, 80, 81 — all `succeeded`, all executed on `p50` |
+| Jobs | 77–81 (pre-fix harness) and 82–86 (post-fix harness) — all `succeeded`, all executed on `p50` |
+| How the identity is proven | post-fix: recovered from the node's `checks[]` argv + advertised capabilities, not from the local variable (§4.3) |
 
 Note this is *not* the repository revision in §1.1. The measured jobs ran the pinned workload revision;
 the supervisor and harness code in this document are later. They are different things and are not
@@ -144,9 +145,9 @@ the evidence came from code that is running on the host today.
 | A7 | **STOP** (cluster-side drain/revoke) | **NOT RUN** | — | n/a | as A6. Supervisor exit is **not** a drain (§3) |
 | A8 | **DUPLICATE-IDENTITY** rejection / de-duplication | **NOT RUN** | — | n/a | needs two nodes under one identity; second node is owned by another agent |
 | A9 | **CPU-inference qualification** (#246 / #250) | **BLOCKED** | — | n/a | no approved artifact exists. Nothing may be reported as qualified |
-| A10 | Cold vs warm preparation/execution separation, both cells | **PASS** (code) / **PARTIAL** (data) | harness §4.1; live run 2026-10-03 | n/a (Mac-side tool) | labels now come from observed preparation, not rep index. Node-side prep is summed from worker evidence; **no remote rep is ever warm** by architecture |
+| A10 | Cold vs warm preparation/execution separation, both cells | **PASS** (code) / **PASS** (data) | post-fix run: all 5 remote reps observed `cold` from worker evidence; `warm` is n=0 (§4.3) | n/a (Mac-side tool) | labels come from observed preparation, not rep index. Node-side prep is summed from worker evidence. **No remote rep is ever warm** — that is the worker's per-job-clone design, now demonstrated rather than assumed |
 | A11 | Latency distribution (min/median/p95/max) for both cells | **PASS** | harness, nearest-rank p95, n reported with every distribution | n/a | n is small; the report states that a p95 over 4 observations is simply the max |
-| A12 | Host resource use sampled during execution | **PARTIAL** | `sampler_state` + per-metric status | n/a | sampler now actually starts (`sampler.start()` was previously never called). **Local Mac only** — every metric is labelled `host: mac-local`; **no `p50` metric is sampled at all** |
+| A12 | Host resource use sampled during execution | **PASS** (local host only) | post-fix run 2026-10-03, jobs 82–86: `sample_count: 27`, `load1_mean 1.777`, `memory_used_pct_max 60.35`; `sampler_state: stopped` | n/a (Mac-side tool) | sampler now actually starts. **Local Mac only** — every metric is labelled `host: mac-local`; **no `p50` metric is sampled at all**, and the report says so in words |
 | A13 | Host-failure recovery: reboot, sleep/wake, address change, DNS/link loss, controller restart, disk full, memory pressure, GPU loss, image upgrade/rollback | **NOT RUN** | — | n/a | needs an explicitly authorised window; not run unilaterally |
 | A14 | Owner-intent state handling: absent vs damaged, atomic update, interruption, parser agreement | **PASS** (code + tests) | `SupervisorOwnerStateTests`, 15 tests; 5/5 injected defects caught | **NO — staged only** | exercised hermetically (stub `docker`/`systemctl`/`wsl`, scratch state dir). **Not run on the host** |
 | A15 | Default regression tests cannot reach live Docker / WSL / systemctl / controller / production container | **PASS** | `TestIsolationEnforcement`, 11 tests | n/a | see §5.3, including the incident that motivated it |
@@ -316,6 +317,56 @@ correctly refused to publish. Neither is cited as a result.
 - All host metrics describe the **Mac only**. The harness explicitly does not sample `p50` and labels
   every metric with the host it describes.
 
+### 4.3 Post-fix live run — 2026-10-03 05:15 UTC, jobs 82–86, pinned `2983c5ccbfeb…`
+
+Run with the corrected harness (`d977f88`). Control plane healthy, all three nodes idle beforehand
+(`p50`, plus two `campaign-2026-10-03-*` nodes owned by another agent), so no campaign or measurement
+window was in flight. Jobs were addressed to `p50` only. All 5 jobs `succeeded`, all executed on
+`p50`, all with `resolved_revision` exactly the pinned sha.
+
+| Metric | Cell A (Mac-local) | Cell B (fleet-p50) |
+| --- | --- | --- |
+| total, cold | 1.5653 s (n=1) | 3.8444 s (n=5, *all* observed cold) |
+| total, warm | median 0.0339 s, p95 0.0357 s (n=4) | **n=0 — no observations** |
+| total, all | median 0.0341 s, mean 0.3405 s (n=5) | median 4.7072 s, mean 4.5627 s, p95 4.8689 s (n=5) |
+| preparation | 1.5302 s cold, 0.0 s warm | **2.1216 s — measured from the worker's own evidence** |
+| queue / admission | n/a | 1.7151 s (clock `cluster.event.created_at`) |
+| execution on node | n/a | 2.5884 s (clock `cluster.event.created_at`) |
+| useful jobs/min | — | 13.15 |
+
+**What this run proves that the previous one could not.**
+
+1. **The phase correction is empirically confirmed.** All five remote reps are labelled `cold` with the
+   reason recorded per rep — `worker evidence shows ['git-clone', 'git-fetch', 'git-checkout']` — and
+   the warm bucket is `n=0`. The node clones per job by design, so no remote rep is ever warm. The
+   earlier document's claim that later reps excluded the clone was an artefact of labelling by index.
+2. **Node-side preparation is now a measurement, not a `null`.** 2.1216 s, summed from the worker's own
+   `evidence[]` steps. The previous document asserted this was "not separately observable"; it is.
+3. **The remote identity is now evidence-derived.** `work_identity.proven: true`, with
+   `remote_source: "the job result's checks[] argv and the node's advertised capabilities"`. The
+   recovered `remote_argv` is `["python3","-m","unittest","-v","test_app"]`, digest
+   `66c8faead5ce10ae…`, matching the pinned local digest. Before the fix this gate compared a local
+   variable with itself and could not fail.
+4. **Host sampling works.** `sample_count: 27` overall, with per-rep windows of n=4–5. Cell A's cold
+   window shows `n=0`, which the report presents as a real count beside `sampler_state` rather than as a
+   sampler failure — exactly the distinction that was previously missing.
+5. **The `p50` node is explicitly not sampled**, and the report prints that line.
+
+**Still not established by this run.** `p50`-side host resources (no sampling of the node exists);
+matched prepared-execution (comparison (c) is reported **NOT SUPPORTED**, with the reason: the worker
+exposes no rep that reuses a prepared tree); and any tail-latency statement (4 warm local observations).
+
+**One honest caveat carried in the report itself.** The gate `ref_resolved_to_full_sha` notes that the
+pinned sha "was not found among the published refs, so reachability was not independently confirmed".
+The sha is a full 40-character immutable id and every job's `resolved_revision` matched it exactly, but
+the harness could not independently corroborate it against the remote's advertised refs and says so
+rather than implying it did.
+
+**Benefit, restated.** 5 of 5 useful jobs completed on `p50`; 0 in cell B were performed on the Mac.
+The demonstrated value is **Mac offload**. The P50 is far slower end to end on this workload
+(median 4.7072 s vs 0.0341 s). No speedup, no inference throughput and no GPU capacity is claimed or
+measurable here.
+
 ---
 
 ## 5. Defects → failing test → fix → evidence → remaining limits
@@ -432,7 +483,8 @@ the evidence that the opt-in cannot reach production. *(Verified directly: `OAI2
   git steps.
 - **Sampler never started.** `sampler.start()` was defined but never called, which is why the live run
   reported `sample_count: 0`. Now started at the top of `measure()` and stopped in a `finally`.
-  `never-ran` is distinguished from `unsupported` and from a real count of 0.
+  `never-ran` is distinguished from `unsupported` and from a real count of 0. **Proven fixed on live
+  data**: the post-fix run sampled 27 times and labels every metric `host=mac-local` (§4.3).
 - **`ZeroDivisionError` on an all-zero-rate cell** (found by driving the real `measure()` with a stubbed
   cluster) — now a clean exit code.
 
