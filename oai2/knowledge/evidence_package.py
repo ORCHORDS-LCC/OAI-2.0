@@ -62,6 +62,41 @@ class RetrievalMetrics:
     raw_source_tokens: int
     compression_ratio: float
     task_success_delta: float
+    # Whether the package carried NO evidence at all, so every rate above is
+    # the result of a measurement that never happened.
+    #
+    # `EvidencePackage.insufficient_evidence` already knew this -- it is
+    # `not selected` -- and `evaluate_retrieval_package` dropped it. Two
+    # ordinary failures, retrieval returning nothing and a candidate that did
+    # not fit the budget, both produced k=0 with precision 0.0, recall 0.0
+    # and irrelevant_context_rate 0.0, and nothing on this record said so.
+    #
+    # `irrelevant_context_rate = 0.0` is the dangerous one: it reads as "this
+    # context introduced no irrelevant material", which is the most flattering
+    # number a retrieval metric can carry, and here it was produced by a
+    # retrieval that retrieved nothing. It is the same failure as
+    # `no_comparable_samples` in the numerical chain and `capability_measured`
+    # in the promotion chain: an absence, rendered as a clean result.
+    insufficient_evidence: bool
+
+    def __post_init__(self) -> None:
+        if self.insufficient_evidence and self.k > 0:
+            raise ValueError(
+                "insufficient_evidence is true but k > 0: a package that "
+                "retrieved something is not an evidence-free package, and "
+                "allowing the combination would let a measured rate and an "
+                "unmeasured one be reported for the same package"
+            )
+
+    @property
+    def measured(self) -> bool:
+        """Whether the rates above describe a real retrieval.
+
+        A property rather than a second stored flag, so it cannot disagree
+        with ``k``: there is no way to construct a ``k=0`` record that claims
+        to be measured.
+        """
+        return self.k > 0
 
 
 def build_evidence_package(
@@ -186,6 +221,10 @@ def evaluate_retrieval_package(
         raw_source_tokens=raw_source_tokens,
         compression_ratio=package.token_count / raw_source_tokens,
         task_success_delta=with_retrieval - without_retrieval,
+        # Derived from k so the record cannot disagree with itself, and
+        # OR-ed with the package's own flag so a hand-built package that
+        # claims evidence it does not have is still reported as such.
+        insufficient_evidence=bool(package.insufficient_evidence) or k == 0,
     )
 
 

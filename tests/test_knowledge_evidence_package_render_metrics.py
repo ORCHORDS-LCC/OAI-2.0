@@ -19,7 +19,7 @@ do NOT pin:
 - ``EvidencePackageEntry`` shape (8 fields + ``score`` default ``None``) +
   ``frozen=True`` + ``slots=True``.
 - ``EvidencePackage`` shape (6 fields) + ``frozen=True`` + ``slots=True``.
-- ``RetrievalMetrics`` shape (7 fields) + ``frozen=True`` + ``slots=True``.
+- ``RetrievalMetrics`` shape (9 fields) + ``frozen=True`` + ``slots=True``.
 - ``EvidencePackageEntry.render()`` line format with ``score=None`` vs
   ``score=0.500000`` (6-decimal format).
 - ``EvidencePackage.render()`` join contract (``\n\n`` separator).
@@ -31,7 +31,8 @@ do NOT pin:
 - ``evaluate_retrieval_package`` math precision: ``precision_at_k``,
   ``recall``, ``irrelevant_context_rate``, ``compression_ratio``,
   ``task_success_delta`` — pinned at boundary conditions (k=0, all-relevant,
-  no-relevant).
+  no-relevant), and ``insufficient_evidence``/``measured`` so an
+  evidence-free package is never readable as a clean measurement.
 - ``__all__`` + package-level re-exports identity check.
 
 A refactor that drops the ``source_uri or artifact_ref`` precedence, that
@@ -47,7 +48,11 @@ import pytest
 from oai2.core import KnowledgeId
 from oai2.knowledge import evidence_package as evidence_package_mod
 from oai2.knowledge import sha256_hex
-from oai2.knowledge.abstraction import RetrievalCandidate, RetrievalResult
+from oai2.knowledge.abstraction import (
+    KnowledgeObject,
+    RetrievalCandidate,
+    RetrievalResult,
+)
 from oai2.knowledge.evidence_package import (
     EVIDENCE_PACKAGE_VERSION,
     EvidencePackage,
@@ -231,6 +236,7 @@ def test_retrieval_metrics_required_field_set() -> None:
         raw_source_tokens=100,
         compression_ratio=0.0,
         task_success_delta=0.0,
+        insufficient_evidence=True,
     )
     assert metrics.k == 0
     assert metrics.precision_at_k == 0.0
@@ -240,6 +246,9 @@ def test_retrieval_metrics_required_field_set() -> None:
     assert metrics.raw_source_tokens == 100
     assert metrics.compression_ratio == 0.0
     assert metrics.task_success_delta == 0.0
+    assert metrics.insufficient_evidence is True
+    # k=0 cannot claim to be measured, whatever any other field says.
+    assert metrics.measured is False
 
 
 def test_retrieval_metrics_is_frozen() -> None:
@@ -253,6 +262,7 @@ def test_retrieval_metrics_is_frozen() -> None:
         raw_source_tokens=100,
         compression_ratio=0.0,
         task_success_delta=0.0,
+        insufficient_evidence=True,
     )
     with pytest.raises((AttributeError, Exception)):
         metrics.k = 999  # type: ignore[misc]
@@ -270,6 +280,7 @@ def test_retrieval_metrics_is_slotted() -> None:
         raw_source_tokens=100,
         compression_ratio=0.0,
         task_success_delta=0.0,
+        insufficient_evidence=True,
     )
     with pytest.raises(AttributeError):
         metrics.injected = "value"  # type: ignore[attr-defined]
@@ -878,3 +889,284 @@ def test_evidence_package_symbols_are_exported_from_knowledge_package() -> None:
     # TokenCounter is a TypeAlias (Callable[[str], int]), so equality is the
     # expected identity.
     assert ExportedTokenCounter is type(TokenCounter) or callable(ExportedTokenCounter)
+
+
+# ---------------------------------------------------------------------------
+# An evidence-free retrieval must not read as a clean measurement.
+#
+# The gap: `EvidencePackage` already carried `insufficient_evidence`
+# (`not selected`), and `evaluate_retrieval_package` dropped it. Two ordinary
+# failures -- retrieval returning nothing, and a candidate that did not fit
+# the budget -- both produced k=0 with precision 0.0, recall 0.0 and
+# `irrelevant_context_rate = 0.0`, and nothing on the metrics record said the
+# measurement had not happened.
+#
+# `irrelevant_context_rate = 0.0` is the dangerous one. It reads as "this
+# context introduced no irrelevant material" -- the most flattering number a
+# retrieval metric can carry -- and it was produced by a retrieval that
+# retrieved nothing. Same family as `no_comparable_samples` and
+# `capability_measured`: an absence rendered as a clean result.
+# ---------------------------------------------------------------------------
+
+
+def _counter(text: str) -> int:
+    return len(text.split())
+
+
+def _empty_package() -> EvidencePackage:
+    """Retrieval returned nothing at all."""
+    return build_evidence_package(
+        RetrievalResult(topic="t", objects=(), candidates=()),
+        token_budget=200,
+        token_counter=_counter,
+    )
+
+
+def _overflow_package() -> EvidencePackage:
+    """A real candidate existed but did not fit the token budget."""
+    obj = KnowledgeObject(
+        knowledge_id="k1",
+        topic="t",
+        content="x y z",
+        content_hash="h" * 64,
+        source_uri="s://1",
+        retrieved_at=1.0,
+        authority=0.5,
+    )
+    candidate = RetrievalCandidate(
+        knowledge_id="k1",
+        content_hash="h" * 64,
+        score=1.0,
+        source_uri="s://1",
+    )
+    return build_evidence_package(
+        RetrievalResult(topic="t", objects=(obj,), candidates=(candidate,)),
+        token_budget=2,
+        token_counter=_counter,
+    )
+
+
+def _metrics(package: EvidencePackage) -> RetrievalMetrics:
+    return evaluate_retrieval_package(
+        package,
+        relevant_knowledge_ids=["k1"],
+        raw_source_tokens=100,
+        task_success_with_retrieval=0.0,
+        task_success_without_retrieval=0.0,
+    )
+
+
+class TestEvidenceFreeRetrievalIsNotAMeasurement:
+    def test_retrieval_returning_nothing_is_marked(self) -> None:
+        package = _empty_package()
+        assert package.insufficient_evidence is True
+        metrics = _metrics(package)
+        assert metrics.k == 0
+        assert metrics.insufficient_evidence is True
+        assert metrics.measured is False
+
+    def test_budget_overflow_is_marked(self) -> None:
+        """The less obvious path to the same empty package."""
+        package = _overflow_package()
+        assert package.insufficient_evidence is True
+        assert _metrics(package).insufficient_evidence is True
+
+    def test_a_real_retrieval_is_still_marked_as_measured(self) -> None:
+        """Guard the opposite failure, so a fix cannot just always say True."""
+        obj = KnowledgeObject(
+            knowledge_id="k1",
+            topic="t",
+            content="alpha beta",
+            content_hash="h" * 64,
+            source_uri="s://1",
+            retrieved_at=1.0,
+        )
+        candidate = RetrievalCandidate(
+            knowledge_id="k1",
+            content_hash="h" * 64,
+            score=1.0,
+            source_uri="s://1",
+        )
+        package = build_evidence_package(
+            RetrievalResult(topic="t", objects=(obj,), candidates=(candidate,)),
+            token_budget=500,
+            token_counter=_counter,
+        )
+        assert package.insufficient_evidence is False
+        metrics = _metrics(package)
+        assert metrics.k == 1
+        assert metrics.insufficient_evidence is False
+        assert metrics.measured is True
+
+    def test_all_relevant_retrieved_still_reports_precision_one(self) -> None:
+        """A measured, perfect result must keep reporting 1.0, not be hidden."""
+        obj = KnowledgeObject(
+            knowledge_id="k1",
+            topic="t",
+            content="alpha",
+            content_hash="h" * 64,
+            source_uri="s://1",
+        )
+        candidate = RetrievalCandidate(
+            knowledge_id="k1",
+            content_hash="h" * 64,
+            score=1.0,
+            source_uri="s://1",
+        )
+        package = build_evidence_package(
+            RetrievalResult(topic="t", objects=(obj,), candidates=(candidate,)),
+            token_budget=500,
+            token_counter=_counter,
+        )
+        metrics = _metrics(package)
+        assert metrics.measured is True
+        assert metrics.precision_at_k == 1.0
+        assert metrics.recall == 1.0
+        assert metrics.irrelevant_context_rate == 0.0
+
+    def test_no_retrieved_entry_can_claim_to_be_measured(self) -> None:
+        """`measured` is derived from k, so no construction can lie about it."""
+        assert _metrics(_empty_package()).measured is False
+        assert _metrics(_overflow_package()).measured is False
+
+    def test_contradictory_construction_is_rejected(self) -> None:
+        """k>0 with insufficient_evidence=True is an unconstructible lie."""
+        with pytest.raises(ValueError, match="insufficient_evidence"):
+            RetrievalMetrics(
+                k=1,
+                precision_at_k=1.0,
+                recall=1.0,
+                irrelevant_context_rate=0.0,
+                package_tokens=3,
+                raw_source_tokens=100,
+                compression_ratio=0.03,
+                task_success_delta=0.0,
+                insufficient_evidence=True,
+            )
+
+    def test_the_flag_survives_serialization(self) -> None:
+        """An evidence artifact is read by someone who is not the writer."""
+        import dataclasses
+
+        payload = dataclasses.asdict(_metrics(_empty_package()))
+        assert payload["insufficient_evidence"] is True
+        assert payload["k"] == 0
+
+
+class TestEvidenceFreeNegativeControls:
+    """Mutate the fix; the guards above must fail."""
+
+    def test_control_defaulted_flag_lets_k0_claim_measured(self, tmp_path) -> None:
+        """The reason the field is required rather than defaulted.
+
+        A default of False would make the construction site optional, and then
+        an evidence-free package would report `insufficient_evidence=False`
+        whenever the call site forgot it -- exactly the original defect, one
+        indirection away. This mutation reproduces that world.
+        """
+        import importlib.util
+        import pathlib
+        import sys
+
+        import oai2.knowledge.evidence_package as ep
+
+        path = pathlib.Path(ep.__file__)
+        source = path.read_text()
+        # Anchor on the surrounding context, not the bare declaration:
+        # `EvidencePackage` declares a field of the same name, so replacing the
+        # declaration alone would default THAT class and leave the one under
+        # test required -- a control that looks like it ran and proves nothing.
+        decl = "    insufficient_evidence: bool\n\n    def __post_init__"
+        assert decl in source, "declaration not found; control is stale"
+        target = tmp_path / "mutant_evidence_package.py"
+        target.write_text(
+            source.replace(
+                decl,
+                "    insufficient_evidence: bool = False\n\n    def __post_init__",
+                1,
+            ).replace(
+                "        insufficient_evidence=bool(package.insufficient_evidence) or k == 0,\n",
+                "",
+                1,
+            )
+        )
+        name = "oai2.knowledge._mutant_evidence_package"
+        spec = importlib.util.spec_from_file_location(name, target)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            del sys.modules[name]
+            raise
+
+        package = module.build_evidence_package(
+            module.RetrievalResult(topic="t", objects=(), candidates=()),
+            token_budget=200,
+            token_counter=_counter,
+        )
+        assert package.insufficient_evidence is True, "fixture no longer empty"
+        metrics = module.evaluate_retrieval_package(
+            package,
+            relevant_knowledge_ids=["k1"],
+            raw_source_tokens=100,
+            task_success_with_retrieval=0.0,
+            task_success_without_retrieval=0.0,
+        )
+        assert metrics.k == 0
+        # The mutation bites: an evidence-free package now claims it was
+        # measured, and only the derived property still catches it.
+        assert metrics.insufficient_evidence is False
+        with pytest.raises(AssertionError):
+            assert metrics.insufficient_evidence is True
+
+    def test_control_validation_removed(self, tmp_path) -> None:
+        """Without __post_init__, a k>0 record can still claim no evidence."""
+        import importlib.util
+        import pathlib
+        import sys
+
+        import oai2.knowledge.evidence_package as ep
+
+        path = pathlib.Path(ep.__file__)
+        source = path.read_text()
+        guard = '''    def __post_init__(self) -> None:
+        if self.insufficient_evidence and self.k > 0:
+            raise ValueError(
+                "insufficient_evidence is true but k > 0: a package that "
+                "retrieved something is not an evidence-free package, and "
+                "allowing the combination would let a measured rate and an "
+                "unmeasured one be reported for the same package"
+            )
+'''
+        assert guard in source, "guard not found; control is stale"
+        target = tmp_path / "mutant_evidence_package2.py"
+        target.write_text(source.replace(guard, "", 1))
+        name = "oai2.knowledge._mutant_evidence_package2"
+        spec = importlib.util.spec_from_file_location(name, target)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            del sys.modules[name]
+            raise
+
+        liar = module.RetrievalMetrics(
+            k=3,
+            precision_at_k=1.0,
+            recall=1.0,
+            irrelevant_context_rate=0.0,
+            package_tokens=9,
+            raw_source_tokens=100,
+            compression_ratio=0.09,
+            task_success_delta=0.0,
+            insufficient_evidence=True,
+        )
+        assert liar.k == 3 and liar.insufficient_evidence is True, (
+            "mutation did not bite: the contradictory record was accepted"
+        )
+        with pytest.raises(AssertionError):
+            assert not liar.insufficient_evidence
