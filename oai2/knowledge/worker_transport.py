@@ -13,12 +13,19 @@ import time
 from collections.abc import Sequence
 from typing import Protocol
 
+from ..observability import TraceRecorder
 from .abstraction import RetrievalRequest
 from .admission import KnowledgeSaturatedError
 from .cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
     KnowledgeIntegrityError,
+)
+from .observability import (
+    emit_conflict,
+    emit_dependency_failure,
+    emit_integrity_failure,
+    emit_internal_failure,
 )
 from .transport import (
     KnowledgeTransportRequest,
@@ -54,7 +61,22 @@ class KnowledgeWorkerTransport:
         request: KnowledgeTransportRequest,
         *,
         now: float | None = None,
+        trace: TraceRecorder | None = None,
     ) -> KnowledgeTransportResponse:
+        """Handle one request.
+
+        ``trace`` is the request's existing recorder, passed down from the
+        transport boundary. It is NOT minted here: one trace per accepted
+        request, so the entrypoint, admission, transport and runtime events
+        correlate. When a caller supplies none — a direct ``handle()`` call
+        outside the Worker — failure events are simply not emitted, because
+        there is no trace to correlate them into. Minting one here would
+        produce a second, unrelated trace for the same logical request.
+
+        This method emits failure DETAIL only. ``knowledge.request.completed``
+        belongs to the entrypoint, which owns the lifecycle and emits it
+        exactly once regardless of which layer saw the failure.
+        """
         timestamp = time.time() if now is None else _finite_non_negative(now, "now")
 
         required_capability = (
@@ -83,6 +105,7 @@ class KnowledgeWorkerTransport:
                     request.knowledge,
                     vector=vector,
                     now=timestamp,
+                    trace=trace,
                 )
                 return KnowledgeTransportResponse(
                     request_id=request.request_id,
@@ -93,7 +116,7 @@ class KnowledgeWorkerTransport:
 
             if request.operation is TransportOperation.GET:
                 assert request.knowledge_id is not None
-                obj = await self._runtime.get(request.knowledge_id)
+                obj = await self._runtime.get(request.knowledge_id, trace=trace)
                 if obj is None:
                     return self._failure(
                         request,
@@ -118,6 +141,7 @@ class KnowledgeWorkerTransport:
                     include_status=request.include_status,
                 ),
                 query_vector=vector,
+                trace=trace,
             )
             return KnowledgeTransportResponse(
                 request_id=request.request_id,
@@ -136,6 +160,9 @@ class KnowledgeWorkerTransport:
                 retryable=exc.error.retryable,
             )
         except KnowledgeConflictError as exc:
+            emit_conflict(
+                trace, timestamp=timestamp, request_id=request.request_id
+            )
             return self._failure(
                 request,
                 TransportErrorCode.CONFLICT,
@@ -143,6 +170,9 @@ class KnowledgeWorkerTransport:
                 retryable=True,
             )
         except KnowledgeIntegrityError as exc:
+            emit_integrity_failure(
+                trace, timestamp=timestamp, request_id=request.request_id
+            )
             return self._failure(
                 request,
                 TransportErrorCode.INTEGRITY,
@@ -150,6 +180,9 @@ class KnowledgeWorkerTransport:
                 retryable=False,
             )
         except RuntimeError as exc:
+            emit_dependency_failure(
+                trace, timestamp=timestamp, request_id=request.request_id
+            )
             return self._failure(
                 request,
                 TransportErrorCode.UNAVAILABLE_DEPENDENCY,
@@ -157,6 +190,13 @@ class KnowledgeWorkerTransport:
                 retryable=True,
             )
         except Exception:
+            # Deliberately NOT knowledge.dependency.failure. An unexpected
+            # exception is our bug, not an infrastructure fault, and reporting
+            # it as a dependency failure would send an on-call engineer to D1
+            # instead of to a stack trace. It gets its own event type.
+            emit_internal_failure(
+                trace, timestamp=timestamp, request_id=request.request_id
+            )
             return self._failure(
                 request,
                 TransportErrorCode.INTERNAL,

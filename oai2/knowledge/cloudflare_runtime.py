@@ -16,6 +16,7 @@ from dataclasses import replace
 from pydantic import ValidationError
 
 from ..core import KnowledgeId
+from ..observability import TraceRecorder
 from .abstraction import (
     KnowledgeObject,
     RetrievalCandidate,
@@ -30,6 +31,7 @@ from .cloudflare_bindings_runtime import (
     CloudflareVectorizeStore,
 )
 from .knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
+from .observability import KV_OPERATION_GET, KV_OPERATION_PUT, emit_kv_degraded
 from .transport import (
     KnowledgeCacheRef,
     QueryCacheEnvelope,
@@ -83,6 +85,7 @@ class AsyncCloudflareKnowledgeRuntime:
         *,
         vector: Sequence[float] | None = None,
         now: float | None = None,
+        trace: TraceRecorder | None = None,
     ) -> int:
         """Persist one object and return the new authoritative corpus revision.
 
@@ -152,7 +155,9 @@ class AsyncCloudflareKnowledgeRuntime:
             )
         return revision
 
-    async def get(self, knowledge_id: KnowledgeId) -> KnowledgeObject | None:
+    async def get(
+        self, knowledge_id: KnowledgeId, *, trace: TraceRecorder | None = None
+    ) -> KnowledgeObject | None:
         row = await self._reader.get_row(knowledge_id)
         if row is None:
             return None
@@ -163,6 +168,7 @@ class AsyncCloudflareKnowledgeRuntime:
         request: RetrievalRequest,
         *,
         query_vector: Sequence[float] | None = None,
+        trace: TraceRecorder | None = None,
     ) -> RetrievalResult:
         """Retrieve through revisioned KV cache, D1/R2, and optional Vectorize."""
         start_revision = await self._writer.corpus_revision()
@@ -173,7 +179,7 @@ class AsyncCloudflareKnowledgeRuntime:
         )
 
         if query_vector is None:
-            cached = await self._cache_get(cache_key)
+            cached = await self._cache_get(cache_key, trace=trace)
             if cached is not None:
                 cached_result = await self._try_cached_result(
                     request,
@@ -226,8 +232,11 @@ class AsyncCloudflareKnowledgeRuntime:
                     ttl_seconds=300,
                 )
             except Exception:
-                # KV is explicitly non-authoritative and best-effort.
-                pass
+                # KV is explicitly non-authoritative and best-effort. The write
+                # is not retried and the request does not fail; a raised write
+                # is reported as degradation so a persistently failing cache is
+                # visible rather than silent.
+                emit_kv_degraded(trace, operation=KV_OPERATION_PUT, timestamp=time.time())
 
         return RetrievalResult(
             topic=request.topic,
@@ -361,10 +370,25 @@ class AsyncCloudflareKnowledgeRuntime:
             embedding_ref=row.vectorize_id,
         )
 
-    async def _cache_get(self, cache_key: str) -> str | None:
+    async def _cache_get(
+        self, cache_key: str, *, trace: TraceRecorder | None = None
+    ) -> str | None:
         try:
             return await self._kv.get_text(cache_key)
         except Exception:
+            # A KV read that RAISED is not a cache miss. Collapsing the two
+            # made a KV outage look like a perfectly healthy empty cache, which
+            # is how a silent cache failure survives for a long time: nothing
+            # errors, every request is just slower. The operation continues
+            # against authoritative D1 either way, so this stays a degraded
+            # signal and never a request failure.
+            #
+            # The recorder is a PARAMETER, never stored on self. Self is
+            # rebuilt per request today, so a stored recorder would appear to
+            # work; that is exactly the shape that leaks a stale request's
+            # trace the moment anything caches the runtime. A parameter cannot
+            # outlive the call it was given to.
+            emit_kv_degraded(trace, operation=KV_OPERATION_GET, timestamp=time.time())
             return None
 
     async def _try_cached_result(

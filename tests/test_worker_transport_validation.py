@@ -103,6 +103,7 @@ class _FakeRuntime:
         *,
         vector: object = None,
         now: float | None = None,
+        trace: object = None,
     ) -> int:
         if self.error is not None:
             raise self.error
@@ -110,12 +111,17 @@ class _FakeRuntime:
         self.puts.append((obj, vector, now))
         return self.put_revision
 
-    async def get(self, _knowledge_id: KnowledgeId) -> KnowledgeObject | None:
+    async def get(
+        self, _knowledge_id: KnowledgeId, *, trace: object = None
+    ) -> KnowledgeObject | None:
         if self.error is not None:
             raise self.error
         return self.get_result
 
-    async def retrieve(self, request: object, *, query_vector: object = None) -> RetrievalResult:
+    async def retrieve(
+        self, request: object, *, query_vector: object = None,
+        trace: object = None,
+    ) -> RetrievalResult:
         if self.error is not None:
             raise self.error
         self.retrieves.append((request, query_vector))

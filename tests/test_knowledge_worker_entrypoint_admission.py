@@ -138,7 +138,10 @@ class _Components:
         self.transport = self
         self.handled: list[object] = []
 
-    async def handle(self, request: object) -> Any:
+    async def handle(self, request: object, *, trace: object = None) -> Any:
+        # ``trace`` is accepted and ignored: the real transport takes the
+        # request's recorder, but this fake emits no events of its own, and
+        # the tests here assert on the entrypoint's lifecycle events.
         if self._error is not None:
             await self._gate.run()
             raise self._error

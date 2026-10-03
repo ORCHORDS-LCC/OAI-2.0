@@ -404,18 +404,19 @@ def test_the_transport_boundary_surfaces_saturation_as_retryable() -> None:
         error: Exception | None = None
         puts: list[object] = field(default_factory=list)
 
-        async def put(self, obj: object, *, vector: object = None, now: float = 0.0) -> int:
+        async def put(self, obj: object, *, vector: object = None, now: float = 0.0,
+                      trace: object = None) -> int:
             if self.error is not None:
                 raise self.error
             return 1
 
-        async def get(self, knowledge_id: str) -> object | None:
+        async def get(self, knowledge_id: str, *, trace: object = None) -> object | None:
             if self.error is not None:
                 raise self.error
             return None
 
         async def retrieve(self, request: object, *, query_vector: object = None,
-                           now: float = 0.0) -> object:
+                           now: float = 0.0, trace: object = None) -> object:
             if self.error is not None:
                 raise self.error
             return None

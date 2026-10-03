@@ -136,6 +136,17 @@ class EventType(StrEnum):
     KNOWLEDGE_CONFLICT = "knowledge.conflict"
     KNOWLEDGE_KV_DEGRADED = "knowledge.kv.degraded"
     KNOWLEDGE_RETRY = "knowledge.retry"
+    # A ninth type, beyond the eight the CFOPS contract names, and added
+    # deliberately. An unexpected exception is OUR bug, not a dependency
+    # fault, and the two want opposite responses from whoever is on call:
+    # "D1 is down" is a retry-the-service signal, "we threw a bare Exception"
+    # is a stop-and-debug signal. Forcing it into knowledge.dependency.failure
+    # to reuse an existing event would have made the failure-by-outcome metric
+    # report infrastructure health that does not exist, and would have taught
+    # an operator to page the D1 owner for a bug in this repository. The
+    # open-string design permits adding a type without invalidating any
+    # existing trace, so the cost of the ninth type is one entry in a tuple.
+    KNOWLEDGE_INTERNAL_FAILURE = "knowledge.internal.failure"
 
     # --- model ----------------------------------------------------------
     MODEL_REQUEST = "model.request"

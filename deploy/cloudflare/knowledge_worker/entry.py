@@ -30,6 +30,8 @@ anyway. A request that reaches a missing schema fails clearly instead.
 from __future__ import annotations
 
 import hmac
+import time
+from typing import ClassVar
 
 from pydantic import ValidationError
 from workers import Response, WorkerEntrypoint
@@ -44,9 +46,17 @@ from oai2.knowledge import (
 )
 from oai2.knowledge.admission import (
     DEFAULT_ADMISSION_LIMIT,
+    ISOLATE_ADMISSION,
     acquire_admission,
     validate_limit,
 )
+from oai2.knowledge.observability import (
+    emit_completed,
+    emit_dependency_failure,
+    emit_request_started,
+    emit_saturated,
+)
+from oai2.observability import EventSink, NullEventSink, TraceRecorder, new_request_recorder
 
 #: Env var carrying the per-isolate knowledge admission limit. Read and
 #: validated on EVERY request, then passed into the module-scope admission
@@ -57,6 +67,17 @@ ADMISSION_LIMIT_ENV = "KNOWLEDGE_MAX_IN_FLIGHT"
 
 
 class Default(WorkerEntrypoint):
+    #: Injectable event sink, class-level.
+    #:
+    #: The Worker runtime constructs ``Default(env)`` itself and passes no
+    #: collaborators, so a sink cannot arrive through the constructor. A class
+    #: attribute is configuration, not per-request state: unlike admission
+    #: counters, a sink holds nothing that must be shared or must NOT be
+    #: shared between invocations. ``NullEventSink`` is the default because
+    #: there is no metrics backend in the Worker yet, and instrumentation must
+    #: never be a prerequisite for serving a request.
+    event_sink: ClassVar[EventSink] = NullEventSink()
+
     async def fetch(self, request):
         # ---- Cheap validation. None of this consumes an admission slot. ----
         if str(request.method).upper() != "POST":
@@ -127,6 +148,27 @@ class Default(WorkerEntrypoint):
                 status=400,
             )
 
+        # ---- ONE trace for this accepted request. ----
+        # Minted here, once, after validation and before admission. Every layer
+        # below receives this recorder; none of them mints a trace of its own,
+        # which is what makes the entrypoint/admission/transport/runtime events
+        # one correlated trace instead of four unrelated ones.
+        #
+        # scope is narrow on purpose: only requests that got as far as a valid
+        # KnowledgeTransportRequest are traced. A malformed body or a failed
+        # auth is a transport-boundary reject, not a knowledge operation, and
+        # counting it as one would make "requests started" disagree with what
+        # the runtime actually attempted.
+        recorder: TraceRecorder = new_request_recorder(
+            sink=self.event_sink,
+            request_id=transport_request.request_id,
+        )
+        emit_request_started(
+            recorder,
+            operation=transport_request.operation.value,
+            timestamp=_now(),
+        )
+
         # ---- Admission, BEFORE any component init or awaited dependency. ----
         # Acquiring here means an unauthenticated, malformed or invalid
         # request never occupies a knowledge-operation slot, while everything
@@ -137,6 +179,17 @@ class Default(WorkerEntrypoint):
             # A misconfigured limit is an operator error, not caller error, and
             # it is not a saturation: the isolate is not full, it is
             # misconfigured. Fail closed without pretending to be backpressure.
+            #
+            # Completion is still emitted: the request WAS accepted and it DID
+            # finish, with an internal outcome. Lifecycle ownership does not
+            # stop at the admission door.
+            emit_completed(
+                recorder,
+                timestamp=_now(),
+                ok=False,
+                outcome=TransportErrorCode.INTERNAL.value,
+                retryable=False,
+            )
             return Response.json(
                 _error_payload(
                     transport_request.request_id,
@@ -146,11 +199,21 @@ class Default(WorkerEntrypoint):
                 status=500,
             )
         except Exception as exc:  # KnowledgeSaturatedError
+            # The refusal is reported, and the sanitized admission snapshot is
+            # recorded. The snapshot is TELEMETRY ONLY: the response body
+            # below still carries the fixed generic message and no counts.
+            emit_saturated(recorder, timestamp=_now(), snapshot=ISOLATE_ADMISSION.snapshot())
+            saturated = _saturated_response(transport_request.request_id, exc)
+            emit_completed(
+                recorder,
+                timestamp=_now(),
+                ok=False,
+                outcome=TransportErrorCode.SATURATED.value,
+                retryable=True,
+            )
             return Response.json(
-                _saturated_payload(transport_request.request_id, exc),
-                status=_status_for_error(_saturated_response(
-                    transport_request.request_id, exc
-                )),
+                saturated.model_dump(mode="json"),
+                status=_status_for_error(saturated),
             )
 
         # ---- Everything below is inside the bound, and must release. ----
@@ -160,8 +223,17 @@ class Default(WorkerEntrypoint):
         try:
             try:
                 components = await self._components()
-                response = await components.transport.handle(transport_request)
+                response = await components.transport.handle(
+                    transport_request, trace=recorder
+                )
             except Exception:
+                # The transport was never reached, so it emitted no detail
+                # event. A failure to build components IS a dependency
+                # failure and is reported as one here, rather than
+                # fabricating a transport invocation that never happened.
+                emit_dependency_failure(
+                    recorder, timestamp=_now(), request_id=transport_request.request_id
+                )
                 response = KnowledgeTransportResponse(
                     request_id=transport_request.request_id,
                     ok=False,
@@ -175,6 +247,21 @@ class Default(WorkerEntrypoint):
                 )
         finally:
             lease.release()
+
+        # EXACTLY ONE completion, here, for every admitted request. The
+        # transport emits failure DETAIL only; it never emits a completion, so
+        # this cannot be duplicated by a success and a failure path racing.
+        error = response.error
+        emit_completed(
+            recorder,
+            timestamp=_now(),
+            ok=response.ok,
+            outcome=(
+                "ok" if response.ok
+                else (error.code.value if error is not None else "internal")
+            ),
+            retryable=error.retryable if error is not None else False,
+        )
 
         status = 200 if response.ok else _status_for_error(response)
         return Response.json(response.model_dump(mode="json"), status=status)
@@ -203,6 +290,11 @@ class Default(WorkerEntrypoint):
         )
         self._knowledge_components = components
         return components
+
+
+def _now() -> float:
+    """Wall clock for event timestamps. Module scope, no binding, no state."""
+    return time.time()
 
 
 def _admission_limit(env: object) -> int:
