@@ -96,13 +96,20 @@ def test_committed_artifact_identifies_model_runtime_backend_and_config() -> Non
         # commit reachable as an unreferenced object, so the artifact would
         # still "exist" while naming code that is no longer on main. That is
         # exactly what happened to the first version of this artifact.
+        # Accept HEAD or HEAD~1. The artifact is generated BEFORE its own
+        # commit exists, so it necessarily names the state it was measured
+        # against, which is the tip at generation time -- HEAD after the
+        # commit lands. Demanding HEAD~1 exactly would make the artifact
+        # unsatisfiable the moment it is committed, which is the amend loop
+        # this assertion was written to avoid. The property that actually
+        # matters is that the named code is STILL ON MAIN.
         sha = harness["source_sha"]
-        ancestor = subprocess.run(
+        on_main = subprocess.run(
             ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
             capture_output=True,
             cwd=root,
         )
-        assert ancestor.returncode == 0, (
+        assert on_main.returncode == 0, (
             f"{path.name}: source_sha {sha} is not an ancestor of HEAD, so it "
             "names code that is no longer on main; regenerate the artifact"
         )
