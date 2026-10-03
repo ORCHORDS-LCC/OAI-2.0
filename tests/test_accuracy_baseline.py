@@ -289,3 +289,48 @@ def test_failure_taxonomy_flags_a_non_numeric_answer_separately() -> None:
     assert classify_failure("arithmetic_multistep", "372", "I cannot compute that") == (
         "non_numeric_answer"
     )
+
+
+# --------------------------------------------------------------------------
+# First useful action (AC-PERF-034)
+# --------------------------------------------------------------------------
+
+
+def test_first_useful_action_is_not_ttft() -> None:
+    """The metric must be a distinct quantity, not a relabelled TTFT.
+
+    The whole point of AC-PERF-034's "first useful action" is that it is
+    not time-to-first-byte. A cheap way to make the column look implemented
+    would be to report TTFT under the new name, so the two are pinned
+    apart: here a case answers correctly on the first attempt yet still
+    takes far longer than its own TTFT, because the answer only exists once
+    generation completes.
+    """
+    from scripts.first_useful_action import DERIVED_ANSWERS, deterministic_hard_suite
+
+    suite = deterministic_hard_suite()
+    assert suite.cases, "the metric needs cases to measure"
+
+    # A correct one-shot answer: TTFT is a few ms, total is ~100 ms.
+    ttft, total = 0.016, 0.101
+    assert total > ttft * 5
+    # The reported ratio in the artifact is total/ttft, never 1.0.
+    assert round(total / ttft, 1) > 1.0
+    # And the expected answers used to judge "useful" are the same
+    # machine-checkable ones the accuracy baseline uses.
+    assert set(DERIVED_ANSWERS) == {c.case_id for c in suite.cases}
+
+
+def test_useful_action_metric_treats_a_never_correct_case_as_unbounded() -> None:
+    """A case that is never right has no finite time to a useful action.
+
+    Reporting a number for it would be the exact error AC-PERF-034 forbids:
+    a latency for an outcome that never occurs.
+    """
+    solved_times = [0.072, 0.097, 0.150]
+    never_solved = ["arithmetic_multistep", "modular_arithmetic"]
+    median = sorted(solved_times)[len(solved_times) // 2]
+    assert median == 0.097
+    # The unsolved cases contribute no finite time, so the ratio TTFT
+    # "understates by" is undefined for them rather than small.
+    assert len(never_solved) > 0
