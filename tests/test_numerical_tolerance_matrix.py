@@ -93,6 +93,21 @@ def test_matrix_is_not_all_zero() -> None:
     assert any(c.max_rel > 0.0 for c in cells)
 
 
+def test_each_cell_records_the_inputs_it_compared() -> None:
+    """A cell must say WHICH samples produced its numbers (d8862af).
+
+    Without the digest, two cells reporting the same figures from different
+    inputs are indistinguishable, and a reader cannot tell what a numerical
+    failure came from.
+    """
+    module = _load()
+    cells = module.build_matrix()  # type: ignore[attr-defined]
+    digests = {c.input_digest for c in cells}
+    assert all(d.startswith("sha256:") for d in digests)
+    # Six distinct operations must not collapse to one digest.
+    assert len(digests) == len(cells), "two cells share an input digest"
+
+
 def test_committed_matrix_artifact_is_sha_tied_and_honest() -> None:
     artifacts = sorted((_REPO / "evidence" / "numerical").glob("tolerance_matrix_*.json"))
     assert artifacts, "no tolerance matrix artifact committed"
@@ -117,6 +132,9 @@ def test_committed_matrix_artifact_is_sha_tied_and_honest() -> None:
         assert "shape" in joined, f"{path.name}: shape coverage unstated"
 
         for cell in data["distribution"]:
+            assert cell.get("input_digest", "").startswith("sha256:"), (
+                f"{path.name}: a cell does not record what was compared"
+            )
             for field in ("max_abs_error", "max_rel_error"):
                 value = cell[field]
                 assert isinstance(value, (int, float))

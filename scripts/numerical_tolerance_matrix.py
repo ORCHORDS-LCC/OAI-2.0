@@ -56,6 +56,10 @@ class Cell:
     max_abs: float
     max_rel: float
     all_finite: bool
+    #: Digest of the exact sample pair, from the gate itself (d8862af). Two
+    #: cells that report the same numbers from different inputs would
+    #: otherwise be indistinguishable in this artifact.
+    input_digest: str
 
 
 def lossy_candidate(values: tuple[float, ...], storage_dtype: str) -> list[float]:
@@ -145,6 +149,7 @@ def build_matrix() -> list[Cell]:
                 max_abs=comparison.max_abs_error,
                 max_rel=comparison.max_rel_error,
                 all_finite=comparison.finite_state_match,
+                input_digest=comparison.input_digest,
             )
         )
     return cells
@@ -161,7 +166,8 @@ def main() -> int:
     for c in cells:
         print(
             f"{c.operation:24s} {c.storage_dtype:16s} {c.shape_class:12s} "
-            f"{c.n:2d} {c.max_abs:12.4e} {c.max_rel:12.4e} {c.all_finite}"
+            f"{c.n:2d} {c.max_abs:12.4e} {c.max_rel:12.4e} "
+            f"{str(c.all_finite):6s} {c.input_digest[:23]}"
         )
     print()
 
@@ -226,6 +232,7 @@ def main() -> int:
                 "max_abs_error": c.max_abs,
                 "max_rel_error": c.max_rel,
                 "finite_state_match": c.all_finite,
+                "input_digest": c.input_digest,
             }
             for c in cells
         ],
