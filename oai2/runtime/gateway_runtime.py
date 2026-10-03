@@ -31,6 +31,7 @@ under ``httpx.MockTransport``. Live end-to-end verification requires
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from collections.abc import Mapping
@@ -136,6 +137,15 @@ def load_gateway_config_from_env(
         try:
             timeout = float(raw_timeout)
         except ValueError:
+            timeout = DEFAULT_TIMEOUT_SECONDS
+        # ``float`` also accepts "nan", "inf" and negatives, none of which is a
+        # usable timeout. httpx does not reject them when the Timeout is built
+        # — it raises from inside the request, where ``generate`` only catches
+        # ``httpx.HTTPError``, so a typo in this one variable surfaced on every
+        # call as a bare ValueError instead of the documented
+        # GatewayRuntimeError. Rejecting here keeps the fallback total: any
+        # value the transport cannot honour becomes DEFAULT_TIMEOUT_SECONDS.
+        if not math.isfinite(timeout) or timeout <= 0.0:
             timeout = DEFAULT_TIMEOUT_SECONDS
     else:
         timeout = DEFAULT_TIMEOUT_SECONDS

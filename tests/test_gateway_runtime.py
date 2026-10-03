@@ -90,6 +90,71 @@ def test_load_gateway_config_from_env_rejects_bad_timeout(
     assert cfg.timeout_seconds == DEFAULT_TIMEOUT_SECONDS
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "nan",
+        "NaN",
+        "-nan",
+        "inf",
+        "Infinity",
+        "-Infinity",
+        "-5",
+        "-0.5",
+        "0",
+        "-0.0",
+    ],
+)
+def test_load_gateway_config_from_env_rejects_unusable_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+) -> None:
+    """``float`` accepts values the transport cannot honour; the gate must not.
+
+    httpx does not reject these when the ``Timeout`` is constructed — it
+    raises from inside the request, where ``generate`` catches only
+    ``httpx.HTTPError``. A typo in this variable therefore surfaced on every
+    call as a bare ``ValueError`` instead of the documented
+    ``GatewayRuntimeError``. Anything unusable falls back to the default.
+    """
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.setenv("OAI2_GATEWAY_TIMEOUT_SECONDS", raw)
+    cfg = load_gateway_config_from_env()
+    assert cfg is not None
+    assert cfg.timeout_seconds == DEFAULT_TIMEOUT_SECONDS
+
+
+@pytest.mark.parametrize("raw", ["12.5", "1e3", "0.5", "300"])
+def test_load_gateway_config_from_env_honours_usable_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+) -> None:
+    """Guard the opposite failure: a real timeout must still be honoured."""
+    monkeypatch.setenv("OAI2_GATEWAY_API_KEY", "k")
+    monkeypatch.setenv("OAI2_GATEWAY_TIMEOUT_SECONDS", raw)
+    cfg = load_gateway_config_from_env()
+    assert cfg is not None
+    assert cfg.timeout_seconds == float(raw)
+
+
+def test_unusable_timeout_yields_a_timeout_the_transport_accepts() -> None:
+    """The value that reaches httpx must be constructible, whatever the env said.
+
+    This is the property that was broken: the config loaded, the runtime was
+    built, and the failure appeared only per-request.
+    """
+    for raw in ("nan", "inf", "-5", "0", "not-a-number"):
+        cfg = load_gateway_config_from_env(
+            {"OAI2_GATEWAY_API_KEY": "k", "OAI2_GATEWAY_TIMEOUT_SECONDS": raw}
+        )
+        assert cfg is not None
+        timeout = httpx.Timeout(cfg.timeout_seconds)
+        assert all(
+            getattr(timeout, attr) == DEFAULT_TIMEOUT_SECONDS
+            for attr in ("connect", "read", "write", "pool")
+        ), f"{raw!r} produced a transport-usable but unintended timeout"
+
+
 def test_gateway_runtime_requires_api_key() -> None:
     with pytest.raises(GatewayConfigError):
         GatewayRuntime(GatewayConfig(base_url="x", api_key="", model="oai-2.0"))
