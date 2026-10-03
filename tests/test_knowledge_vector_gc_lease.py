@@ -154,30 +154,57 @@ def test_reference_count_for_a_vector_id_is_always_zero() -> None:
         assert _scalar(db, GC_LEASE_REFERENCE_COUNT_SQL, (BLOB_A,)) == 1
 
 
-def test_writer_fence_is_not_consulted_for_the_vector_it_adopts() -> None:
-    """A lease is held on the vector, and the writer adopts it anyway.
+def test_writer_fence_is_consulted_for_the_vector_it_adopts() -> None:
+    """A lease is held on the vector, and the writer must not adopt it.
 
-    The fence is only ever asked about the blob key (?1 = r2_blob_key). The
-    vector id is adopted with no check at all.
+    HISTORY, kept deliberately: this test used to be named
+    ``test_writer_fence_is_not_consulted_for_the_vector_it_adopts`` and asserted
+    the opposite. It was the evidence that the #261 gap was real — the fence
+    was only ever asked about the blob key, and a put adopted the vector id with
+    no check at all. The gap is now closed by moving the fence INSIDE the
+    writer's compare-and-set, so the assertion is inverted here.
+
+    The pre-fix behaviour is still pinned, as the RED record, in
+    ``tests/test_knowledge_writer_fence.py``.
     """
     with _authoritative_db() as db:
-        _acquire_r2_lease(db, VEC_NEW)
-        # The fence, asked honestly about the vector, WOULD block...
-        assert _scalar(db, GC_LEASE_WRITER_BLOCK_SQL, (VEC_NEW, NOW)) == 1
-        # ...but the writer asks about the body key, which is not leased.
-        assert _scalar(db, GC_LEASE_WRITER_BLOCK_SQL, (BLOB_B, NOW)) == 0
+        # The scenario that matters in #261 is a TYPED vector lease, which is
+        # what the sweeper now takes out on a vector.
+        _acquire(db, GC_RESOURCE_TYPE_VECTOR, VEC_NEW)
+        # The typed fence answers the question, for the vector as well as the
+        # body key.
+        assert _scalar(db, GC_RESOURCE_WRITER_BLOCK_SQL, (BLOB_B, VEC_NEW, NOW)) == 1
 
         revision = _writer_upsert(db, blob_key=BLOB_B, vector_id=VEC_NEW)
         row = db.execute(
             "SELECT vectorize_id FROM knowledge_index WHERE knowledge_id = ?", (KID,)
         ).fetchone()
-        assert row is not None and row[0] == VEC_NEW
-        assert revision == REV + 1, "a put adopted a vector under an active lease"
+        assert row is None, "a put adopted a vector under an active lease"
+        assert revision == -1, "the refused write still advanced the revision"
 
-        # And the guard clause in the writer SQL confirms it structurally.
-        assert "vectorize_id" not in KNOWLEDGE_WRITER_UPSERT_SQL.split(
-            "AND NOT EXISTS ("
-        )[1].split(")")[0]
+        # Structurally, the vector predicate is now inside the writer SQL.
+        assert "vectorize_id" in KNOWLEDGE_WRITER_UPSERT_SQL
+
+
+def test_a_legacy_r2_lease_keyed_on_a_vector_still_does_not_fence() -> None:
+    """An unsupported, degenerate state, recorded rather than papered over.
+
+    The #233 table is R2-only and keyed on a bare ``object_key``; nothing
+    prevents a caller putting a vector id in that column. The writer consults
+    that table with the BODY key, so such a row matches nothing and the write
+    proceeds.
+
+    This is left visible on purpose. It is a malformed lease, not a supported
+    one, and closing it would mean changing #233's table semantics — which owns
+    live lease state and is explicitly out of scope here. The real vector path
+    is covered by the typed lease above.
+    """
+    with _authoritative_db() as db:
+        _acquire_r2_lease(db, VEC_NEW)
+        # The legacy fence asked about the vector does notice...
+        assert _scalar(db, GC_LEASE_WRITER_BLOCK_SQL, (VEC_NEW, NOW)) == 1
+        # ...but the writer asks about the body key, which is not that key.
+        assert _scalar(db, GC_LEASE_WRITER_BLOCK_SQL, (BLOB_B, NOW)) == 0
 
 
 def test_r2_finalize_cannot_detect_that_a_vector_became_authoritative() -> None:
@@ -387,16 +414,29 @@ def test_the_losing_writer_is_refused_and_the_winner_keeps_its_vector() -> None:
 
 
 def test_an_adoption_that_races_a_sweeper_still_cannot_be_deleted() -> None:
-    """The unsafe sequence, now caught by the typed re-check.
+    """The unsafe sequence, caught by the typed re-check.
 
-    Writer adopts without holding the lease (or after it expired), the sweeper
-    re-validates — and this time the predicate looks at vectorize_id, so the
-    new reference IS seen and the lease refuses to validate.
+    The writer fence is the FIRST line of defence. This tests the SECOND: a
+    sweeper re-validates immediately before acting, and the typed predicate
+    looks at ``vectorize_id``, so a reference created in the window is seen and
+    the lease refuses to validate.
+
+    The adoption is written DIRECTLY, not through ``_writer_upsert``, because
+    the writer is now fenced and can no longer perform the unsafe step this
+    test needs to simulate. A row inserted directly represents a writer that
+    bypassed the fence, or a row that predates the lease — the sweeper must be
+    safe against both.
     """
     with _authoritative_db() as db:
         _acquire(db, GC_RESOURCE_TYPE_VECTOR, VEC_NEW)
-        # A writer that ignored the fence adopts the vector anyway.
-        _writer_upsert(db, blob_key=BLOB_B, vector_id=VEC_NEW)
+        # An adoption that got past the fence anyway.
+        db.execute(
+            "INSERT INTO knowledge_index ("
+            "knowledge_id, topic, content_hash, authority, status, source_uri,"
+            "retrieved_at, r2_blob_key, vectorize_id, corpus_revision) "
+            "VALUES (?, 'topic', ?, 0.5, 'active', NULL, ?, ?, ?, ?)",
+            (KID, "c" * 64, NOW, BLOB_B, VEC_NEW, REV),
+        )
 
         # The sweeper re-validates and the typed predicate catches the race.
         assert _scalar(
@@ -436,6 +476,15 @@ def test_finalize_is_idempotent_and_a_repeat_does_not_report_false_failure() -> 
 
 
 def test_failure_recording_is_bounded_and_then_refused_on_re_adoption() -> None:
+    """Failure recording stops as soon as the resource is referenced again.
+
+    The re-adoption here is written DIRECTLY rather than through the writer.
+    That is deliberate: the writer is now fenced, so it can no longer adopt a
+    vector under an unexpired lease, and driving this through it would assert
+    the bug rather than the lease invariant. The invariant under test belongs
+    to the lease statement — "a referenced resource's lease is not mutated" —
+    so the authoritative row is inserted as a row that predates the lease.
+    """
     with _authoritative_db() as db:
         _acquire(db, GC_RESOURCE_TYPE_VECTOR, VEC_NEW)
         db.execute(
@@ -447,8 +496,14 @@ def test_failure_recording_is_bounded_and_then_refused_on_re_adoption() -> None:
             "FROM knowledge_gc_resource_lease"
         ).fetchone()
         assert row == ("delete_failed", 1, "retryable_failure_recorded")
-        # Once the vector has been adopted, the failure path stops touching it.
-        _writer_upsert(db, blob_key=BLOB_B, vector_id=VEC_NEW)
+        # The vector becomes authoritative, as a prior row would have.
+        db.execute(
+            "INSERT INTO knowledge_index ("
+            "knowledge_id, topic, content_hash, authority, status, source_uri,"
+            "retrieved_at, r2_blob_key, vectorize_id, corpus_revision) "
+            "VALUES (?, 't', ?, 0.5, 'active', NULL, ?, ?, ?, ?)",
+            (KID, "c" * 64, NOW, BLOB_B, VEC_NEW, REV),
+        )
         db.execute(
             GC_RESOURCE_LEASE_RECORD_FAILURE_SQL,
             (GC_RESOURCE_TYPE_VECTOR, VEC_NEW, "tok-1", NOW + 2, REV),

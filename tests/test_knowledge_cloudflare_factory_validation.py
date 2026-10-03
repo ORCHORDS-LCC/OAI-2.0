@@ -357,14 +357,20 @@ async def test_builder_accepts_boolean_true_and_false_for_ensure_schema() -> Non
 
 
 @pytest.mark.asyncio
-async def test_builder_runs_writer_schema_then_lease_schema_in_order() -> None:
-    """``build_cloudflare_knowledge_components`` must run ``writer.ensure_schema`` BEFORE ``lease_store.ensure_schema``.
+async def test_builder_runs_the_provisioning_contract_in_order() -> None:
+    """The factory must apply the full provisioning contract, in order.
 
-    The knowledge tables / corpus state are the authoritative source for
-    ``knowledge_index`` liveness; the GC lease SQL references that
-    liveness. Running the lease schema first would fail because the
-    knowledge_index table does not exist yet.
+    It used to run two batches: the knowledge tables, then the legacy R2 lease.
+    It now delegates to ``provision_knowledge_schema``, which is three batches —
+    the third being the typed resource lease and its index. That third batch is
+    not optional: since #261 the writer's compare-and-set consults
+    ``knowledge_gc_resource_lease`` on every write, so a database provisioned
+    without it cannot serve a write at all.
     """
+    from oai2.knowledge.gc_resource_lease_d1 import (
+        gc_resource_lease_schema_statements,
+    )
+
     d1 = _FakeD1()
     await SourceBuilder(
         d1=d1,
@@ -375,9 +381,12 @@ async def test_builder_runs_writer_schema_then_lease_schema_in_order() -> None:
         embedding_digest="digest-v1",
     )
 
-    assert len(d1.batch_calls) == 2
+    assert len(d1.batch_calls) == 3
     assert [stmt.query for stmt in d1.batch_calls[0]] == list(knowledge_schema_statements())
     assert [stmt.query for stmt in d1.batch_calls[1]] == list(gc_lease_schema_statements())
+    assert [stmt.query for stmt in d1.batch_calls[2]] == list(
+        gc_resource_lease_schema_statements()
+    )
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,8 @@ credentials. The statements are designed for the D1 prepared/batch API.
 
 from __future__ import annotations
 
+from .gc_resource_lease_d1 import GC_RESOURCE_LEASE_TABLE
+
 KNOWLEDGE_SCHEMA_VERSION = 1
 KNOWLEDGE_INDEX_TABLE = "knowledge_index"
 KNOWLEDGE_CORPUS_STATE_TABLE = "knowledge_corpus_state"
@@ -100,6 +102,62 @@ ORDER BY authority DESC, retrieved_at DESC
 LIMIT ?{limit_index}
 """.strip()
 
+# #261: the resource-typed writer fence, defined ONCE.
+#
+# A put adopts a body AND a vector together, so either one being under lease
+# must stop it. This is written as a single template used by BOTH the metadata
+# upsert and the corpus-revision advance, for two reasons:
+#
+#   1. Correctness. The two statements run in one D1 batch and the writer
+#      requires them to agree: a write of 1 with a revision of 0 (or the
+#      reverse) is an inconsistent mutation count and fails closed. If the
+#      fence were written twice, the copies could drift and break that
+#      agreement in exactly the way the invariant exists to catch.
+#   2. It is not a preflight. `gc_resource_lease_d1.GC_RESOURCE_WRITER_BLOCK_SQL`
+#      can express the same question, but consuming it as
+#      `blocked = SELECT ...; if blocked: return; write()` is a TOCTOU race:
+#      a sweeper can acquire the lease in the gap and the write still lands.
+#      The predicates below therefore live INSIDE the same compare-and-set
+#      that performs the write, so the lease state and the mutation are
+#      decided by one statement against one snapshot.
+#
+# NULL handling: when a row is not vectorized, `vectorize_id` binds as NULL and
+# `resource_key = NULL` evaluates to NULL, never true, so the vector predicate
+# selects no row and the NOT EXISTS holds. A non-vectorized write is therefore
+# never blocked by a vector lease. `resource_key` is NOT NULL in the lease
+# table, so no stored lease can match a NULL key either.
+_TYPED_RESOURCE_FENCE = """
+AND NOT EXISTS (
+    SELECT 1
+    FROM {lease_table}
+    WHERE resource_type = 'r2_blob'
+      AND resource_key = {blob}
+      AND state IN ('active', 'delete_failed')
+      AND expires_at > {now}
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM {lease_table}
+    WHERE resource_type = 'vector'
+      AND resource_key = {vector}
+      AND state IN ('active', 'delete_failed')
+      AND expires_at > {now}
+)
+"""
+
+_TYPED_FENCE_UP = _TYPED_RESOURCE_FENCE.format(
+    lease_table=GC_RESOURCE_LEASE_TABLE, blob="?8", vector="?9", now="?11"
+)
+_TYPED_FENCE_CONFLICT = _TYPED_RESOURCE_FENCE.format(
+    lease_table=GC_RESOURCE_LEASE_TABLE,
+    blob="excluded.r2_blob_key",
+    vector="excluded.vectorize_id",
+    now="?11",
+)
+_TYPED_FENCE_ADVANCE = _TYPED_RESOURCE_FENCE.format(
+    lease_table=GC_RESOURCE_LEASE_TABLE, blob="?2", vector="?4", now="?3"
+)
+
 KNOWLEDGE_WRITER_UPSERT_SQL = f"""
 INSERT INTO {KNOWLEDGE_INDEX_TABLE} (
     knowledge_id,
@@ -127,6 +185,7 @@ AND NOT EXISTS (
       AND state IN ('active', 'delete_failed')
       AND expires_at > ?11
 )
+{_TYPED_FENCE_UP}
 ON CONFLICT(knowledge_id) DO UPDATE SET
     topic = excluded.topic,
     content_hash = excluded.content_hash,
@@ -150,8 +209,13 @@ AND NOT EXISTS (
       AND state IN ('active', 'delete_failed')
       AND expires_at > ?11
 )
+{_TYPED_FENCE_CONFLICT}
 """.strip()
 
+# The corpus-revision advance carries the SAME fence, on the SAME parameters,
+# so a fenced write cannot advance the revision without writing the row, nor
+# write the row without advancing the revision. ?4 is the vectorize_id the
+# write was adopting; it is new to this statement and is bound by the writer.
 KNOWLEDGE_CORPUS_ADVANCE_SQL = f"""
 UPDATE {KNOWLEDGE_CORPUS_STATE_TABLE}
 SET revision = revision + 1
@@ -164,6 +228,7 @@ WHERE singleton = 1
         AND state IN ('active', 'delete_failed')
         AND expires_at > ?3
   )
+{_TYPED_FENCE_ADVANCE}
 """.strip()
 
 

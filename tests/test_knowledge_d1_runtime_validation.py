@@ -704,8 +704,15 @@ async def test_write_metadata_rejects_non_non_negative_number_now(bad_now: objec
 
 
 @pytest.mark.asyncio
-async def test_write_metadata_binds_eleven_column_upsert_and_three_column_advance() -> None:
-    """``write_metadata`` must bind the 11-column upsert + 3-column advance in order."""
+async def test_write_metadata_binds_eleven_column_upsert_and_four_column_advance() -> None:
+    """``write_metadata`` must bind the 11-column upsert + 4-column advance.
+
+    The advance gained a fourth bind in #261. It has to carry the vectorize_id
+    the write is adopting, because the corpus advance now evaluates the same
+    resource-typed fence as the upsert; without it the two statements of one
+    batch could reach different conclusions, which is exactly the inconsistent
+    mutation count the writer fails closed on.
+    """
     db = _FakeDatabase()
     db.batch_results = [
         _FakeResult(meta=_FakeMeta(changes=1)),
@@ -736,9 +743,11 @@ async def test_write_metadata_binds_eleven_column_upsert_and_three_column_advanc
         7,
         12.0,
     )
-    # Advance bind: revision, r2_blob_key, timestamp — 3 columns.
+    # Advance bind: revision, r2_blob_key, timestamp, vectorize_id — 4 columns.
     advance_bound = db.batched[1].bound
-    assert advance_bound == (7, "oai2-blobs/" + "a" * 64, 12.0)
+    assert advance_bound == (7, "oai2-blobs/" + "a" * 64, 12.0, "ko_writer_1")
+    # And it is the SAME vectorize_id the upsert adopted, not a re-derived one.
+    assert advance_bound[3] == upsert_bound[8]
 
 
 @pytest.mark.asyncio

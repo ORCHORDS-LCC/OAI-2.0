@@ -105,6 +105,11 @@ class D1KnowledgeWriter:
             revision,
             row.r2_blob_key,
             timestamp,
+            # #261: the corpus advance carries the same resource-typed fence as
+            # the upsert, so it must know the vector this write is adopting.
+            # Without it the advance could not evaluate the vector predicate
+            # and the two statements could disagree.
+            row.vectorize_id,
         )
 
         results = await self._db.batch([upsert, advance])

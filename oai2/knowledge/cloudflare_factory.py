@@ -17,6 +17,7 @@ from .cloudflare_bindings_runtime import (
     R2BucketBinding,
     VectorizeIndexBinding,
 )
+from .cloudflare_provisioning import provision_knowledge_schema
 from .cloudflare_runtime import AsyncCloudflareKnowledgeRuntime
 from .gc_lease_d1_runtime import D1DatabaseBinding, D1GcLeaseStore
 from .knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
@@ -56,10 +57,20 @@ async def build_cloudflare_knowledge_components(
     lease_store = D1GcLeaseStore(d1)
 
     if ensure_schema:
-        # Knowledge tables/revision authority first; GC lease SQL references
-        # authoritative knowledge_index liveness.
-        await writer.ensure_schema()
-        await lease_store.ensure_schema()
+        # The knowledge tables and the revision authority come first, because
+        # both lease tables' reference predicates resolve against
+        # `knowledge_index`. The typed resource lease and the vectorize_id
+        # index follow.
+        #
+        # This delegates to the ONE ordered contract rather than repeating a
+        # sequence here. The previous version called `writer.ensure_schema()`
+        # and then `lease_store.ensure_schema()`, which applied the knowledge
+        # tables and the legacy R2 lease but NOT
+        # `knowledge_gc_resource_lease` — so a database provisioned through
+        # this path was missing a table that the writer's compare-and-set now
+        # consults on every write (#261). One definition of the order means a
+        # new lease table cannot be forgotten here again.
+        await provision_knowledge_schema(d1)
 
     r2_store = CloudflareR2Store(r2)
     vectorize_store = CloudflareVectorizeStore(vectorize)

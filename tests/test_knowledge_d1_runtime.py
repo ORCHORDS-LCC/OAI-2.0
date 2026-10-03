@@ -7,14 +7,13 @@ import pytest
 
 from oai2.core import KnowledgeId, Status
 from oai2.knowledge import CFRow, RetrievalRequest
-from oai2.knowledge.gc_lease_d1 import gc_lease_schema_statements
+from oai2.knowledge.cloudflare_provisioning import provisioning_batches
 from oai2.knowledge.knowledge_d1 import (
     KNOWLEDGE_CORPUS_ADVANCE_SQL,
     KNOWLEDGE_CORPUS_REVISION_SQL,
     KNOWLEDGE_GET_SQL,
     KNOWLEDGE_WRITER_UPSERT_SQL,
     knowledge_query_sql,
-    knowledge_schema_statements,
 )
 from oai2.knowledge.knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
 
@@ -108,7 +107,11 @@ async def test_write_metadata_batches_upsert_and_revision_advance() -> None:
         KNOWLEDGE_CORPUS_ADVANCE_SQL,
     ]
     assert db.batched[0].bound[-2:] == (7, 12.0)
-    assert db.batched[1].bound == (7, _row().r2_blob_key, 12.0)
+    # The advance binds revision, r2_blob_key, timestamp and — since #261 —
+    # the vectorize_id being adopted, so its fence matches the upsert's.
+    assert db.batched[1].bound == (
+        7, _row().r2_blob_key, 12.0, _row().vectorize_id
+    )
 
 
 @pytest.mark.asyncio
@@ -306,11 +309,19 @@ def test_knowledge_query_sql_rejects_empty_status_set() -> None:
 
 
 def _authoritative_db() -> sqlite3.Connection:
+    """A database built from the PROVISIONING CONTRACT, in order.
+
+    #261: the writer SQL now consults ``knowledge_gc_resource_lease`` inside its
+    compare-and-set, so a database provisioned without that table cannot serve
+    a write at all. Building this harness from
+    ``oai2.knowledge.cloudflare_provisioning.provisioning_batches`` is what
+    makes it a test of the deployment contract rather than of a hand-picked
+    subset: if a future batch reorders or drops a statement, this fails.
+    """
     db = sqlite3.connect(":memory:")
-    for statement in knowledge_schema_statements():
-        db.execute(statement)
-    for statement in gc_lease_schema_statements():
-        db.execute(statement)
+    for _name, statements in provisioning_batches():
+        for statement in statements:
+            db.execute(statement)
     # The schema already creates the corpus-state singleton, so seed it rather
     # than inserting a second row.
     db.execute(
@@ -347,7 +358,7 @@ def _upsert(
     )
     db.execute(
         KNOWLEDGE_CORPUS_ADVANCE_SQL,
-        (expected_revision, f"oai2-blobs/{content_hash}", 0),
+        (expected_revision, f"oai2-blobs/{content_hash}", 0, knowledge_id),
     )
     db.commit()
     return (

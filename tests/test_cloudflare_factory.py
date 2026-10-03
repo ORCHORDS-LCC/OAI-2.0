@@ -9,6 +9,7 @@ from oai2.knowledge.cloudflare_factory import (
     build_cloudflare_knowledge_components,
 )
 from oai2.knowledge.gc_lease_d1 import gc_lease_schema_statements
+from oai2.knowledge.gc_resource_lease_d1 import gc_resource_lease_schema_statements
 from oai2.knowledge.knowledge_d1 import knowledge_schema_statements
 
 
@@ -93,12 +94,17 @@ async def test_factory_initializes_knowledge_then_gc_schema() -> None:
     )
 
     assert isinstance(components, CloudflareKnowledgeComponents)
-    assert len(d1.batch_calls) == 2
+    assert len(d1.batch_calls) == 3
     assert [stmt.query for stmt in d1.batch_calls[0]] == list(
         knowledge_schema_statements()
     )
     assert [stmt.query for stmt in d1.batch_calls[1]] == list(
         gc_lease_schema_statements()
+    )
+    # #261: the typed resource lease is part of the contract, because the
+    # writer's compare-and-set consults it on every write.
+    assert [stmt.query for stmt in d1.batch_calls[2]] == list(
+        gc_resource_lease_schema_statements()
     )
 
 
