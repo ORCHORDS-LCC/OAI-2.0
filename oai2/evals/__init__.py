@@ -32,6 +32,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..runtime.inference import InferenceRequest, InferenceResponse, InferenceRuntime
+from .deterministic_hard import deterministic_hard_suite
 from .regression import (
     CapabilityRegression,
     CapabilityRegressionThreshold,
@@ -741,6 +742,9 @@ _BUILTIN_SUITES: dict[str, Callable[[], CapabilitySuite]] = {
     "multi_file_reasoning": _multi_file_reasoning_suite,
     "abstention": _abstention_suite,
     "conflicting_evidence": _conflicting_evidence_suite,
+    # 12 fixed tasks with machine-checkable answers, used to re-baseline
+    # accuracy at a pinned SHA (#240). See oai2/evals/deterministic_hard.py.
+    "deterministic_hard": deterministic_hard_suite,
 }
 
 
@@ -790,6 +794,7 @@ __all__ = [
     "TruthRunResult",
     "run_held_out_truth_cases",
     "classify_truth_outcome",
+    "deterministic_hard_suite",
 ]
 
 
