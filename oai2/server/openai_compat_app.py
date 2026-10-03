@@ -25,7 +25,7 @@ import json
 import sys
 import time
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -40,12 +40,53 @@ from oai2.agents.composer import (
 from oai2.runtime import (
     InferenceRequest,
     InferenceResponse,
-    MLXHotRuntime,
     ModelSpec,
     PrefixKVCache,
     TemplateRenderError,
     validate_tool_calls,
 )
+
+if TYPE_CHECKING:
+    # ``MLXHotRuntime`` reaches ``mlx_lm`` at module import time, so it is
+    # imported only where it is actually instantiated. Annotations are
+    # strings under ``from __future__ import annotations`` and need no
+    # runtime binding.
+    from oai2.runtime import MLXHotRuntime
+
+
+def __getattr__(name: str) -> Any:
+    """Expose ``MLXHotRuntime`` without importing MLX at module load (PEP 562).
+
+    Callers and tests replace ``mod.MLXHotRuntime`` on this module to inject a
+    stub runtime, so the name has to remain a readable module attribute. It is
+    resolved on first access instead of at import time because
+    ``mlx_hot_runtime`` imports ``mlx_lm`` at module scope, which would make
+    ``import oai2.server`` require an Apple GPU stack (REQ-FLEET-013).
+    """
+    if name == "MLXHotRuntime":
+        from oai2.runtime import MLXHotRuntime
+
+        return MLXHotRuntime
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), "MLXHotRuntime"})
+
+
+def _resolve_runtime_cls() -> type[MLXHotRuntime]:
+    """Return the runtime class, honouring a module-global override.
+
+    Tests and callers inject a stub by assigning ``mod.MLXHotRuntime``, so
+    the module global wins. The lazy fallback keeps ``import oai2.server``
+    free of the MLX stack until a runtime is actually built.
+    """
+    override = globals().get("MLXHotRuntime")
+    if override is not None:
+        return cast("type[MLXHotRuntime]", override)
+    from oai2.runtime import MLXHotRuntime
+
+    return MLXHotRuntime
 
 
 class ChatCompletionRequest(BaseModel):
@@ -166,6 +207,8 @@ def create_app(
     prefix_cache: PrefixKVCache | None = None,
     enable_prefix_cache: bool = False,
 ) -> FastAPI:
+    runtime_cls = _resolve_runtime_cls()
+
     spec = ModelSpec(name=model_id)
     # Without this the runtime's cache is None and the digest computed below
     # has nowhere to go — the wiring gap that made #240's reuse unreachable
@@ -184,7 +227,7 @@ def create_app(
         if prefix_cache is not None
         else (PrefixKVCache(max_entries=8) if enable_prefix_cache else None)
     )
-    runtime = MLXHotRuntime(
+    runtime = runtime_cls(
         spec,
         model_id=model_id,
         prefix_cache=cache,

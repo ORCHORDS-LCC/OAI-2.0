@@ -8,6 +8,14 @@ loop are placeholders pending a checked-in reference model.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Binds the name for type checkers only. At runtime it resolves through
+    # the module ``__getattr__`` below, which is what keeps the MLX backend
+    # out of the import graph.
+    from .mlx_hot_runtime import MLXHotRuntime
+
 from .admission import (
     AdmissionAction,
     AdmissionDecision,
@@ -62,7 +70,6 @@ from .inference import (
     select_runtime_from_env,
 )
 from .local_service import create_local_service_app
-from .mlx_hot_runtime import MLXHotRuntime
 from .model import ModelSpec, discover_default_device, smoke_check
 from .prefix_kv_cache import PrefixCacheEntry, PrefixCacheMetrics, PrefixKVCache
 from .residency import (
@@ -172,3 +179,32 @@ __all__ = [
     "UnknownModelError",
     "WorkingModelResolution",
 ]
+
+#: Names resolved on first access rather than at package import.
+#:
+#: ``mlx_hot_runtime`` imports ``mlx_lm`` at module level, so importing it
+#: eagerly made ``import oai2.runtime`` — and every package that depends on
+#: it, including :mod:`oai2.server` and :mod:`oai2.agents` — require an
+#: Apple GPU stack. MLX is a *backend*, and selecting a backend is a decision
+#: the caller makes, not one this package should make at import time.
+#: :mod:`oai2.runtime.model` already keeps its MLX imports function-local for
+#: exactly this reason; this extends the same rule to the package boundary.
+_LAZY_EXPORTS = frozenset({"MLXHotRuntime"})
+
+
+def __getattr__(name: str) -> object:
+    """Resolve a lazily-exported name (PEP 562).
+
+    Reaching ``MLXHotRuntime`` without MLX installed raises ``ImportError``,
+    which names the real missing dependency, rather than ``AttributeError``,
+    which would report a missing export and hide the actual cause.
+    """
+    if name in _LAZY_EXPORTS:
+        from . import mlx_hot_runtime
+
+        return getattr(mlx_hot_runtime, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | _LAZY_EXPORTS)
