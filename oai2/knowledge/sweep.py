@@ -103,13 +103,52 @@ class GcSweepState:
             raise ValueError("candidate fingerprint does not match candidates")
 
     @classmethod
-    def from_report(cls, report: GcDryRunReport) -> Self:
-        """Create sweep state from a completed, non-destructive dry-run report."""
+    def from_report(
+        cls, report: GcDryRunReport, *, prior: GcSweepState | None = None
+    ) -> Self:
+        """Create sweep state from a completed, non-destructive dry-run report.
+
+        ``prior`` carries the grace clock across runs, and without it the grace
+        window is unsatisfiable.
+
+        Measured on the previous source, every candidate was stamped
+        ``first_seen_at = report.observed_at``. A sweep that re-runs its
+        dry-run each cycle -- the natural shape for a scheduled sweep -- then
+        restamps the clock every time, so ``age = now - first_seen_at`` is
+        always ~0 and every candidate is ``deferred_grace`` forever:
+
+            cycle 1 @   1000  first_seen=1000  -> deferred_grace
+            cycle 2 @   5000  first_seen=5000  -> deferred_grace
+            cycle 3 @  50000  first_seen=50000 -> deferred_grace
+
+        REQ-GC-021 holds vacuously and AC-GC-023 ("a confirmed old orphan is
+        deleted exactly once") is unreachable on that path. Passing the
+        previous state as ``prior`` is what makes the window mean elapsed
+        time rather than "time since this process started".
+
+        Two rules govern what carries forward:
+
+        * A key in ``prior.retired_keys`` does **not** carry its age. It was
+          found referenced, so that period of unreferencedness is over; if it
+          is unreferenced again it must earn a fresh window, because the row
+          that came and went may have been a different one.
+        * A carried ``first_seen_at`` is clamped to ``report.observed_at``.
+          A clock that moved backwards must not manufacture age, and clamping
+          fails safe: the candidate simply defers a little longer.
+        """
         _require_non_negative_number(report.observed_at, "report observed_at")
+        carried: dict[str, float] = {}
+        if prior is not None:
+            for candidate in prior.candidates:
+                if candidate.key in prior.retired_keys:
+                    continue
+                carried[candidate.key] = min(
+                    candidate.first_seen_at, report.observed_at
+                )
         candidates = tuple(
             GcSweepCandidate(
                 key=record.key,
-                first_seen_at=report.observed_at,
+                first_seen_at=carried.get(record.key, report.observed_at),
                 size_bytes=record.size_bytes,
             )
             for record in report.records
