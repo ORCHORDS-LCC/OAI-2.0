@@ -174,3 +174,62 @@ generation rate. Client-observed wall-clock is recorded separately in
 `ttft_seconds` and `client_decode_tokens_per_second` and is never promoted to a
 decode rate. TTFT at 8 agents rises to ~1.1 s because 8 requests contend for 4
 slots; that is queueing, not a regression in decode speed.
+
+## Uncontended re-run — `llamacpp_production_1ba5283/clean_uncontended/`
+
+Re-run after the STRONG lane went idle, to separate the throughput figures
+from the contention described above. Harness `ff4956c912e9`, `dirty=false`.
+
+`:8854` slot occupancy was sampled every second for the whole window:
+**busy on 0 of 211 samples.** The GPU-contention confound from the first
+run is absent here.
+
+| Mode | Agents | Decode tok/s/agent | Aggregate tok/s | TTFT ms | Prefill tok/s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| B0 Cold baseline | 1 | 270.23 | 270.23 | 7.5 | 185.6 |
+| B1 Hot | 1 | 245.01 | 245.01 | 7.1 | 196.6 |
+| B2 Hot + prompt cache | 1 | 272.17 | 272.17 | 5.3 | 264.9 |
+| F Hot | 2 | 254.93 | 509.86 | 5.8 | 234.5 |
+| F Hot | 4 | 178.63 | 714.53 | 8.7 | 167.7 |
+| F Hot | 8 | 179.52 | 1433.14 | 723.9 | 168.3 |
+
+Contended → uncontended, same suite, same host, same model:
+
+| Mode | Contended | Uncontended | Delta |
+| --- | ---: | ---: | ---: |
+| B0 Cold | 183.28 | 270.23 | +47% |
+| B1 Hot | 187.90 | 245.01 | +30% |
+| B2 Hot + prompt cache | 184.49 | 272.17 | +48% |
+| N=2 | 289.64 | 509.86 | +76% |
+| N=4 | 464.32 | 714.53 | +54% |
+| N=8 | 927.27 | 1433.14 | +55% |
+
+A 30–76% swing from lane contention alone. This is the reason the first
+run's figures are reported as lower bounds rather than capacity.
+
+### B0 is not the slowest configuration — a labelling caveat
+
+B0 "cold" (270.23) is *faster* than B1 "hot" (245.01) here, which inverts
+the expected ordering. B0 also has the widest spread across repetitions
+(233.03–297.17) against B1's tight 243.98–265.62. The 75 s idle before B0
+is not sufficient to evict llama.cpp's slot-level prefix cache, so "cold"
+in this harness means "no warm-up credit from the harness", not "no
+residual server state". Treat B0 as *unwarmed-harness*, not *cold server*.
+
+### Second confound — host memory, not GPU
+
+This run was uncontended for GPU compute but **not** for host memory. At
+the end of the window the host reported 64.0 GB total, **63.41 GB used,
+0.59 GB free, 3.99 GB of 5.0 GB swap in use**.
+
+The cause is visible in process residency: the idle STRONG lane
+(`Qwen3-4B-Thinking-2507-Q4_K_M`, 2 slots × 16384 ctx) holds **19.5 GB
+RSS**, against 4.1 GB for the NORMAL lane. On Apple Silicon the unified
+memory pool is shared, so both servers' KV caches and Metal allocations are
+resident in the same physical memory regardless of lane activity — an idle
+lane still costs its footprint.
+
+So these figures answer "what does the NORMAL lane do with the GPU to
+itself" — they are **not** a clean whole-host capacity baseline. A truly
+clean baseline needs the STRONG lane's memory released as well as its GPU
+time, which on this host means stopping that lane rather than idling it.
