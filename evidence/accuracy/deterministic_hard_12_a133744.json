@@ -1,0 +1,210 @@
+{
+  "generated_at": "2026-10-03T19:51:01.845067+00:00",
+  "harness": {
+    "source": "scripts/accuracy_baseline.py",
+    "commit": "a1337442df2f60294cfa31a8d5ef569488c8b752",
+    "branch": "main",
+    "dirty": "false"
+  },
+  "serving_identity": {
+    "base_url": "http://127.0.0.1:8851",
+    "model_alias": "smollm2-1.7b-q4km",
+    "model_path": "/Users/orchords/models/normal/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "model_basename": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "total_slots": 4,
+    "n_ctx": 8192
+  },
+  "suite_id": "deterministic_hard_12",
+  "case_count": 12,
+  "scorer": "regex_or",
+  "sampling": {
+    "temperature": 0.0,
+    "seed": 20261004,
+    "max_tokens": 64,
+    "note": "temperature 0.0 + fixed seed: the same SHA must reproduce this score"
+  },
+  "failure_taxonomy": {
+    "arithmetic_error": 5,
+    "fact_error": 1,
+    "logic_error": 1,
+    "symbolic_corruption": 1
+  },
+  "result": {
+    "passed": 4,
+    "total": 12,
+    "pass_rate": 0.3333
+  },
+  "cases": [
+    {
+      "case_id": "days_in_a_week",
+      "prompt": "How many days are there in one week? Answer with a number.",
+      "expected_patterns": [
+        "\\b7\\b",
+        "\\bseven\\b"
+      ],
+      "oracle_note": "accepts numeral or word; answer 7",
+      "passed": true,
+      "matched_pattern": "\\b7\\b",
+      "failure_reason": null,
+      "failure_class": "correct_but_unmatched",
+      "expected_answer": "7",
+      "raw_output": "There are 7 days in one week."
+    },
+    {
+      "case_id": "arithmetic_multistep",
+      "prompt": "Compute 17 * 23 - 19. Answer with a number only.",
+      "expected_patterns": [
+        "\\b372\\b"
+      ],
+      "oracle_note": "answer 372; requires multiply-then-subtract without reordering",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "arithmetic_error",
+      "expected_answer": "372",
+      "raw_output": "17 * 23 - 19 = 401"
+    },
+    {
+      "case_id": "modular_arithmetic",
+      "prompt": "What is the remainder when 98765 is divided by 31? Answer with a number only.",
+      "expected_patterns": [
+        "\\b30\\b"
+      ],
+      "oracle_note": "answer 30; 5-digit division, not a memorised fact",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "arithmetic_error",
+      "expected_answer": "30",
+      "raw_output": "108"
+    },
+    {
+      "case_id": "count_letter_in_word",
+      "prompt": "How many times does the letter 'a' appear in the word 'banana'? Answer with a number only.",
+      "expected_patterns": [
+        "\\b3\\b",
+        "\\bthree\\b"
+      ],
+      "oracle_note": "accepts numeral or word; answer 3",
+      "passed": true,
+      "matched_pattern": "\\b3\\b",
+      "failure_reason": null,
+      "failure_class": "correct_but_unmatched",
+      "expected_answer": "3",
+      "raw_output": "The letter 'a' appears 3 times in the word 'banana'."
+    },
+    {
+      "case_id": "geometric_sequence",
+      "prompt": "What number comes next in this sequence: 2, 4, 8, 16, ...? Answer with a number only.",
+      "expected_patterns": [
+        "\\b32\\b"
+      ],
+      "oracle_note": "answer 32; the term after the last one shown, not the last one",
+      "passed": true,
+      "matched_pattern": "\\b32\\b",
+      "failure_reason": null,
+      "failure_class": "correct_but_unmatched",
+      "expected_answer": "32",
+      "raw_output": "32"
+    },
+    {
+      "case_id": "boolean_logic",
+      "prompt": "Evaluate: (True AND False) OR True. Answer with True or False only.",
+      "expected_patterns": [
+        "(?i)\\btrue\\b"
+      ],
+      "oracle_note": "answer True; requires honouring the OR after the AND collapses to False",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "logic_error",
+      "expected_answer": "True",
+      "raw_output": "False"
+    },
+    {
+      "case_id": "unit_conversion",
+      "prompt": "How many seconds are there in 3 hours? Answer with a number only.",
+      "expected_patterns": [
+        "\\b10,?800\\b"
+      ],
+      "oracle_note": "answer 10800; comma tolerated, magnitude must be right",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "arithmetic_error",
+      "expected_answer": "10800",
+      "raw_output": "7200"
+    },
+    {
+      "case_id": "rate_word_problem",
+      "prompt": "A train travels 60 kilometres in 1.5 hours at constant speed. What is its average speed in kilometres per hour? Answer with a number only.",
+      "expected_patterns": [
+        "\\b40\\b"
+      ],
+      "oracle_note": "answer 40; requires dividing, not multiplying",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "arithmetic_error",
+      "expected_answer": "40",
+      "raw_output": "120"
+    },
+    {
+      "case_id": "capital_city",
+      "prompt": "What is the capital city of Australia? Answer with the name only.",
+      "expected_patterns": [
+        "(?i)\\bcanberra\\b"
+      ],
+      "oracle_note": "answer Canberra; long-tail fact with a single unambiguous answer",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "fact_error",
+      "expected_answer": "Canberra",
+      "raw_output": "Sydney"
+    },
+    {
+      "case_id": "distinct_letter_count",
+      "prompt": "How many distinct letters appear in the word 'orchestra'? Answer with a number only.",
+      "expected_patterns": [
+        "\\b8\\b",
+        "\\beight\\b"
+      ],
+      "oracle_note": "accepts numeral or word; answer 8 (o,r,c,h,e,s,t,a); confusable with the 9 letters typed",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "arithmetic_error",
+      "expected_answer": "8",
+      "raw_output": "3"
+    },
+    {
+      "case_id": "string_reversal",
+      "prompt": "Reverse the string 'orchords'. Output only the reversed string.",
+      "expected_patterns": [
+        "\\bsdrohcro\\b"
+      ],
+      "oracle_note": "answer sdrohcro; character-exact, so no normalisation is possible",
+      "passed": false,
+      "matched_pattern": null,
+      "failure_reason": "no-pattern-match",
+      "failure_class": "symbolic_corruption",
+      "expected_answer": "sdrohcro",
+      "raw_output": "The reversed string is 'drocorb'."
+    },
+    {
+      "case_id": "leap_year_length",
+      "prompt": "How many days are there in a leap year? Answer with a number only.",
+      "expected_patterns": [
+        "\\b366\\b"
+      ],
+      "oracle_note": "answer 366; confusable with 365, the common-year answer",
+      "passed": true,
+      "matched_pattern": "\\b366\\b",
+      "failure_reason": null,
+      "failure_class": "correct_but_unmatched",
+      "expected_answer": "366",
+      "raw_output": "366"
+    }
+  ]
+}
