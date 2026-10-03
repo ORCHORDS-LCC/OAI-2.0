@@ -97,7 +97,7 @@ def _writer_upsert(
     db.execute(
         KNOWLEDGE_WRITER_UPSERT_SQL,
         (KID, "topic", "c" * 64, 0.5, "active", "https://example.test/x", NOW,
-         blob_key, vector_id, REV, at),
+         blob_key, vector_id, None, None, REV, at),
     )
     row = db.execute(
         "SELECT corpus_revision FROM knowledge_index WHERE knowledge_id = ?", (KID,)

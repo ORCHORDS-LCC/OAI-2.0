@@ -379,6 +379,10 @@ def test_a_failed_put_yields_a_candidate_and_never_a_delete() -> None:
             self.source_uri = None
             self.retrieved_at = 1.0
             self.content = content
+            # object_to_row maps the supersession fields; this stub stands in
+            # for a KnowledgeObject, so it must carry them too.
+            self.superseded_by = None
+            self.superseded_at = None
 
     async def scenario() -> tuple[list[str], _Vectorize]:
         reader, writer, r2, vectorize, kv = _Reader(), _Writer(), _R2(), _Vectorize(), _Kv()

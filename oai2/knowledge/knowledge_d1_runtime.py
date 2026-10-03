@@ -8,6 +8,7 @@ object key is not protected by an active lease.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import cast
 
@@ -98,6 +99,8 @@ class D1KnowledgeWriter:
             float(row.retrieved_at),
             row.r2_blob_key,
             row.vectorize_id,
+            row.superseded_by,
+            row.superseded_at,
             revision,
             timestamp,
         )
@@ -176,13 +179,25 @@ def _row_from_mapping(row: Mapping[str, object]) -> CFRow:
     source_uri = cast("str | None", row.get("source_uri"))
     r2_blob_key = cast("str | None", row.get("r2_blob_key"))
     vectorize_id = cast("str | None", row.get("vectorize_id"))
+    superseded_by = cast("str | None", row.get("superseded_by"))
+    raw_superseded_at = row.get("superseded_at")
     for name, value in (
         ("source_uri", source_uri),
         ("r2_blob_key", r2_blob_key),
         ("vectorize_id", vectorize_id),
+        ("superseded_by", superseded_by),
     ):
         if value is not None and not isinstance(value, str):
             raise RuntimeError(f"D1 knowledge row has invalid {name}")
+    if raw_superseded_at is not None:
+        if (
+            isinstance(raw_superseded_at, bool)
+            or not isinstance(raw_superseded_at, (int, float))
+            or not math.isfinite(float(raw_superseded_at))
+            or float(raw_superseded_at) < 0
+        ):
+            raise RuntimeError("D1 knowledge row has invalid superseded_at")
+    superseded_at = None if raw_superseded_at is None else float(raw_superseded_at)
     return CFRow(
         knowledge_id=KnowledgeId(knowledge_id),
         topic=topic,
@@ -193,6 +208,8 @@ def _row_from_mapping(row: Mapping[str, object]) -> CFRow:
         retrieved_at=float(retrieved_at),
         r2_blob_key=r2_blob_key,
         vectorize_id=vectorize_id,
+        superseded_by=superseded_by,
+        superseded_at=superseded_at,
     )
 
 

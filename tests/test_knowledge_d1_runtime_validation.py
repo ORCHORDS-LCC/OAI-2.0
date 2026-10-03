@@ -728,7 +728,9 @@ async def test_write_metadata_binds_eleven_column_upsert_and_four_column_advance
     ]
     # Upsert bind: str(knowledge_id), topic, content_hash, float(authority),
     # status.value, source_uri, float(retrieved_at), r2_blob_key,
-    # vectorize_id, revision, timestamp — 11 columns.
+    # vectorize_id, superseded_by, superseded_at, revision, timestamp —
+    # 13 columns. The two supersession columns were added for REQ-TEMP-014
+    # and sit immediately before the revision authority.
     upsert_bound = db.batched[0].bound
     assert upsert_bound == (
         "ko_writer_1",
@@ -740,6 +742,8 @@ async def test_write_metadata_binds_eleven_column_upsert_and_four_column_advance
         10.0,
         "oai2-blobs/" + "a" * 64,
         "ko_writer_1",
+        None,
+        None,
         7,
         12.0,
     )
@@ -747,7 +751,7 @@ async def test_write_metadata_binds_eleven_column_upsert_and_four_column_advance
     advance_bound = db.batched[1].bound
     assert advance_bound == (7, "oai2-blobs/" + "a" * 64, 12.0, "ko_writer_1")
     # And it is the SAME vectorize_id the upsert adopted, not a re-derived one.
-    assert advance_bound[3] == upsert_bound[8]
+    assert advance_bound[3] == upsert_bound[8]  # vectorize_id unchanged position
 
 
 @pytest.mark.asyncio

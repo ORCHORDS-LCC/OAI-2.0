@@ -90,6 +90,8 @@ def _writer_batch(
     vector_id: str | None,
     expected_revision: int = REV,
     now: float = NOW,
+    superseded_by: str | None = None,
+    superseded_at: float | None = None,
 ) -> tuple[int, int]:
     """Run the REAL writer batch: upsert + corpus advance.
 
@@ -102,7 +104,8 @@ def _writer_batch(
         upsert = db.execute(
             KNOWLEDGE_WRITER_UPSERT_SQL,
             (KID, "topic", "c" * 64, 0.5, "active", "https://example.test/x",
-             NOW, blob_key, vector_id, expected_revision, now),
+             NOW, blob_key, vector_id, superseded_by, superseded_at,
+             expected_revision, now),
         )
         advance = db.execute(
             KNOWLEDGE_CORPUS_ADVANCE_SQL,

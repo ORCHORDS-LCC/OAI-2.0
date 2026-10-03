@@ -302,10 +302,14 @@ def test_knowledge_writer_upsert_sql_includes_on_conflict_clause() -> None:
 
 def test_knowledge_writer_upsert_sql_includes_revision_guard() -> None:
     """The upsert SQL gates on
-    ``knowledge_corpus_state.revision = ?10`` — pinned because removing
-    the guard would let ingestion bypass the corpus-revision authority."""
+    ``knowledge_corpus_state.revision = ?12`` — pinned because removing
+    the guard would let ingestion bypass the corpus-revision authority.
+
+    The index moved from ?10 to ?12 when the supersession columns were added
+    ahead of it (REQ-TEMP-014); the guard itself is unchanged.
+    """
     assert "knowledge_corpus_state" in KNOWLEDGE_WRITER_UPSERT_SQL
-    assert "revision = ?10" in KNOWLEDGE_WRITER_UPSERT_SQL
+    assert "revision = ?12" in KNOWLEDGE_WRITER_UPSERT_SQL
 
 
 def test_knowledge_writer_upsert_sql_includes_gc_lease_gate() -> None:
@@ -316,11 +320,14 @@ def test_knowledge_writer_upsert_sql_includes_gc_lease_gate() -> None:
 
 
 def test_knowledge_writer_upsert_sql_advances_corpus_revision() -> None:
-    """``SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 + 1`` advances
-    the corpus revision by 1 on every successful upsert — pinned
-    because a refactor that drops the ``+ 1`` would silently stall the
-    corpus revision authority."""
-    assert "?10 + 1" in KNOWLEDGE_WRITER_UPSERT_SQL
+    """The SELECT list advances the corpus revision by 1 on every
+    successful upsert — pinned because a refactor that drops the ``+ 1``
+    would silently stall the corpus revision authority.
+
+    The revision expression is now ``?12 + 1`` because the two supersession
+    columns were inserted before it.
+    """
+    assert "?12 + 1" in KNOWLEDGE_WRITER_UPSERT_SQL
 
 
 def test_knowledge_corpus_advance_sql_increments_revision() -> None:
@@ -376,7 +383,7 @@ def test_knowledge_corpus_revision_sql_pins_singleton() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_module_all_lists_ten_public_exports() -> None:
+def test_module_all_lists_thirteen_public_exports() -> None:
     """``__all__`` is the canonical public surface — adding a name is a
     deliberate API change and must be flagged here."""
     expected = {
@@ -390,9 +397,12 @@ def test_module_all_lists_ten_public_exports() -> None:
         "KNOWLEDGE_WRITER_UPSERT_SQL",
         "KNOWLEDGE_CORPUS_ADVANCE_SQL",
         "knowledge_schema_statements",
+        "KNOWLEDGE_SCHEMA_MIGRATION_SQL",
+        "KNOWLEDGE_SUPERSESSION_COLUMNS",
+        "missing_supersession_migration",
     }
     assert set(knowledge_d1_mod.__all__) == expected
-    assert len(knowledge_d1_mod.__all__) == 10
+    assert len(knowledge_d1_mod.__all__) == 13
 
 
 def test_knowledge_d1_symbols_are_exported_from_knowledge_package() -> None:

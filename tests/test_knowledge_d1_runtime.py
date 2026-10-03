@@ -106,6 +106,8 @@ async def test_write_metadata_batches_upsert_and_revision_advance() -> None:
         KNOWLEDGE_WRITER_UPSERT_SQL,
         KNOWLEDGE_CORPUS_ADVANCE_SQL,
     ]
+    # revision and timestamp remain the final two binds; the supersession
+    # columns are inserted ahead of them.
     assert db.batched[0].bound[-2:] == (7, 12.0)
     # The advance binds revision, r2_blob_key, timestamp and — since #261 —
     # the vectorize_id being adopted, so its fence matches the upsert's.
@@ -352,6 +354,8 @@ def _upsert(
             10.0,
             f"oai2-blobs/{content_hash}",
             knowledge_id,
+            None,
+            None,
             expected_revision,
             0,
         ),

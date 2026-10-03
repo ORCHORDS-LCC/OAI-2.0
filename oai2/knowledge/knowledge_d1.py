@@ -6,6 +6,8 @@ credentials. The statements are designed for the D1 prepared/batch API.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from .gc_resource_lease_d1 import GC_RESOURCE_LEASE_TABLE
 
 KNOWLEDGE_SCHEMA_VERSION = 1
@@ -33,6 +35,8 @@ CREATE TABLE IF NOT EXISTS {KNOWLEDGE_INDEX_TABLE} (
     retrieved_at REAL NOT NULL CHECK(retrieved_at >= 0),
     r2_blob_key TEXT,
     vectorize_id TEXT,
+    superseded_by TEXT,
+    superseded_at REAL,
     corpus_revision INTEGER NOT NULL CHECK(corpus_revision >= 0)
 ) STRICT;
 
@@ -50,6 +54,28 @@ CREATE TABLE IF NOT EXISTS {KNOWLEDGE_CORPUS_STATE_TABLE} (
 INSERT OR IGNORE INTO {KNOWLEDGE_CORPUS_STATE_TABLE}(singleton, revision)
 VALUES (1, 0);
 """.strip()
+
+# Adding the supersession columns to KNOWLEDGE_SCHEMA_SQL is necessary but NOT
+# sufficient. That statement is `CREATE TABLE IF NOT EXISTS`, so on a database
+# that was already provisioned the table exists, the statement is a no-op, and
+# the new columns never appear -- while every query that now selects them fails.
+# That is the silent half-migration this pair exists to prevent.
+#
+# So the schema change ships with an explicit additive migration. SQLite has no
+# `ADD COLUMN IF NOT EXISTS`, so each ALTER is emitted on its own and applied
+# only when the column is genuinely absent -- see
+# `missing_supersession_migration()` for the detection the provisioning step
+# uses. Both are additive: nullable columns with no default, so an existing row
+# is unaffected and no backfill is required.
+KNOWLEDGE_SCHEMA_MIGRATION_SQL: tuple[str, ...] = (
+    f"ALTER TABLE {KNOWLEDGE_INDEX_TABLE} ADD COLUMN superseded_by TEXT",
+    f"ALTER TABLE {KNOWLEDGE_INDEX_TABLE} ADD COLUMN superseded_at REAL",
+)
+
+KNOWLEDGE_SUPERSESSION_COLUMNS: tuple[str, ...] = (
+    "superseded_by",
+    "superseded_at",
+)
 
 KNOWLEDGE_CORPUS_REVISION_SQL = f"""
 SELECT revision
@@ -69,6 +95,8 @@ SELECT
     retrieved_at,
     r2_blob_key,
     vectorize_id,
+    superseded_by,
+    superseded_at,
     corpus_revision
 FROM {KNOWLEDGE_INDEX_TABLE}
 WHERE knowledge_id = ?1
@@ -93,11 +121,14 @@ SELECT
     retrieved_at,
     r2_blob_key,
     vectorize_id,
+    superseded_by,
+    superseded_at,
     corpus_revision
 FROM {KNOWLEDGE_INDEX_TABLE}
 WHERE instr(lower(topic), lower(?1)) > 0
   AND authority >= ?2
   AND status IN ({status_placeholders})
+  AND superseded_by IS NULL
 ORDER BY authority DESC, retrieved_at DESC
 LIMIT ?{limit_index}
 """.strip()
@@ -146,13 +177,13 @@ AND NOT EXISTS (
 """
 
 _TYPED_FENCE_UP = _TYPED_RESOURCE_FENCE.format(
-    lease_table=GC_RESOURCE_LEASE_TABLE, blob="?8", vector="?9", now="?11"
+    lease_table=GC_RESOURCE_LEASE_TABLE, blob="?8", vector="?9", now="?13"
 )
 _TYPED_FENCE_CONFLICT = _TYPED_RESOURCE_FENCE.format(
     lease_table=GC_RESOURCE_LEASE_TABLE,
     blob="excluded.r2_blob_key",
     vector="excluded.vectorize_id",
-    now="?11",
+    now="?13",
 )
 _TYPED_FENCE_ADVANCE = _TYPED_RESOURCE_FENCE.format(
     lease_table=GC_RESOURCE_LEASE_TABLE, blob="?2", vector="?4", now="?3"
@@ -169,21 +200,23 @@ INSERT INTO {KNOWLEDGE_INDEX_TABLE} (
     retrieved_at,
     r2_blob_key,
     vectorize_id,
+    superseded_by,
+    superseded_at,
     corpus_revision
 )
-SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 + 1
+SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 + 1
 WHERE EXISTS (
     SELECT 1
     FROM {KNOWLEDGE_CORPUS_STATE_TABLE}
     WHERE singleton = 1
-      AND revision = ?10
+      AND revision = ?12
 )
 AND NOT EXISTS (
     SELECT 1
     FROM knowledge_gc_delete_lease
     WHERE object_key = ?8
       AND state IN ('active', 'delete_failed')
-      AND expires_at > ?11
+      AND expires_at > ?13
 )
 {_TYPED_FENCE_UP}
 ON CONFLICT(knowledge_id) DO UPDATE SET
@@ -195,19 +228,21 @@ ON CONFLICT(knowledge_id) DO UPDATE SET
     retrieved_at = excluded.retrieved_at,
     r2_blob_key = excluded.r2_blob_key,
     vectorize_id = excluded.vectorize_id,
+    superseded_by = excluded.superseded_by,
+    superseded_at = excluded.superseded_at,
     corpus_revision = excluded.corpus_revision
 WHERE EXISTS (
     SELECT 1
     FROM {KNOWLEDGE_CORPUS_STATE_TABLE}
     WHERE singleton = 1
-      AND revision = ?10
+      AND revision = ?12
 )
 AND NOT EXISTS (
     SELECT 1
     FROM knowledge_gc_delete_lease
     WHERE object_key = excluded.r2_blob_key
       AND state IN ('active', 'delete_failed')
-      AND expires_at > ?11
+      AND expires_at > ?13
 )
 {_TYPED_FENCE_CONFLICT}
 """.strip()
@@ -240,6 +275,27 @@ def knowledge_schema_statements() -> tuple[str, ...]:
     )
 
 
+def missing_supersession_migration(existing_columns: Iterable[str]) -> tuple[str, ...]:
+    """Return the ALTER statements a database still needs.
+
+    ``existing_columns`` is the result of ``PRAGMA table_info(knowledge_index)``.
+    A column already present is skipped, which is what makes provisioning
+    re-runnable: a second pass applies nothing and does not raise
+    "duplicate column name".
+    """
+    present = {str(column) for column in existing_columns}
+    # strict=True so a future edit that adds a column without a matching
+    # ALTER fails loudly here instead of silently dropping a migration.
+    by_column = dict(
+        zip(KNOWLEDGE_SUPERSESSION_COLUMNS, KNOWLEDGE_SCHEMA_MIGRATION_SQL, strict=True)
+    )
+    return tuple(
+        by_column[column]
+        for column in KNOWLEDGE_SUPERSESSION_COLUMNS
+        if column not in present
+    )
+
+
 __all__ = [
     "KNOWLEDGE_SCHEMA_VERSION",
     "KNOWLEDGE_INDEX_TABLE",
@@ -251,4 +307,7 @@ __all__ = [
     "KNOWLEDGE_WRITER_UPSERT_SQL",
     "KNOWLEDGE_CORPUS_ADVANCE_SQL",
     "knowledge_schema_statements",
+    "KNOWLEDGE_SCHEMA_MIGRATION_SQL",
+    "KNOWLEDGE_SUPERSESSION_COLUMNS",
+    "missing_supersession_migration",
 ]

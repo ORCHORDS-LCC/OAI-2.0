@@ -188,7 +188,8 @@ def test_provisioning_in_order_produces_a_database_the_writer_can_use() -> None:
         # which is what would happen if the typed table were not provisioned.
         db.execute(
             KNOWLEDGE_WRITER_UPSERT_SQL,
-            ("ko_1", "t", "c" * 64, 0.5, "active", None, 1.0, "b-1", "v-2", 3, 2.0),
+            ("ko_1", "t", "c" * 64, 0.5, "active", None, 1.0, "b-1", "v-2",
+             None, None, 3, 2.0),
         )
         db.execute(KNOWLEDGE_CORPUS_ADVANCE_SQL, (3, "b-1", 2.0, "v-2"))
         assert db.execute(

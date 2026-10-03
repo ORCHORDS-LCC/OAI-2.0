@@ -370,6 +370,13 @@ class AsyncCloudflareKnowledgeRuntime:
                 continue
             if row.status not in request.include_status:
                 continue
+            if row.superseded_by is not None and not request.include_superseded:
+                # REQ-TEMP-014. This path resolves rows one at a time through
+                # get_row, so it never runs knowledge_query_sql and would
+                # otherwise bypass its `superseded_by IS NULL` predicate
+                # entirely -- a vector match would resurrect a superseded
+                # record that the keyword path correctly excluded.
+                continue
             if row.knowledge_id in seen:
                 # One authoritative row, one candidate, even if an index ever
                 # returned two vector ids that D1 both point at.
@@ -407,6 +414,8 @@ class AsyncCloudflareKnowledgeRuntime:
             status=row.status,
             artifact_ref=row.r2_blob_key,
             embedding_ref=row.vectorize_id,
+            superseded_by=row.superseded_by,
+            superseded_at=row.superseded_at,
         )
 
     async def _cache_get(

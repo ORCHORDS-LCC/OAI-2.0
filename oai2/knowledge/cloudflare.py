@@ -86,6 +86,10 @@ class CFRow:
     retrieved_at: float
     r2_blob_key: str | None
     vectorize_id: str | None
+    # REQ-TEMP-014/025: without these the row cannot express supersession, so
+    # no retrieval filter could ever act on it.
+    superseded_by: str | None = None
+    superseded_at: float | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -116,6 +120,8 @@ def row_to_d1(row: CFRow) -> dict[str, Any]:
         "retrieved_at": row.retrieved_at,
         "r2_blob_key": row.r2_blob_key,
         "vectorize_id": row.vectorize_id,
+        "superseded_by": row.superseded_by,
+        "superseded_at": row.superseded_at,
     }
 
 
@@ -141,6 +147,8 @@ def object_to_row(obj: KnowledgeObject) -> CFRow:
         retrieved_at=obj.retrieved_at,
         r2_blob_key=f"oai2-blobs/{obj.content_hash}" if obj.content else None,
         vectorize_id=None,
+        superseded_by=obj.superseded_by,
+        superseded_at=obj.superseded_at,
     )
 
 
@@ -234,6 +242,10 @@ class MockCloudflareBindings:
             retrieved_at=float(raw.get("retrieved_at", 0.0)),
             r2_blob_key=raw.get("r2_blob_key"),
             vectorize_id=raw.get("vectorize_id"),
+            superseded_by=raw.get("superseded_by"),
+            superseded_at=(
+                None if raw.get("superseded_at") is None else float(raw["superseded_at"])
+            ),
         )
 
     def d1_query(
@@ -251,6 +263,11 @@ class MockCloudflareBindings:
             if float(raw["authority"]) < min_authority:
                 continue
             if str(raw["status"]) not in allowed:
+                continue
+            # Mirrors `superseded_by IS NULL` in knowledge_query_sql. A mock
+            # that did not filter would make the real SQL look covered by
+            # tests that never exercised the real predicate.
+            if raw.get("superseded_by") is not None:
                 continue
             row = self.d1_get(raw["knowledge_id"])
             if row is not None:
@@ -412,6 +429,8 @@ class CloudflareKnowledgeStore(KnowledgeStore):
             status=row.status,
             artifact_ref=row.r2_blob_key,
             embedding_ref=row.vectorize_id,
+            superseded_by=row.superseded_by,
+            superseded_at=row.superseded_at,
         )
 
     def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
