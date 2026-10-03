@@ -267,6 +267,7 @@ def create_app(
             "tools_enabled": with_tools,
         }
 
+    @app.get("/v1/models")
     @app.post("/v1/models")
     def models() -> dict[str, Any]:
         """Model listing that publishes only limits this server enforces.
@@ -288,6 +289,13 @@ def create_app(
         ``capabilities.tools`` reflects the real wiring: a request carrying
         ``tools`` against a server started with ``with_tools=False`` has them
         dropped, so claiming tool support unconditionally would be false.
+
+        ``GET`` is the canonical method, matching the OpenAI convention and
+        both in-repo consumers: :func:`oai2.runtime.gateway_models.discover_cloud_models`
+        issues a ``GET`` and the ``verify.py`` ``gateway-reach`` gate does too.
+        This route used to be ``POST`` only, so the local listing answered
+        405 to the very code that discovers models. ``POST`` is kept as an
+        alias so anything that learned the non-standard method keeps working.
         """
         entry: dict[str, Any] = {
             "id": model_id,

@@ -162,3 +162,51 @@ def test_every_capability_field_is_present_even_when_unknown(
     """
     caps = _client().post("/v1/models").json()["data"][0]["capabilities"]
     assert field in caps
+
+
+def test_model_listing_answers_get(stub_runtime: None) -> None:
+    """GET is the canonical method and the one consumers actually use.
+
+    This route was POST-only, so it answered 405 to
+    `oai2.runtime.gateway_models.discover_cloud_models` -- which issues a GET
+    -- and to the `verify.py` `gateway-reach` gate, which also uses GET. A
+    test that exercised only POST would never have noticed.
+    """
+    response = _client().get("/v1/models")
+    assert response.status_code == 200
+    assert response.json()["data"][0]["id"] == "oai-2.0"
+
+
+def test_get_and_post_return_the_same_payload(stub_runtime: None) -> None:
+    """POST stays as an alias, and must not drift from GET."""
+    client = _client(context_window=8192)
+    assert client.get("/v1/models").json() == client.post("/v1/models").json()
+
+
+def test_discovery_client_uses_a_method_this_route_serves(stub_runtime: None) -> None:
+    """Pin the alignment that broke: client method vs route method.
+
+    `discover_cloud_models` is the function that exists to find models. It
+    issues a GET; the route used to be POST-only, so pointing it at the local
+    app produced a 405. Rather than trusting that these stay in step, the
+    method the client actually sends is captured and matched against the
+    methods the route registers.
+    """
+    import httpx
+
+    from oai2.runtime.gateway_models import discover_cloud_models
+
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.method)
+        return httpx.Response(200, json={"object": "list", "data": [{"id": "oai-2.0"}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler), base_url="http://gw") as c:
+        discover_cloud_models(c)
+
+    assert sent == ["GET"], f"discovery client sent {sent}"
+
+    # ...and the local app must serve that same method.
+    client = _client()
+    assert client.get("/v1/models").status_code == 200
