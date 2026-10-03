@@ -567,8 +567,19 @@ async def test_d1_write_exception_is_not_reported_as_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_repeated_put_is_idempotent_by_key() -> None:
-    """Same logical object twice: same R2 key, same Vectorize id, one D1 row."""
+async def test_repeated_put_targets_the_same_keys_or_ids() -> None:
+    """FAKE ORCHESTRATION EVIDENCE ONLY.
+
+    `FakeWriter` is a write RECORDER, not a keyed table. What this proves is
+    that repeated PUTs target the same identity — the same R2 content key and
+    the same Vectorize id. It does NOT prove the authoritative D1 table still
+    holds exactly one row after repeated upserts; that is the D1 contract and
+    needs a real keyed adapter/SQLite-backed test, which this issue does not
+    have. Do not read this as persistence cardinality.
+
+    Revision behaviour is asserted here and is NOT idempotent: every
+    successful PUT advances it.
+    """
     runtime, reader, writer, r2, vectorize, _kv = _runtime()
     obj = _obj()
 
@@ -580,7 +591,8 @@ async def test_repeated_put_is_idempotent_by_key() -> None:
     assert set(r2.values) == {f"oai2-blobs/{obj.content_hash}"}
     # Vectorize upserts by knowledge_id: same id, no second record.
     assert {u[0] for u in vectorize.upserts} == {str(obj.knowledge_id)}
-    # D1 is an upsert keyed by knowledge_id: exactly one authoritative row.
+    # Same identity targeted on every write. Cardinality of the real
+    # authoritative table is NOT established by a recorder.
     assert len({row.knowledge_id for row, _exp, _now in writer.writes}) == 1
     reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
     assert len(reader.rows) == 1
@@ -606,7 +618,9 @@ async def test_retry_after_partial_failure_creates_no_duplicate_authoritative_ro
     revision = await runtime.put(obj, vector=[1.0, 0.0], now=21.0)
 
     assert revision == 5, "the successful retry advances the revision exactly once"
-    assert len(writer.writes) == 1, "only the successful attempt wrote D1"
+    # Only the successful attempt reached the writer. This is orchestration
+    # evidence; it is not a statement about the authoritative table.
+    assert len(writer.writes) == 1
     reader.rows[str(obj.knowledge_id)] = writer.writes[0][0]
     assert len(reader.rows) == 1
     assert [u[0] for u in vectorize.upserts] == [str(obj.knowledge_id)]

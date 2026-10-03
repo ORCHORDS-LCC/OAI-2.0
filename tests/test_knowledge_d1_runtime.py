@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, field
 
 import pytest
 
 from oai2.core import KnowledgeId, Status
 from oai2.knowledge import CFRow, RetrievalRequest
+from oai2.knowledge.gc_lease_d1 import gc_lease_schema_statements
 from oai2.knowledge.knowledge_d1 import (
     KNOWLEDGE_CORPUS_ADVANCE_SQL,
     KNOWLEDGE_CORPUS_REVISION_SQL,
     KNOWLEDGE_GET_SQL,
     KNOWLEDGE_WRITER_UPSERT_SQL,
     knowledge_query_sql,
+    knowledge_schema_statements,
 )
 from oai2.knowledge.knowledge_d1_runtime import D1KnowledgeReader, D1KnowledgeWriter
 
@@ -288,3 +291,137 @@ async def test_reader_fails_closed_on_invalid_row_status() -> None:
 def test_knowledge_query_sql_rejects_empty_status_set() -> None:
     with pytest.raises(ValueError, match="positive integer"):
         knowledge_query_sql(0)
+
+
+# ---------------------------------------------------------------------------
+# #205 REQ-CFOPS-015 — the D1 CONTRACT, not fake orchestration.
+#
+# The orchestration tests elsewhere use a write RECORDER, which proves the same
+# identity was targeted but NOT that the authoritative table holds one row.
+# These execute the real KNOWLEDGE_WRITER_UPSERT_SQL / CORPUS_ADVANCE_SQL
+# against a real SQLite database, following the existing sqlite harness in
+# tests/test_gc_lease_d1.py, so persistence cardinality is established rather
+# than inferred.
+# ---------------------------------------------------------------------------
+
+
+def _authoritative_db() -> sqlite3.Connection:
+    db = sqlite3.connect(":memory:")
+    for statement in knowledge_schema_statements():
+        db.execute(statement)
+    for statement in gc_lease_schema_statements():
+        db.execute(statement)
+    # The schema already creates the corpus-state singleton, so seed it rather
+    # than inserting a second row.
+    db.execute(
+        "INSERT INTO knowledge_corpus_state(singleton, revision) VALUES (1, 4) "
+        "ON CONFLICT(singleton) DO UPDATE SET revision = 4"
+    )
+    return db
+
+
+def _upsert(
+    db: sqlite3.Connection,
+    *,
+    knowledge_id: str,
+    content_hash: str,
+    expected_revision: int,
+) -> bool:
+    # The SQL uses anonymous numbered parameters (?1..?n), so sqlite3 binds
+    # them positionally.
+    db.execute(
+        KNOWLEDGE_WRITER_UPSERT_SQL,
+        (
+            knowledge_id,
+            "runtime",
+            content_hash,
+            0.9,
+            "experimental",
+            "https://example.test/source",
+            10.0,
+            f"oai2-blobs/{content_hash}",
+            knowledge_id,
+            expected_revision,
+            0,
+        ),
+    )
+    db.execute(
+        KNOWLEDGE_CORPUS_ADVANCE_SQL,
+        (expected_revision, f"oai2-blobs/{content_hash}", 0),
+    )
+    db.commit()
+    return (
+        db.execute(
+            "SELECT COUNT(*) FROM knowledge_index WHERE knowledge_id = ?",
+            (knowledge_id,),
+        ).fetchone()[0]
+        == 1
+    )
+
+
+def test_repeated_upsert_leaves_exactly_one_authoritative_row() -> None:
+    """D1 CONTRACT: repeated upsert of the same knowledge_id is one row."""
+    db = _authoritative_db()
+
+    assert _upsert(db, knowledge_id="ko_d1", content_hash="a" * 64, expected_revision=4)
+    assert _upsert(db, knowledge_id="ko_d1", content_hash="a" * 64, expected_revision=5)
+    assert _upsert(db, knowledge_id="ko_d1", content_hash="a" * 64, expected_revision=6)
+
+    rows = db.execute(
+        "SELECT knowledge_id, content_hash, corpus_revision FROM knowledge_index"
+    ).fetchall()
+    assert len(rows) == 1, f"expected one authoritative row, got {rows}"
+    assert rows[0][0] == "ko_d1"
+    # The latest content wins; the row is replaced, never duplicated.
+    assert rows[0][1] == "a" * 64
+    assert rows[0][2] == 7, "the row records the revision it was written at"
+    db.close()
+
+
+def test_upsert_replaces_content_hash_rather_than_adding_a_row() -> None:
+    """A changed body under a stable id updates in place."""
+    db = _authoritative_db()
+
+    _upsert(db, knowledge_id="ko_d1", content_hash="a" * 64, expected_revision=4)
+    _upsert(db, knowledge_id="ko_d1", content_hash="b" * 64, expected_revision=5)
+
+    rows = db.execute(
+        "SELECT content_hash FROM knowledge_index WHERE knowledge_id = 'ko_d1'"
+    ).fetchall()
+    assert rows == [("b" * 64,)], "content change must update the single row"
+    db.close()
+
+
+def test_distinct_ids_produce_distinct_rows() -> None:
+    """The control: the keying is real, so a different id is a different row."""
+    db = _authoritative_db()
+
+    _upsert(db, knowledge_id="ko_one", content_hash="a" * 64, expected_revision=4)
+    _upsert(db, knowledge_id="ko_two", content_hash="b" * 64, expected_revision=5)
+
+    count = db.execute("SELECT COUNT(*) FROM knowledge_index").fetchone()[0]
+    assert count == 2, "distinct knowledge_ids must be distinct authoritative rows"
+    db.close()
+
+
+def test_a_stale_expected_revision_is_denied_and_writes_nothing() -> None:
+    """A conflicting/stale revision must not claim the request committed."""
+    db = _authoritative_db()
+
+    _upsert(db, knowledge_id="ko_d1", content_hash="a" * 64, expected_revision=4)
+    assert db.execute(
+        "SELECT revision FROM knowledge_corpus_state WHERE singleton = 1"
+    ).fetchone()[0] == 5, "one successful upsert advanced the corpus by one"
+
+    # Expected revision 4 is now stale: the corpus is at 5.
+    _upsert(db, knowledge_id="ko_d1", content_hash="c" * 64, expected_revision=4)
+
+    rows = db.execute(
+        "SELECT content_hash FROM knowledge_index WHERE knowledge_id = 'ko_d1'"
+    ).fetchall()
+    assert rows == [("a" * 64,)], "a stale-revision write must not overwrite the row"
+    revision = db.execute(
+        "SELECT revision FROM knowledge_corpus_state WHERE singleton = 1"
+    ).fetchone()[0]
+    assert revision == 5, "a denied write must not advance the corpus revision"
+    db.close()

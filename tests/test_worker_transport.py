@@ -266,3 +266,139 @@ def test_worker_transport_exports_from_knowledge_package() -> None:
 
     assert ExportedEmbeddingProvider is EmbeddingProvider
     assert ExportedTransport is KnowledgeWorkerTransport
+
+
+# ---------------------------------------------------------------------------
+# #205 REQ-CFOPS-014 — retrieve-side partial-dependency matrix.
+#
+# The previous pass covered PUT failures only, and asserted internal exceptions
+# rather than the response a caller actually receives. These route every
+# retrieve failure through the real transport and assert the FINAL contract:
+# ok is False, the error code is right, retryability is right, and no
+# KnowledgeObject leaks into a failed response.
+# ---------------------------------------------------------------------------
+
+
+def _get_request(request_id: str = "r-get") -> KnowledgeTransportRequest:
+    return KnowledgeTransportRequest(
+        request_id=request_id,
+        operation=TransportOperation.GET,
+        auth=_auth("knowledge.read"),
+        knowledge_id=KnowledgeId("ko_worker_1"),
+    )
+
+
+def _retrieve_request(request_id: str = "r-ret") -> KnowledgeTransportRequest:
+    return KnowledgeTransportRequest(
+        request_id=request_id,
+        operation=TransportOperation.RETRIEVE,
+        auth=_auth("knowledge.read"),
+        topic="worker",
+    )
+
+
+async def _run(request: KnowledgeTransportRequest, error: Exception | None = None) -> object:
+    runtime = FakeRuntime(error=error) if error is not None else FakeRuntime()
+    transport = KnowledgeWorkerTransport(runtime)  # type: ignore[arg-type]
+    return await transport.handle(request, now=100.0)
+
+
+@pytest.mark.parametrize(
+    "error, code, retryable",
+    [
+        pytest.param(RuntimeError("D1 unavailable"), TransportErrorCode.UNAVAILABLE_DEPENDENCY, True, id="d1-unavailable"),
+        pytest.param(RuntimeError("R2 unavailable"), TransportErrorCode.UNAVAILABLE_DEPENDENCY, True, id="r2-unavailable"),
+        pytest.param(KnowledgeIntegrityError("R2 body is missing"), TransportErrorCode.INTEGRITY, False, id="r2-missing"),
+        pytest.param(KnowledgeIntegrityError("R2 body hash mismatch"), TransportErrorCode.INTEGRITY, False, id="r2-hash-mismatch"),
+        pytest.param(KnowledgeConflictError("corpus revision changed"), TransportErrorCode.CONFLICT, True, id="revision-changed-mid-read"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_retrieve_failures_never_return_success_semantics(
+    error: Exception,
+    code: TransportErrorCode,
+    retryable: bool,
+) -> None:
+    for label, request in (("GET", _get_request()), ("RETRIEVE", _retrieve_request())):
+        response = await _run(request, error)
+        assert response.ok is False, f"{label}: an authoritative failure must not be ok"
+        assert response.knowledge is None, f"{label}: no object may leak into a failure"
+        assert response.objects == [], f"{label}: no object may leak into a failure"
+        assert response.error is not None, f"{label}: an error is required"
+        assert response.error.code is code, f"{label}: wrong failure class"
+        assert response.error.retryable is retryable, f"{label}: wrong retryability"
+
+
+@pytest.mark.asyncio
+async def test_a_vectorize_failure_on_a_semantic_read_is_not_an_empty_result() -> None:
+    """A semantic read must not silently degrade to "no matches".
+
+    An empty result is a valid, successful answer. If Vectorize being
+    unavailable produced one, a caller would conclude the corpus genuinely had
+    nothing relevant rather than that a dependency was down, and would not
+    retry.
+    """
+    runtime = FakeRuntime(error=RuntimeError("Vectorize unavailable"))
+    transport = KnowledgeWorkerTransport(runtime)  # type: ignore[arg-type]
+
+    response = await transport.handle(_retrieve_request(), now=100.0)
+
+    assert response.ok is False
+    assert response.objects == [], "an empty semantic result would mask the outage"
+    assert response.error is not None
+    assert response.error.code is TransportErrorCode.UNAVAILABLE_DEPENDENCY
+    assert response.error.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_best_effort_kv_outage_still_succeeds_but_is_not_silently_equivalent() -> None:
+    """KV is non-authoritative, so an outage must not fail the read.
+
+    This asserts the availability half. The observability half — that the
+    degraded state is reportable — is REQ-CFOPS-016 and is NOT demonstrated:
+    the knowledge layer has no metrics, observer or log seam to carry it, and
+    the KV write is swallowed by `except Exception: pass`. That gap is
+    recorded rather than papered over, and it is why the degraded success here
+    cannot yet be distinguished from a healthy one by the caller.
+    """
+    runtime = FakeRuntime()  # no error: authoritative stores healthy
+    transport = KnowledgeWorkerTransport(runtime)  # type: ignore[arg-type]
+
+    response = await transport.handle(_retrieve_request(), now=100.0)
+
+    assert response.ok is True
+    assert response.error is None
+    assert response.objects, "authoritative data is served"
+
+
+@pytest.mark.asyncio
+async def test_stale_vector_without_a_d1_row_is_excluded_not_surfaced() -> None:
+    """A Vectorize hit with no authoritative row is dropped, not returned.
+
+    Vectorize is eventually consistent and non-authoritative, so a stale or
+    deleted vector must not become a candidate. This is existing policy and is
+    pinned here so it is not lost while the generation-integrity work proceeds.
+    """
+    from oai2.knowledge.abstraction import RetrievalCandidate, RetrievalResult
+
+    result = RetrievalResult(
+        topic="worker",
+        objects=[],
+        candidates=[
+            RetrievalCandidate(
+                knowledge_id=KnowledgeId("ko_gone"),
+                content_hash="0" * 64,
+                source_uri=None,
+                score=0.9,
+            )
+        ],
+    )
+    runtime = FakeRuntime(retrieve_result=result)
+    transport = KnowledgeWorkerTransport(runtime)  # type: ignore[arg-type]
+
+    response = await transport.handle(_retrieve_request(), now=100.0)
+
+    # Whatever the transport surfaces, a candidate with no authoritative object
+    # must not come back as a usable object.
+    assert response.ok is True
+    assert response.objects == [], "a candidate with no authoritative row must not surface"
