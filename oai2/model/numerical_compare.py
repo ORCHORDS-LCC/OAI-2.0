@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .numerics import NumericalOperation
+from .tolerance_matrix import canonical_policy, policy_violations
 
 
 class NumericalFallback(StrEnum):
@@ -69,6 +70,19 @@ class NumericalComparison:
     # numerical failure came from. REQ-NUM-006 asks for reproducibility
     # from model/config/INPUT identity, and the input half was missing.
     input_digest: str
+    # Which CANONICAL policy the declared profile was measured against.
+    # `profile_id` is chosen by the caller and therefore proves nothing: the
+    # same caller-supplied id can be attached to a profile declaring
+    # max_abs_error=1e9 and to one declaring 1e-6, producing artifacts that
+    # agree on every field a reader would check. Recording the policy that
+    # actually applied means an artifact is falsifiable against a declared
+    # baseline rather than against the caller's own description of it.
+    tolerance_policy_id: str
+    # The specific axes on which the declared profile was looser than
+    # `tolerance_policy_id` required. Empty when the profile complies. A bare
+    # `tolerance_policy` failure kind says only that something was wrong; this
+    # says which number a reader has to go argue with.
+    tolerance_policy_violations: tuple[str, ...]
     sample_count: int
     max_abs_error: float
     max_rel_error: float
@@ -179,6 +193,32 @@ def compare_numerical_paths(
     )
 
     failures: list[str] = []
+    # A DECLARED TOLERANCE IS NOT EVIDENCE OF ONE. `NumericalToleranceProfile`
+    # is caller-supplied, so before the canonical matrix existed a caller could
+    # declare max_abs_error=1e9 / max_capability_regression=1.0 /
+    # require_finite_state_match=False for ROUTER_PROBABILITIES and promote a
+    # kernel whose router probabilities were wrong by 0.4 absolute with total
+    # capability loss: `passed=True, failures=()`, at any speedup. Each
+    # declaration was individually legal and collectively meaningless.
+    #
+    # This check is reported FIRST because it invalidates the frame the other
+    # failures are measured in -- the numbers below were compared against a
+    # gate that should not have existed, so a reader must not reach
+    # `absolute_error` and conclude the profile was meaningfully tight.
+    #
+    # Only WIDENING is a violation. A caller may always demand more accuracy
+    # than the matrix requires, so this can only ever make the gate stricter
+    # than the caller intended, never looser.
+    policy_violation_details = policy_violations(
+        operation=profile.operation,
+        dtype=profile.dtype,
+        max_abs_error=profile.max_abs_error,
+        max_rel_error=profile.max_rel_error,
+        max_capability_regression=profile.max_capability_regression,
+        require_finite_state_match=profile.require_finite_state_match,
+    )
+    if policy_violation_details:
+        failures.append("tolerance_policy")
     if profile.require_finite_state_match and not finite_match:
         failures.append("finite_state_mismatch")
     # NO COMPARABLE SAMPLES IS NOT A PASS. Non-finite samples are skipped
@@ -204,6 +244,8 @@ def compare_numerical_paths(
         profile_id=profile.profile_id,
         identity=identity,
         input_digest=_samples_digest(reference, optimized),
+        tolerance_policy_id=canonical_policy(profile.operation, profile.dtype).policy_id,
+        tolerance_policy_violations=policy_violation_details,
         sample_count=len(reference),
         max_abs_error=max_abs,
         max_rel_error=max_rel,
