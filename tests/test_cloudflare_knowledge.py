@@ -121,6 +121,21 @@ def test_cache_key_changes_when_status_set_changes() -> None:
     assert cache_key_for(r1, "v1", 7) != cache_key_for(r2, "v1", 7)
 
 
+def test_cache_key_changes_when_superseded_inclusion_changes() -> None:
+    """A default query and a historical query are different result sets.
+
+    They share topic, limit, min_authority, include_status and corpus
+    revision, so without `include_superseded` in the fingerprint they would
+    share a cache entry -- letting a historical query be served the
+    superseded-excluded result, or a default query be served superseded rows.
+    """
+    from oai2.knowledge import RetrievalRequest
+
+    r1 = RetrievalRequest(topic="x")
+    r2 = RetrievalRequest(topic="x", include_superseded=True)
+    assert cache_key_for(r1, "v1", 7) != cache_key_for(r2, "v1", 7)
+
+
 def test_cache_revision_invalidates_after_write() -> None:
     b = MockCloudflareBindings()
     store = CloudflareKnowledgeStore(b, embedding_digest="test-embed-digest-v1")

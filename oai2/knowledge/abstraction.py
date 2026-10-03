@@ -87,6 +87,10 @@ class RetrievalRequest:
         Status.IMPLEMENTED,
         Status.EXPERIMENTAL,
     )
+    # REQ-TEMP-025: a historical question must still be able to retrieve
+    # superseded evidence, so exclusion is the default and inclusion is an
+    # explicit opt-in rather than an unconditional filter.
+    include_superseded: bool = False
 
 
 @dataclass(slots=True, frozen=True)
@@ -157,6 +161,15 @@ class InMemoryKnowledgeStore(KnowledgeStore):
             if obj.authority < request.min_authority:
                 continue
             if obj.status not in request.include_status:
+                continue
+            # REQ-TEMP-014: a superseded record stays retrievable for audit,
+            # never by default. This is the gate `is_active` promised and no
+            # caller performed. It cannot be delegated to `include_status`,
+            # because a superseded row is deliberately demoted to
+            # EXPERIMENTAL and EXPERIMENTAL is in the default set -- so the
+            # status filter never excluded it. Filtering on the field itself
+            # is what makes the exclusion independent of the status mapping.
+            if obj.superseded_by is not None and not request.include_superseded:
                 continue
             out.append(obj)
         out.sort(key=lambda o: (o.authority, o.retrieved_at), reverse=True)

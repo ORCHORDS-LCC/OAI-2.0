@@ -338,6 +338,12 @@ def cache_key_for(
         "limit": request.limit,
         "min_authority": request.min_authority,
         "include_status": sorted(s.value for s in request.include_status),
+        # A default request and a historical (include_superseded) request are
+        # different result sets over the same corpus revision, so they must not
+        # share a cache entry. Omitting this would let a historical query be
+        # served the default (superseded-excluded) result, or worse, let a
+        # default query be served a result that contains superseded rows.
+        "include_superseded": request.include_superseded,
         "embedding_digest": embedding_digest,
         "corpus_revision": corpus_revision,
     }

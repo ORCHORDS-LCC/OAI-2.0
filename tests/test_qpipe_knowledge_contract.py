@@ -17,7 +17,11 @@ import json
 import pytest
 
 from oai2.core import Status
-from oai2.knowledge.abstraction import MAX_SUPERSEDED_BY_LENGTH
+from oai2.knowledge.abstraction import (
+    MAX_SUPERSEDED_BY_LENGTH,
+    InMemoryKnowledgeStore,
+    RetrievalRequest,
+)
 from oai2.knowledge.qpipe_import import (
     DEFAULT_SOURCES,
     EXPORTABLE_SCOPES,
@@ -314,3 +318,79 @@ class TestTransportCarriesTheNewFields:
         obj = self._object()
         assert obj.trust_class == "retrieved_evidence"
         assert obj.status in {Status.IMPLEMENTED, Status.EXPERIMENTAL}
+
+
+class TestSupersededEvidenceIsNotRetrievalDefault:
+    """REQ-TEMP-014/025: excluded by default, still reachable on request.
+
+    The mitigation `row_to_knowledge_object` relies on is a status demotion
+    to EXPERIMENTAL, on the stated basis that it is then "not
+    retrieval-default". That never held: `RetrievalRequest.include_status`
+    defaults to `(IMPLEMENTED, EXPERIMENTAL)`, so the demotion excluded the
+    row from nothing. These tests pin the field-level gate instead.
+    """
+
+    def _store(self) -> InMemoryKnowledgeStore:
+        rep = import_qpipe_rows(
+            [
+                _row(ext="old", rid=1, steps=[STEP_A], superseded_by=2),
+                _row(ext="new", rid=2, steps=[STEP_A, STEP_B]),
+            ],
+            policy=_policy(),
+        )
+        store = InMemoryKnowledgeStore()
+        for obj in rep.imported:
+            store.put(obj)
+        return store
+
+    def test_a_superseded_record_is_not_returned_by_a_default_retrieve(self):
+        store = self._store()
+        topic = "qpipe:recipe-candidates:generic"
+        result = store.retrieve(RetrievalRequest(topic=topic))
+        returned = {o.source_uri.rsplit("/", 1)[-1] for o in result.objects}
+        # REQ-TEMP-014: the superseded record must not be retrieval-default.
+        assert returned == {"new"}
+
+    def test_a_historical_question_can_still_retrieve_the_superseded_record(self):
+        """Opposite-direction guard: the fix must not simply hide it forever.
+
+        REQ-TEMP-025 requires historical retrieval to keep working, so
+        exclusion is a default rather than a permanent deletion.
+        """
+        store = self._store()
+        topic = "qpipe:recipe-candidates:generic"
+        result = store.retrieve(
+            RetrievalRequest(topic=topic, include_superseded=True)
+        )
+        returned = {o.source_uri.rsplit("/", 1)[-1] for o in result.objects}
+        assert returned == {"old", "new"}
+
+    def test_exclusion_does_not_depend_on_the_status_demotion(self):
+        """The gate reads the field, not the status.
+
+        If this regressed to a status-based filter it would break the moment
+        a superseded row carried IMPLEMENTED, because IMPLEMENTED is in every
+        default include set.
+        """
+        store = self._store()
+        topic = "qpipe:recipe-candidates:generic"
+        strict = store.retrieve(
+            RetrievalRequest(
+                topic=topic,
+                include_status=(Status.IMPLEMENTED, Status.EXPERIMENTAL),
+            )
+        )
+        assert all(o.superseded_by is None for o in strict.objects)
+
+    def test_is_active_accessor_agrees_with_the_gate(self):
+        """`is_active` promised exclusion; now the gate implements it."""
+        store = self._store()
+        topic = "qpipe:recipe-candidates:generic"
+        active = {o.source_uri.rsplit("/", 1)[-1] for o in
+                  store.retrieve(RetrievalRequest(topic=topic)).objects}
+        everything = {
+            o.source_uri.rsplit("/", 1)[-1]
+            for o in store.all()
+            if o.superseded_by is None
+        }
+        assert active == everything

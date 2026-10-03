@@ -663,9 +663,24 @@ def test_retrieval_request_is_slotted() -> None:
     assert not hasattr(req, "__dict__")
 
 
-def test_retrieval_request_field_set_pinned_to_four_names() -> None:
+def test_retrieval_request_field_set_pinned_to_five_names() -> None:
+    # `include_superseded` was added for REQ-TEMP-025: excluding superseded
+    # evidence by default (REQ-TEMP-014) must not remove the ability to ask
+    # for it as historical evidence. See the gate in
+    # InMemoryKnowledgeStore.retrieve.
     field_names = {f.name for f in dataclasses.fields(RetrievalRequest)}
-    assert field_names == {"topic", "limit", "min_authority", "include_status"}
+    assert field_names == {
+        "topic",
+        "limit",
+        "min_authority",
+        "include_status",
+        "include_superseded",
+    }
+
+
+def test_retrieval_request_excludes_superseded_by_default() -> None:
+    req = RetrievalRequest(topic="x")
+    assert req.include_superseded is False
 
 
 def test_retrieval_request_topic_is_mandatory() -> None:
