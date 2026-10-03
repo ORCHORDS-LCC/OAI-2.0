@@ -89,6 +89,13 @@ def _resolve_runtime_cls() -> type[MLXHotRuntime]:
     return MLXHotRuntime
 
 
+#: The output-token ceiling this server actually enforces. Published in
+#: ``/v1/models`` so a client does not have to invent one, and kept in sync
+#: with ``ChatCompletionRequest.max_tokens`` below -- a published limit the
+#: server does not enforce is worse than none, because a client will trust it.
+MAX_OUTPUT_TOKENS = 32_768
+
+
 class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -101,6 +108,16 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     tools: list[dict[str, Any]] = Field(default_factory=list)
     tool_choice: str | dict[str, Any] | None = None
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        # The published ceiling and the enforced one are the same promise.
+        # Deriving one from the other is not possible with pydantic Field
+        # bounds, so the invariant is asserted instead of duplicated.
+        if self.max_tokens > MAX_OUTPUT_TOKENS:  # pragma: no cover - belt and braces
+            raise ValueError(
+                f"max_tokens {self.max_tokens} exceeds the served ceiling {MAX_OUTPUT_TOKENS}"
+            )
 
 
 def _usage(response: InferenceResponse) -> dict[str, Any]:
@@ -121,9 +138,7 @@ def _usage(response: InferenceResponse) -> dict[str, Any]:
     }
 
 
-def _prefix_report(
-    runtime: MLXHotRuntime, response: InferenceResponse
-) -> dict[str, Any] | None:
+def _prefix_report(runtime: MLXHotRuntime, response: InferenceResponse) -> dict[str, Any] | None:
     """Prefix KV reuse evidence, or ``None`` with the reason it is absent."""
     cache = runtime.prefix_cache
     if cache is None:
@@ -206,6 +221,7 @@ def create_app(
     with_tools: bool = True,
     prefix_cache: PrefixKVCache | None = None,
     enable_prefix_cache: bool = False,
+    context_window: int | None = None,
 ) -> FastAPI:
     runtime_cls = _resolve_runtime_cls()
 
@@ -253,13 +269,46 @@ def create_app(
 
     @app.post("/v1/models")
     def models() -> dict[str, Any]:
-        """Minimal model listing so an OpenAI-compatible client can start."""
-        return {
-            "object": "list",
-            "data": [{"id": model_id, "object": "model", "owned_by": "oai2-local"}],
-        }
+        """Model listing that publishes only limits this server enforces.
 
-    def _prepare(body: ChatCompletionRequest) -> tuple[list[dict[str, Any]], list[dict[str, Any]], PrefixSpec]:
+        A client that finds no limits here has no honest source for them and
+        will fill the fields with its own defaults. That is how a UI ends up
+        advertising a context window several orders of magnitude larger than
+        the one actually served (#258). So the listing states the two limits
+        the server can back:
+
+        - ``max_output_tokens`` is :data:`MAX_OUTPUT_TOKENS`, enforced by
+          ``ChatCompletionRequest`` on every request.
+        - ``context_window`` is included **only** when the operator declared
+          one at construction. When it is absent the field is ``None``, and
+          a client that respects the contract has to treat the limit as
+          unknown rather than assume a default. Publishing a plausible
+          number here would be the same fabrication one level up.
+
+        ``capabilities.tools`` reflects the real wiring: a request carrying
+        ``tools`` against a server started with ``with_tools=False`` has them
+        dropped, so claiming tool support unconditionally would be false.
+        """
+        entry: dict[str, Any] = {
+            "id": model_id,
+            "object": "model",
+            "owned_by": "oai2-local",
+            "capabilities": {
+                "max_output_tokens": MAX_OUTPUT_TOKENS,
+                "context_window": context_window,
+                "context_window_known": context_window is not None,
+                "tools": with_tools,
+                # This transport passes images through untouched but does not
+                # advertise or verify a vision path, so it is declared absent
+                # rather than assumed either way.
+                "vision": False,
+            },
+        }
+        return {"object": "list", "data": [entry]}
+
+    def _prepare(
+        body: ChatCompletionRequest,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], PrefixSpec]:
         messages = [dict(m) for m in body.messages]
         tools = body.tools if with_tools else []
 
@@ -285,6 +334,25 @@ def create_app(
 
     @app.post("/v1/chat/completions")
     def chat_completions(body: ChatCompletionRequest) -> Any:
+        # Enforce the published context window rather than merely advertising
+        # it. An advertised limit the server will not reject is a promise
+        # nobody keeps, and clients size their requests from it.
+        #
+        # Only the output side is checkable here: this layer has no tokenizer,
+        # so a prompt-length estimate would be a guess. The runtime and the
+        # serving backend own prompt-side overflow (llama-server answers
+        # `exceed_context_size_error` with the real count). What IS knowable
+        # is that a generation at least as long as the whole window can never
+        # fit alongside any prompt, so that is refused here with the declared
+        # number rather than discovered as a downstream 500.
+        if context_window is not None and body.max_tokens >= context_window:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"max_tokens {body.max_tokens} cannot fit in the declared context "
+                    f"window of {context_window}"
+                ),
+            )
         messages, tools, prefix = _prepare(body)
 
         # ``prompt`` must be non-empty; the gateway falls back to using
@@ -399,7 +467,9 @@ def _sse(
             {
                 "index": 0,
                 "delta": final_delta,
-                "finish_reason": "tool_contract_violation" if problems else response.finish_reason or "stop",
+                "finish_reason": "tool_contract_violation"
+                if problems
+                else response.finish_reason or "stop",
             }
         ],
         "usage": _usage(response),
