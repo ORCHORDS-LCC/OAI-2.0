@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-10-03T20:06:32.991278+00:00",
+  "harness": {
+    "script": "scripts/numerical_backend_evidence.py",
+    "source_sha": "58b5d1b0e42942524915343005bc20a2e5216f91",
+    "dirty": false,
+    "gate": "oai2.model.numerical_promotion.evaluate_numerical_candidate"
+  },
+  "serving_identity": {
+    "base_url": "http://127.0.0.1:8851",
+    "model_alias": "smollm2-1.7b-q4km",
+    "model_path": "/Users/orchords/models/normal/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "model_basename": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "total_slots": 4,
+    "n_ctx": 8192,
+    "weights_sha256": "77665ea4815999596525c636fbeb56ba8b080b46ae85efef4f0d986a139834d7",
+    "weights_bytes": 1055609824
+  },
+  "operation": {
+    "profile_id": "arithmetic-infer-fp32-scalar-v1",
+    "operation": "normalization",
+    "dtype": "q4_K_M",
+    "shape_class": "scalar",
+    "max_abs_error_tolerance": 1e-06,
+    "max_rel_error_tolerance": 1e-06,
+    "require_finite_state_match": true,
+    "fallback": "use_reference"
+  },
+  "samples": {
+    "prompts": [
+      "Compute 17 + 25. Reply with only the integer.",
+      "Compute 144 / 12. Reply with only the integer.",
+      "Compute 2^10. Reply with only the integer."
+    ],
+    "reference": [
+      42.0,
+      12.0,
+      1024.0
+    ],
+    "optimized": [
+      32.0,
+      12.0,
+      1024.0
+    ],
+    "reference_basis": "exact integer arithmetic (declared oracle)",
+    "sampling": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "seed": 20261004,
+      "max_tokens": 16
+    }
+  },
+  "result": {
+    "candidate_kind": "BACKEND",
+    "model_version": "smollm2-1.7b-q4km",
+    "runtime_version": "llama.cpp/77665ea48159",
+    "backend": "llamacpp-server:http://127.0.0.1:8851",
+    "config_id": "q4_K_M@seed20261004@temp0.0",
+    "sample_count": 3,
+    "measured_max_abs_error": 10.0,
+    "measured_max_rel_error": 0.23809523809523808,
+    "finite_state_match": true,
+    "passed": false,
+    "failures": [
+      "absolute_error",
+      "relative_error"
+    ],
+    "eligible": false,
+    "used_fallback": true
+  },
+  "scope": "This artifact claims only that the llama.cpp NORMAL lane was run through the canonical numerical promotion gate on the probed operation, and what the gate decided. It is NOT a claim that the backend is or is not fit for production, and NOT an accuracy figure for any suite."
+}
