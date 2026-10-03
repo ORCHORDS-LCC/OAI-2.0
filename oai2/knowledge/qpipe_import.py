@@ -530,14 +530,27 @@ def import_qpipe_rows(
     # outside its own database, so it is translated here. A target that is not
     # part of this import stays None and is reported, rather than being
     # rendered as a link that names the wrong or a nonexistent record.
-    id_to_external: dict[int, str] = {}
+    #
+    # The FK is only meaningful WITHIN a source: `recipe_id` is unique per
+    # source, not globally, so two sources may both contain id 1. Keying this
+    # map on the bare integer let the last source win, and a row in one source
+    # was then linked to another source's external_id inside its own
+    # namespace -- a record that does not exist, reported nowhere. The key is
+    # the CANONICAL source so the lookup namespace is the same one the ref is
+    # built from below; otherwise a winner spelled with a source alias would
+    # be wrongly reported as unresolved.
+    id_to_external: dict[tuple[str, int], str] = {}
     for row in accepted:
         if row.superseded_by is None:
-            id_to_external[row.recipe_id] = row.external_id
+            id_to_external[(_canonical_source(row.source), row.recipe_id)] = (
+                row.external_id
+            )
     for row in accepted:
         ref: str | None = None
         if row.superseded_by is not None:
-            winner_external = id_to_external.get(int(row.superseded_by))
+            winner_external = id_to_external.get(
+                (_canonical_source(row.source), int(row.superseded_by))
+            )
             if winner_external is None:
                 report.unresolved_supersession.append(
                     (row.external_id, int(row.superseded_by))

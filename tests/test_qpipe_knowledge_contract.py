@@ -168,6 +168,67 @@ class TestSupersessionIsLinkedNotRetired:
                 loser.topic.split(":")[:2]
             )
 
+    def test_supersession_never_crosses_a_source_namespace(self):
+        """A same-numbered id in another source is not this row's target.
+
+        ``recipe_id`` is unique per source, not globally, so two sources may
+        both contain id 1. Keying the winner map on the bare integer let the
+        last source win, and a row was linked to another source's external_id
+        inside its own namespace -- ``qpipe:scenario-forge:TB`` for a record
+        that does not exist, with ``unresolved_supersession`` left empty so the
+        corruption was reported nowhere. That is precisely the "link that
+        names the wrong or a nonexistent record" the module says it will not
+        render.
+        """
+        rows = [
+            _row(ext="SF", rid=1, steps=[STEP_A], source="scenario-forge"),
+            _row(ext="TB", rid=1, steps=[STEP_B], source="terminal-bench-2.1"),
+            _row(
+                ext="OLD",
+                rid=2,
+                steps=[STEP_A, STEP_B],
+                source="scenario-forge",
+                superseded_by=1,
+            ),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 3
+        linked = [o for o in rep.imported if o.superseded_by is not None]
+        assert len(linked) == 1
+        # The winner is the one in the losser's OWN source.
+        assert linked[0].superseded_by == "qpipe:scenario-forge:SF"
+        assert "TB" not in linked[0].superseded_by
+        # The target is genuinely in the import, so nothing is unresolved.
+        assert rep.unresolved_supersession == []
+
+    def test_supersession_resolves_across_source_alias_spellings(self):
+        """Opposite-direction guard: scoping by source must not over-refuse.
+
+        The winner map is keyed on the CANONICAL source, because the ref is
+        built from the canonical namespace too. If the key used the raw
+        spelling, a winner stored as ``recipe_candidates`` would not match a
+        loser stored as ``recipe-candidates`` -- the same source under two
+        spellings -- and a real, resolvable link would be wrongly reported as
+        unresolved. This is the aliasing ``_canonical_source`` exists to
+        absorb, and scoping the key must not throw it away.
+        """
+        rows = [
+            _row(ext="new", rid=1, steps=[STEP_A], source="recipe_candidates"),
+            _row(
+                ext="old",
+                rid=2,
+                steps=[STEP_A, STEP_B],
+                source="recipe-candidates",
+                superseded_by=1,
+            ),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 2
+        assert rep.unresolved_supersession == []
+        linked = [o for o in rep.imported if o.superseded_by is not None]
+        assert len(linked) == 1
+        assert linked[0].superseded_by == "qpipe:recipe-candidates:new"
+
     def test_unresolvable_supersession_is_reported_not_faked(self):
         """A target outside the import set must not become a plausible link."""
         rows = [_row(ext="orphan", rid=7, steps=[STEP_A], superseded_by=999)]
