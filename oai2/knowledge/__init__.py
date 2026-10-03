@@ -100,6 +100,18 @@ from .gc_lease_d1_runtime import (
     D1GcLeaseStore,
     D1PreparedStatementBinding,
 )
+from .gc_resource_lease_d1 import (
+    GC_RESOURCE_LEASE_TABLE,
+    GC_RESOURCE_TYPE_R2_BLOB,
+    GC_RESOURCE_TYPE_VECTOR,
+    GC_RESOURCE_WRITER_BLOCK_SQL,
+)
+from .gc_vector import (
+    VectorGcDisposition,
+    VectorGcDryRunReport,
+    VectorGcReconciliationState,
+    VectorInventoryEntry,
+)
 from .ingestion import IngestionJob, IngestionPipeline, IngestionStatus
 from .knowledge_d1 import (
     KNOWLEDGE_CORPUS_ADVANCE_SQL,
@@ -268,6 +280,14 @@ __all__ = [
     "VectorMatch",
     "VECTOR_ID_MAX_BYTES",
     "vector_id_for",
+    "GC_RESOURCE_LEASE_TABLE",
+    "GC_RESOURCE_TYPE_R2_BLOB",
+    "GC_RESOURCE_TYPE_VECTOR",
+    "GC_RESOURCE_WRITER_BLOCK_SQL",
+    "VectorGcDisposition",
+    "VectorGcDryRunReport",
+    "VectorGcReconciliationState",
+    "VectorInventoryEntry",
     "KnowledgeCacheRef",
     "QueryCacheEnvelope",
 ]

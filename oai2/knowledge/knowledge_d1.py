@@ -10,6 +10,16 @@ KNOWLEDGE_SCHEMA_VERSION = 1
 KNOWLEDGE_INDEX_TABLE = "knowledge_index"
 KNOWLEDGE_CORPUS_STATE_TABLE = "knowledge_corpus_state"
 
+# #261: the vector reclamation path asks "does any row reference this vector?",
+# which is a lookup on vectorize_id. Without an index on that column the
+# predicate is a full table scan on every acquire, revalidate and finalize, and
+# a sweep runs those against the whole authoritative table. The index below is
+# symmetric with the existing blob-key index. Applying it to a live D1 database
+# is a schema migration and is NOT performed by this source change.
+#
+# Kept as a Python comment rather than an SQL one: the schema is split on
+# semicolons into individual statements, and a comment containing one would
+# silently split a statement in two.
 KNOWLEDGE_SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS {KNOWLEDGE_INDEX_TABLE} (
     knowledge_id TEXT PRIMARY KEY NOT NULL,
@@ -26,6 +36,9 @@ CREATE TABLE IF NOT EXISTS {KNOWLEDGE_INDEX_TABLE} (
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_index_r2_blob_key
 ON {KNOWLEDGE_INDEX_TABLE}(r2_blob_key);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_index_vectorize_id
+ON {KNOWLEDGE_INDEX_TABLE}(vectorize_id);
 
 CREATE TABLE IF NOT EXISTS {KNOWLEDGE_CORPUS_STATE_TABLE} (
     singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton = 1),
