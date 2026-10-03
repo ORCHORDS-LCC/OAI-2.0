@@ -1,0 +1,94 @@
+{
+  "generated_at": "2026-10-03T20:19:28.953455+00:00",
+  "harness": {
+    "script": "scripts/numerical_tolerance_matrix.py",
+    "source_sha": "87d35007693d1c6154d86c3ad8e36efe613d57ca",
+    "dirty": false,
+    "gate": "oai2.model.numerical_compare.compare_numerical_paths"
+  },
+  "method": {
+    "reference": "oai2.model.numerics.extreme_value_fixtures()",
+    "dtype_source": "oai2.model.numerics.REFERENCE_PRECISION_RULES",
+    "candidate": "DECLARED SIMULATION of a path storing at the operation's own declared dtype (bf16 = 8 mantissa bits; int4/int8 = uniform grid). NOT a measurement of a real backend.",
+    "profile": "max_abs_error=1e18, max_rel_error=1e18 (measure-only)"
+  },
+  "distribution": [
+    {
+      "operation": "attention_softmax",
+      "storage_dtype": "bf16",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 0.0,
+      "max_rel_error": 0.0,
+      "finite_state_match": true,
+      "input_digest": "sha256:6d0b3d6330d3f958e4cc2a4faff1c5bf364f893cb8f5e09f12c97551d2656796"
+    },
+    {
+      "operation": "normalization",
+      "storage_dtype": "bf16",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 727379968.0,
+      "max_rel_error": 0.000727379968,
+      "finite_state_match": true,
+      "input_digest": "sha256:31fcf437edbe4ba4d6541b4710db27d24e599e974e563884301078f8c1225960"
+    },
+    {
+      "operation": "router_probabilities",
+      "storage_dtype": "bf16",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 1.4835710813625603e-33,
+      "max_rel_error": 1.4835710813625602e-21,
+      "finite_state_match": true,
+      "input_digest": "sha256:467e634c93b1e73cb1dafd950e1e36096465b3edd5c3897057a324a10200d360"
+    },
+    {
+      "operation": "loss",
+      "storage_dtype": "fp32",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 0.0,
+      "max_rel_error": 0.0,
+      "finite_state_match": true,
+      "input_digest": "sha256:5859a6bc49b0ba7d8e1a18bc30c88c9c2acf4678c8c3273bea792a02c705b224"
+    },
+    {
+      "operation": "quantize_dequantize",
+      "storage_dtype": "int4_or_int8",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 0.06666666666666288,
+      "max_rel_error": 0.0005249343832020699,
+      "finite_state_match": true,
+      "input_digest": "sha256:f0d5cd345bb40ae1294ffa84908b49a9dae8d85cea841eb21af1d63defa813a2"
+    },
+    {
+      "operation": "long_context_reduction",
+      "storage_dtype": "bf16",
+      "shape_class": "scalar",
+      "sample_count": 3,
+      "max_abs_error": 123136.0,
+      "max_rel_error": 0.00123136,
+      "finite_state_match": true,
+      "input_digest": "sha256:137253195fbe0076295fee301be992099af5357e880021a8cbf2c3f53fcad387"
+    }
+  ],
+  "summary": {
+    "cells": 6,
+    "comparable_cells": 6,
+    "max_abs_min": 0.0,
+    "max_abs_median": 0.06666666666666288,
+    "max_abs_max": 727379968.0,
+    "max_rel_min": 0.0,
+    "max_rel_median": 0.0005249343832020699,
+    "max_rel_max": 0.00123136,
+    "widest_relative_error_operation": "long_context_reduction"
+  },
+  "known_limitations": [
+    "extreme_value_fixtures() is a RANGE probe, not an operation-correct probe. Values like (-80, 0, 80) are not a softmax input in any meaningful sense, so a nonlinear operation is being round-tripped through storage rather than computed. The error measured is therefore the STORAGE error, which is the part a dtype-aware tolerance has to cover, but it is not the error of the whole operation.",
+    "attention_softmax and loss report max_abs_error=0.0 because their fixture values are exactly representable at the declared storage precision (0.0, and 80.0 as a power of two). That is a TRUE zero, not an empty-comparison artifact -- but it means those two cells carry NO information about typical error and must not be read as 'softmax is exact'.",
+    "Every cell has shape_class='scalar' because the declared fixture surface is three values wide. REQ-NUM-022's shape dimension is therefore NOT covered by this matrix; a real long-context sweep needs a fixture surface that is actually long."
+  ],
+  "scope": "Measures how large the storage error actually is for a DECLARED lossy candidate at each operation's declared storage dtype, so that choosing a tolerance is informed rather than guessed. It does NOT propose or endorse any tolerance, and it is NOT a measurement of a real backend -- that is evidence/numerical/backend_*.json."
+}
