@@ -67,12 +67,18 @@ import json
 import math
 import platform
 import statistics
+import subprocess
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import httpx
 
 
 @dataclass(slots=True)
@@ -105,6 +111,26 @@ class RunMetrics:
     output_text: str = ""
     output_excerpt: str = ""
     notes: list[str] = field(default_factory=list)
+
+    # ---- llama.cpp-server (remote/preloaded) observability ----
+    # `prefill_seconds` and `decode_tokens_per_second` above are the
+    # *server-reported* values for the llamacpp backend: llama-server
+    # publishes its own `timings.prompt_ms` and `timings.predicted_per_second`.
+    # HTTP wall-clock is never promoted to the decode rate; it is recorded
+    # separately below so the two can never be confused.
+    ttft_seconds: float | None = None
+    client_decode_tokens_per_second: float | None = None
+    server_prompt_tokens: int | None = None
+    server_predicted_tokens: int | None = None
+    cache_hit_tokens: int | None = None
+    serving_identity: dict[str, object] | None = None
+    agents: int = 1
+    config_label: str = "hot"
+    #: Index of the repetition this run belongs to. Concurrency aggregates are
+    #: summed *within* a repetition and then reduced across repetitions; a
+    #: flat sum over all runs would multiply throughput by the repetition
+    #: count and by the agent count simultaneously.
+    repetition: int = 0
 
 
 @dataclass(slots=True)
@@ -157,6 +183,51 @@ def _system_info() -> dict[str, str]:
         info["mlx_lm_version"] = _md.version("mlx-lm")
     except Exception:
         info["mlx_lm_version"] = "unknown"
+    return info
+
+
+def _harness_identity() -> dict[str, str]:
+    """Record the exact source revision that produced a summary artifact.
+
+    #240's audit rejected prior artifacts because no revision could be tied to
+    them. A throughput number without the harness SHA that produced it is not
+    evidence, so every summary carries this block. Failure to read git is
+    reported, never silently omitted.
+    """
+    info = {"source": "scripts/bench.py"}
+    try:
+        root = Path(__file__).resolve().parents[1]
+        info["commit"] = (
+            subprocess.run(  # noqa: S603
+                ["git", "-C", str(root), "rev-parse", "HEAD"],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True,
+            ).stdout.strip()
+            or "unknown"
+        )
+        dirty = subprocess.run(  # noqa: S603
+            ["git", "-C", str(root), "status", "--porcelain", "--", "scripts/bench.py"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout.strip()
+        info["dirty"] = "true" if dirty else "false"
+        info["branch"] = (
+            subprocess.run(  # noqa: S603
+                ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True,
+            ).stdout.strip()
+            or "unknown"
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        info["commit"] = f"unavailable:{type(exc).__name__}"
+        info["dirty"] = "unknown"
     return info
 
 
@@ -371,7 +442,14 @@ def _extract_quantization(model_id: str) -> str | None:
     return None
 
 
-def _aggregate(runs: list[RunMetrics]) -> dict[str, dict[str, float | int | None]]:
+#: Value type of an aggregate entry. Most entries are a :meth:`Stat.as_dict`
+#: mapping of scalars, but the llamacpp backend also stores nested objects
+#: (the per-repetition aggregate and the per-agent distribution), so the
+#: honest type is `object`, not `float | int | None`.
+_AggregateValue = object
+
+
+def _aggregate(runs: list[RunMetrics]) -> dict[str, _AggregateValue]:
     metric_names = [
         "load_seconds",
         "compile_seconds",
@@ -385,7 +463,7 @@ def _aggregate(runs: list[RunMetrics]) -> dict[str, dict[str, float | int | None
         "active_memory_gb",
         "cache_memory_gb",
     ]
-    out: dict[str, dict[str, float | int | None]] = {}
+    out: dict[str, _AggregateValue] = {}
     for name in metric_names:
         values = [getattr(r, name) for r in runs]
         s = _stat(values)
@@ -564,6 +642,32 @@ def run_one_gateway(
     )
 
 
+def aggregate_per_repetition(runs: list[RunMetrics]) -> dict[str, object]:
+    """Aggregate throughput summed *within* a repetition, reduced across reps.
+
+    For the concurrency matrix each repetition produces ``agents`` independent
+    runs. Summing all runs in the config would multiply the concurrency by the
+    repetition count as well, so a flat ``sum`` would overstate real system
+    throughput. Per-agent numbers stay on each :class:`RunMetrics`; this only
+    produces the system-level figure the issue asks for.
+    """
+    by_rep: dict[int, list[float]] = {}
+    for r in runs:
+        if r.decode_tokens_per_second is None:
+            continue
+        by_rep.setdefault(r.repetition, []).append(r.decode_tokens_per_second)
+    per_rep = [sum(v) for _, v in sorted(by_rep.items())]
+    if not per_rep:
+        return {"repetitions": 0, "median": None, "min": None, "max": None, "per_repetition": []}
+    return {
+        "repetitions": len(per_rep),
+        "median": round(statistics.median(per_rep), 4),
+        "min": round(min(per_rep), 4),
+        "max": round(max(per_rep), 4),
+        "per_repetition": [round(v, 4) for v in per_rep],
+    }
+
+
 def _fmt(v: float | None) -> str:
     if v is None:
         return "n/a"
@@ -572,14 +676,344 @@ def _fmt(v: float | None) -> str:
     return str(v)
 
 
+# ---------------------------------------------------------------------------
+# llama.cpp server backend (WI-PERF-003 / #240 configurations A/B/C + F)
+# ---------------------------------------------------------------------------
+
+
+def probe_llamacpp_identity(base_url: str, client: httpx.Client) -> dict[str, object]:
+    """Read the serving identity straight from llama-server's ``/props``.
+
+    Issue #240 and the repository model-identity rule require proving
+    ``endpoint -> server -> model -> context/parallel`` rather than trusting a
+    document or a 200 response. Anything the server does not report is left
+    out of the mapping instead of being guessed.
+    """
+    identity: dict[str, object] = {"base_url": base_url}
+    try:
+        resp = client.get(f"{base_url}/props")
+        resp.raise_for_status()
+        props = resp.json()
+    except Exception as exc:
+        identity["props_error"] = f"{type(exc).__name__}: {exc}"
+        return identity
+
+    model_path = props.get("model_path")
+    identity["model_path"] = model_path
+    identity["model_basename"] = (
+        model_path.rsplit("/", 1)[-1] if isinstance(model_path, str) else None
+    )
+    for key in ("default_generation_settings", "total_slots", "build_info"):
+        if key in props:
+            identity[key] = props[key]
+    gen = props.get("default_generation_settings")
+    if isinstance(gen, dict):
+        for key in ("n_ctx", "n_parallel", "n_batch", "n_ubatch"):
+            if key in gen:
+                identity[key] = gen[key]
+    return identity
+
+
+def _sse_json(payload: str | bytes) -> dict[str, object] | None:
+    """Decode one ``data:`` line of an OpenAI-compatible SSE stream.
+
+    Accepts ``str`` or ``bytes`` because ``httpx.Response.iter_lines()``
+    yields ``str`` while ``aiter_lines()``/raw iteration can yield ``bytes``.
+    """
+    if isinstance(payload, (bytes, bytearray)):
+        text = bytes(payload).decode("utf-8", errors="replace").strip()
+    else:
+        text = payload.strip()
+    if not text or not text.startswith("data:"):
+        return None
+    body = text[5:].strip()
+    if body == "[DONE]":
+        return None
+    try:
+        decoded = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    return decoded if isinstance(decoded, dict) else None
+
+
+def run_one_llamacpp(
+    *,
+    base_url: str,
+    model: str,
+    prompt: str,
+    prompt_label: str,
+    max_tokens: int,
+    timeout_seconds: float,
+    client: httpx.Client,
+    warm: bool,
+    config_label: str,
+) -> RunMetrics:
+    """One measured streaming generation against a running llama-server.
+
+    ``prefill_seconds`` is llama-server's own ``timings.prompt_ms`` and
+    ``decode_tokens_per_second`` is its own ``timings.predicted_per_second``.
+    The caller-observed time-to-first-token and the caller-observed token rate
+    are recorded in ``ttft_seconds`` / ``client_decode_tokens_per_second`` so a
+    transport-level number can never be reported as the model's decode rate.
+
+    ``cache_hit_tokens`` is the server's ``timings.cache_n``. That is the
+    observable hit/miss evidence REQ-PERF-032 asks for; when the build does
+    not publish ``timings`` the fields stay ``None`` and a note records it.
+    """
+    run_id = f"bench_{uuid.uuid4().hex[:10]}"
+    sys_info = _system_info()
+    notes: list[str] = []
+
+    payload = {
+        "model": model,
+        "stream": True,
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    def _post():
+        # Streaming is required for an honest TTFT: a non-streaming
+        # httpx.Client.post() buffers the entire body before returning, which
+        # would make the first observed line arrive at the *end* of the
+        # response and silently turn TTFT into end-to-end latency.
+        return client.stream(
+            "POST",
+            f"{base_url}/v1/chat/completions",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
+    warm_run_seconds: float | None = None
+    if warm:
+        # Discarded: primes the server-side prompt cache / GPU graphs so the
+        # measured run below is not the process's first-request compile.
+        try:
+            t_warm = time.perf_counter()
+            with _post() as warm_resp:
+                warm_resp.raise_for_status()
+                for line in warm_resp.iter_lines():
+                    _sse_json(line)
+            warm_run_seconds = time.perf_counter() - t_warm
+        except Exception as exc:
+            notes.append(f"warmup-failed: {type(exc).__name__}: {exc}")
+
+    ttft: float | None = None
+    first_token_at: float | None = None
+    end_to_end: float | None = None
+    chunks = 0
+    output_text = ""
+    timings: dict[str, object] | None = None
+
+    try:
+        t_start = time.perf_counter()
+        last = t_start
+        with _post() as resp:
+            resp.raise_for_status()
+            for raw in resp.iter_lines():
+                decoded = _sse_json(raw)
+                if decoded is None:
+                    continue
+                chunks += 1
+                last = time.perf_counter()
+                if first_token_at is None:
+                    first_token_at = last - t_start
+                if isinstance(decoded.get("timings"), dict):
+                    timings = decoded["timings"]  # type: ignore[assignment]
+                choices = decoded.get("choices")
+                if isinstance(choices, list) and choices:
+                    first = choices[0]
+                    if isinstance(first, dict):
+                        delta = first.get("delta")
+                        content = delta.get("content") if isinstance(delta, dict) else None
+                        if isinstance(content, str) and content:
+                            if ttft is None:
+                                # TTFT is the first *content* token, not the
+                                # first (possibly empty) role/frame chunk.
+                                ttft = last - t_start
+                            output_text += content
+                        if first.get("finish_reason") is not None:
+                            break
+        end_to_end = last - t_start
+        if ttft is None:
+            # No content token was observed: the split is unmeasurable, so
+            # leave it None instead of substituting the frame time.
+            notes.append("no-content-token-observed")
+    except Exception as exc:
+        notes.append(f"generate-failed: {type(exc).__name__}: {exc}")
+
+    server_prompt_seconds: float | None = None
+    server_decode_tps: float | None = None
+    server_prompt_tokens: int | None = None
+    server_predicted_tokens: int | None = None
+    cache_hit_tokens: int | None = None
+    if timings is None:
+        notes.append("server-published-no-timings")
+    else:
+        v_prompt_ms = timings.get("prompt_ms")
+        if isinstance(v_prompt_ms, (int, float)):
+            server_prompt_seconds = float(v_prompt_ms) / 1000.0
+        v_predicted_ps = timings.get("predicted_per_second")
+        if isinstance(v_predicted_ps, (int, float)):
+            server_decode_tps = float(v_predicted_ps)
+        v_prompt_n = timings.get("prompt_n")
+        if isinstance(v_prompt_n, (int, float)):
+            server_prompt_tokens = int(v_prompt_n)
+        v_predicted_n = timings.get("predicted_n")
+        if isinstance(v_predicted_n, (int, float)):
+            server_predicted_tokens = int(v_predicted_n)
+        v_cache_n = timings.get("cache_n")
+        if isinstance(v_cache_n, (int, float)):
+            cache_hit_tokens = int(v_cache_n)
+
+    # Without server timings the prefill/decode split is genuinely unknown;
+    # leave it None rather than back-filling a wall-clock estimate.
+    prefill_seconds = server_prompt_seconds
+    decode_tps = server_decode_tps
+    client_decode_tps: float | None = None
+    decode_seconds: float | None = None
+    if end_to_end and ttft is not None and end_to_end > ttft:
+        decode_seconds = end_to_end - ttft
+        if chunks > 1:
+            client_decode_tps = (chunks - 1) / decode_seconds
+
+    # llama.cpp reports prompt_n as the tokens *processed on this call*; the
+    # cached ones arrive separately as cache_n. The prompt the model actually
+    # conditioned on is their sum, so that is what prompt_tokens means here.
+    total_prompt_tokens: int | None = None
+    if server_prompt_tokens is not None or cache_hit_tokens is not None:
+        total_prompt_tokens = (server_prompt_tokens or 0) + (cache_hit_tokens or 0)
+        notes.append(
+            f"prompt_n={server_prompt_tokens} cache_n={cache_hit_tokens} "
+            "(llama.cpp prompt_n excludes cached tokens; prompt_tokens is their sum)"
+        )
+
+    return RunMetrics(
+        run_id=run_id,
+        timestamp=time.time(),
+        model=f"llamacpp:{model}",
+        quantization=None,
+        prompt_label=prompt_label,
+        prompt_tokens=total_prompt_tokens
+        if total_prompt_tokens is not None
+        else len(prompt.split()),
+        max_tokens=max_tokens,
+        # The server owns model residency; this process loads nothing.
+        load_seconds=None,
+        compile_seconds=None,
+        warm_run_seconds=warm_run_seconds,
+        prefill_seconds=prefill_seconds,
+        prefill_tokens_per_second=(
+            server_prompt_tokens / server_prompt_seconds
+            if server_prompt_tokens and server_prompt_seconds
+            else None
+        ),
+        decode_seconds=decode_seconds,
+        decode_tokens_per_second=decode_tps,
+        end_to_end_seconds=end_to_end,
+        generation_tokens=server_predicted_tokens
+        if server_predicted_tokens is not None
+        else chunks,
+        peak_memory_gb=None,
+        active_memory_gb=None,
+        cache_memory_gb=None,
+        device=f"llamacpp:{base_url}",
+        sys_info=sys_info,
+        output_text=output_text,
+        output_excerpt=output_text[:240],
+        notes=notes,
+        ttft_seconds=ttft,
+        client_decode_tokens_per_second=client_decode_tps,
+        server_prompt_tokens=server_prompt_tokens,
+        server_predicted_tokens=server_predicted_tokens,
+        cache_hit_tokens=cache_hit_tokens,
+        serving_identity=probe_llamacpp_identity(base_url, client),
+        agents=1,
+        config_label=config_label,
+    )
+
+
+def run_concurrent_llamacpp(
+    *,
+    base_url: str,
+    model: str,
+    prompt: str,
+    prompt_label: str,
+    max_tokens: int,
+    timeout_seconds: float,
+    client: httpx.Client,
+    agents: int,
+    warm: bool,
+    config_label: str,
+    repetition: int = 0,
+) -> list[RunMetrics]:
+    """Configuration F: run ``agents`` independent streams against one server.
+
+    Each agent is an independent request; per-agent metrics stay in each
+    :class:`RunMetrics` and the caller derives aggregate throughput. Aggregate
+    is never substituted for a per-agent number.
+    """
+    if agents < 1:
+        raise ValueError("agents must be >= 1")
+    if warm:
+        # Prime the shared cache once; every agent then races the same prefix.
+        run_one_llamacpp(
+            base_url=base_url,
+            model=model,
+            prompt=prompt,
+            prompt_label=prompt_label,
+            max_tokens=8,
+            timeout_seconds=timeout_seconds,
+            client=client,
+            warm=False,
+            config_label=config_label,
+        )
+
+    barrier = threading.Barrier(agents)
+    results: list[RunMetrics | None] = [None] * agents
+    errors: list[str] = []
+
+    def _worker(index: int) -> None:
+        try:
+            barrier.wait()
+            results[index] = run_one_llamacpp(
+                base_url=base_url,
+                model=model,
+                prompt=prompt,
+                prompt_label=prompt_label,
+                max_tokens=max_tokens,
+                timeout_seconds=timeout_seconds,
+                client=client,
+                warm=False,
+                config_label=config_label,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            errors.append(f"agent{index}: {type(exc).__name__}: {exc}")
+
+    threads = [threading.Thread(target=_worker, args=(i,)) for i in range(agents)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for e in errors:
+        print(f"WARN {e}", file=sys.stderr)
+    done = [r for r in results if r is not None]
+    for r in done:
+        r.agents = agents
+        r.repetition = repetition
+    return done
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--backend",
-        choices=("mlx", "gateway"),
+        choices=("mlx", "gateway", "llamacpp"),
         default="mlx",
-        help="Inference backend: mlx (local Apple Silicon weights) or gateway "
-        "(OAI-2.0 GatewayModelClient driving api.orchords.com).",
+        help="Inference backend: mlx (local Apple Silicon weights), gateway "
+        "(OAI-2.0 GatewayModelClient driving api.orchords.com), or llamacpp "
+        "(a running llama-server OpenAI-compatible endpoint — the production "
+        "serving path).",
     )
     parser.add_argument(
         "--model",
@@ -626,6 +1060,46 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Gateway backend only. Override OAI2_GATEWAY_TIMEOUT_SECONDS.",
     )
+    # ---- llamacpp backend (WI-PERF-003 / #240) ----
+    parser.add_argument(
+        "--llamacpp-base-url",
+        default=None,
+        help="llamacpp backend only. Base URL of a running llama-server, e.g. "
+        "http://127.0.0.1:8851. Override OAI2_LLAMACPP_BASE_URL.",
+    )
+    parser.add_argument(
+        "--llamacpp-model",
+        default=None,
+        help="llamacpp backend only. Model/alias the server accepts. Override "
+        "OAI2_LLAMACPP_MODEL. Defaults to the alias reported by /props.",
+    )
+    parser.add_argument(
+        "--llamacpp-timeout-seconds",
+        type=float,
+        default=900.0,
+        help="llamacpp backend only. Per-request timeout.",
+    )
+    parser.add_argument(
+        "--config",
+        choices=("cold", "hot", "hot-prefix"),
+        default="hot",
+        help="Configuration label recorded in the artifact: 'cold' (B0, no "
+        "warm-up credit), 'hot' (B1, server already resident) or 'hot-prefix' "
+        "(B2/C, stable prefix repeated so the server prompt cache is hit).",
+    )
+    parser.add_argument(
+        "--agents",
+        type=int,
+        default=1,
+        help="llamacpp backend only. Concurrent independent streams (the #240 "
+        "configuration-F concurrency matrix: 1/2/4/8).",
+    )
+    parser.add_argument(
+        "--stable-prefix",
+        default=None,
+        help="llamacpp backend only. Prepended verbatim to every prompt so the "
+        "server-side prompt cache is exercised and cache_n is observable.",
+    )
     args = parser.parse_args(argv)
 
     # ---- Gateway-backend prerequisite resolution ----
@@ -671,8 +1145,44 @@ def main(argv: list[str] | None = None) -> int:
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # ---- llamacpp-backend prerequisite resolution ----
+    llamacpp_client = None
+    llamacpp_base_url: str | None = None
+    llamacpp_model: str | None = None
+    if args.backend == "llamacpp":
+        import os
+
+        import httpx
+
+        llamacpp_base_url = args.llamacpp_base_url or os.environ.get("OAI2_LLAMACPP_BASE_URL")
+        if not llamacpp_base_url:
+            print(
+                "SKIP llamacpp-bench: no base URL. Pass --llamacpp-base-url or set "
+                "OAI2_LLAMACPP_BASE_URL (e.g. http://127.0.0.1:8851).",
+                file=sys.stderr,
+            )
+            return 0
+        llamacpp_base_url = llamacpp_base_url.rstrip("/")
+        llamacpp_client = httpx.Client(timeout=args.llamacpp_timeout_seconds)
+        identity = probe_llamacpp_identity(llamacpp_base_url, llamacpp_client)
+        llamacpp_model = args.llamacpp_model or os.environ.get("OAI2_LLAMACPP_MODEL")
+        if not llamacpp_model:
+            # Take the alias the server actually reports rather than guessing.
+            reported = identity.get("model_path")
+            llamacpp_model = reported.rsplit("/", 1)[-1] if isinstance(reported, str) else None
+        if not llamacpp_model:
+            print(
+                "SKIP llamacpp-bench: could not determine the served model. Pass "
+                "--llamacpp-model or --llamacpp-timeout-seconds is too small for /props.",
+                file=sys.stderr,
+            )
+            llamacpp_client.close()
+            return 0
+
     if args.backend == "gateway":
         tag = args.tag or f"gateway-{args.model}"
+    elif args.backend == "llamacpp":
+        tag = args.tag or f"llamacpp-{args.config}-a{args.agents}-{llamacpp_model}"
     else:
         tag = args.tag or args.model.split("/")[-1]
     print(
@@ -690,11 +1200,20 @@ def main(argv: list[str] | None = None) -> int:
         "repetitions": args.repetitions,
         "warmup": not args.no_warmup,
         "sys_info": _system_info(),
+        "harness": _harness_identity(),
         "configs": [],  # list[dict[str, object]], narrowed explicitly where appended
     }
+    if args.backend == "llamacpp":
+        summary["config_label"] = args.config
+        summary["agents"] = args.agents
+        summary["serving_identity"] = identity
+        summary["llamacpp_model"] = llamacpp_model
 
     for budget in args.prompt_tokens:
         prompt, word_count = _build_prompt(budget)
+        if args.stable_prefix:
+            prompt = f"{args.stable_prefix}\n\n{prompt}"
+            word_count = len(prompt.split())
         prompt_label = f"~{budget}tokens ({word_count}words)"
         runs: list[RunMetrics] = []
         for i in range(args.repetitions):
@@ -713,6 +1232,42 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=gateway_timeout_seconds,
                     warm=not args.no_warmup,
                 )
+            elif args.backend == "llamacpp":
+                assert llamacpp_client is not None
+                assert llamacpp_base_url is not None
+                assert llamacpp_model is not None
+                if args.agents > 1:
+                    for r in run_concurrent_llamacpp(
+                        base_url=llamacpp_base_url,
+                        model=llamacpp_model,
+                        prompt=prompt,
+                        prompt_label=prompt_label,
+                        max_tokens=args.max_tokens,
+                        timeout_seconds=args.llamacpp_timeout_seconds,
+                        client=llamacpp_client,
+                        agents=args.agents,
+                        warm=not args.no_warmup,
+                        config_label=args.config,
+                        repetition=i,
+                    ):
+                        runs.append(r)
+                        (out_dir / f"{r.run_id}.json").write_text(
+                            json.dumps(asdict(r), indent=2, default=str)
+                        )
+                    continue
+                r = run_one_llamacpp(
+                    base_url=llamacpp_base_url,
+                    model=llamacpp_model,
+                    prompt=prompt,
+                    prompt_label=prompt_label,
+                    max_tokens=args.max_tokens,
+                    timeout_seconds=args.llamacpp_timeout_seconds,
+                    client=llamacpp_client,
+                    # 'cold' is configuration B0: no warm-up credit at all.
+                    warm=(not args.no_warmup) and args.config != "cold",
+                    config_label=args.config,
+                )
+                r.repetition = i
             else:
                 r = run_one(
                     model_id=args.model,
@@ -724,15 +1279,32 @@ def main(argv: list[str] | None = None) -> int:
             runs.append(r)
             run_file = out_dir / f"{r.run_id}.json"
             run_file.write_text(json.dumps(asdict(r), indent=2, default=str))
+        if not runs:
+            continue
         _print_run_table(args.model, prompt_label, runs)
+        aggregate = _aggregate(runs)
+        if args.backend == "llamacpp":
+            for name in ("ttft_seconds", "client_decode_tokens_per_second", "cache_hit_tokens"):
+                aggregate[name] = _stat([getattr(r, name) for r in runs]).as_dict()
+            per_agent = [
+                r.decode_tokens_per_second for r in runs if r.decode_tokens_per_second is not None
+            ]
+            # Aggregate is reported alongside, never instead of, per-agent, and
+            # is summed *within* a repetition then reduced across repetitions —
+            # a flat sum would multiply by the repetition count too.
+            aggregate["aggregate_decode_tokens_per_second"] = aggregate_per_repetition(runs)
+            aggregate["per_agent_decode_tokens_per_second"] = _stat(per_agent).as_dict()
         summary["configs"].append(  # type: ignore[attr-defined]
             {
                 "prompt_label": prompt_label,
                 "prompt_tokens": runs[0].prompt_tokens if runs else None,
                 "runs": [asdict(r) for r in runs],
-                "aggregate": _aggregate(runs),
+                "aggregate": aggregate,
             }
         )
+
+    if llamacpp_client is not None:
+        llamacpp_client.close()
 
     summary_file = out_dir / f"summary_{tag}.json"
     summary_file.write_text(json.dumps(summary, indent=2, default=str))
