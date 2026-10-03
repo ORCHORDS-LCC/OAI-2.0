@@ -433,3 +433,50 @@ time. This matches the accuracy baseline exactly: the same 4 cases pass.
 That is the useful result. Retrying a deterministic wrong answer is not a
 mitigation, so the fix for those 8 is a different model or a different
 serving configuration, not a retry policy.
+
+## Tail behaviour at 20 repetitions — `llamacpp_production_1ba5283/tail_20rep/`
+
+Every cell above uses 5 repetitions, which satisfies AC-PERF-031's stated
+minimum but **cannot resolve a tail**: under nearest rank, p95 and p99 index
+the same observation until N=20. `test_nearest_rank_p95_and_p99_need_twenty_samples_to_separate`
+pins that boundary so the 5-rep cells are not mistaken for tail measurements.
+
+This matrix re-runs 1/2/4/8 agents at **20 repetitions**, 128-token prompt,
+256 generated tokens, hot config.
+
+> **Contended.** `:8854` was busy on **391 of 425** telemetry samples. The
+> absolute level is a lower bound, consistent with the earlier contended
+> run. The *tail shape* is the finding here and is not a level claim.
+
+| Agents | Runs | Per-agent p50 | p95 | p99 | Aggregate p50 | TTFT p50 ms | TTFT p95 ms | TTFT p99 ms | E2E p95 s |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 20 | 140.69 | 161.00 | 163.31 | 140.69 | 9.2 | 18.4 | 19.2 | 2.109 |
+| 2 | 40 | 115.22 | 135.98 | 141.62 | 230.38 | 14.8 | 23.4 | 24.0 | 2.510 |
+| 4 | 80 | 78.57 | 83.59 | 86.14 | 314.27 | 20.8 | 39.2 | 62.5 | 3.392 |
+| 8 | 160 | 78.17 | 80.76 | 83.34 | 625.14 | 1570.2 | **3344.7** | 3380.3 | 6.663 |
+
+p95 and p99 are now **distinct at every concurrency level**.
+
+### The 8-agent tail is the thing the 5-repetition runs hid
+
+| Agents | TTFT p50 | p95 / p50 | p99 / p50 |
+| ---: | ---: | ---: | ---: |
+| 1 | 9.2 ms | 2.00× | 2.09× |
+| 2 | 14.8 ms | 1.58× | 1.62× |
+| 4 | 20.8 ms | 1.88× | **3.00×** |
+| 8 | 1570.2 ms | **2.13×** | 2.15× |
+
+At 8 agents the p95 latency is **2.13× the median** — over 3.3 s against a
+1.57 s median. The previous 5-rep cells reported a single value for p95 and
+p99, so this distribution was invisible. Any p95/p99 limit declared from
+5-rep data would have been a limit on the maximum, not on the tail.
+
+The 4-agent cell is the other thing worth noticing: p99/p50 is **3.00×**,
+the sharpest relative tail in the matrix even though its absolute latency is
+small. Absolute and relative tail behaviour do not pick the same cell as
+worst, so a declared envelope has to say which one it bounds.
+
+Per-agent throughput is essentially flat from 4 to 8 agents (78.57 vs 78.17)
+while aggregate doubles (314.27 → 625.14). Eight agents on four slots adds
+throughput and queueing, not per-agent speed — and the TTFT p50 of 1.57 s is
+that queueing made visible.

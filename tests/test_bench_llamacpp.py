@@ -990,3 +990,32 @@ def test_percentiles_handle_a_single_sample() -> None:
     stat = bench._stat([42.0])
     assert stat.p95 == 42.0
     assert stat.p99 == 42.0
+
+
+def test_nearest_rank_p95_and_p99_need_twenty_samples_to_separate() -> None:
+    """Documents why the issue's 5-repetition minimum cannot resolve a tail.
+
+    AC-PERF-031 asks for "at least 5 samples per configuration" and that
+    minimum is satisfied everywhere. It is still not enough to distinguish
+    p95 from p99 under nearest rank: both indices round to the top of the
+    sample set until N=20. Anyone reading a p95 from a 5-sample cell is
+    reading the maximum, and should be told that rather than left to infer
+    it.
+    """
+    import math
+
+    def index(n: int, fraction: float) -> int:
+        return math.ceil(fraction * n) - 1
+
+    # Below 20 the two percentiles are the same observation.
+    for n in (5, 10, 15, 19):
+        assert index(n, 0.95) == index(n, 0.99), f"N={n} should not separate"
+
+    # 20 is the first N where they can differ.
+    assert index(20, 0.95) != index(20, 0.99)
+    for n in (25, 40, 100):
+        assert index(n, 0.95) <= index(n, 0.99)
+
+    # And the practical consequence: at N=5 the reported p95 *is* the max.
+    stat = bench._stat([10, 20, 30, 40, 50])
+    assert stat.p95 == stat.max
