@@ -66,6 +66,7 @@ import argparse
 import json
 import math
 import platform
+import re
 import statistics
 import subprocess
 import sys
@@ -184,6 +185,78 @@ def _system_info() -> dict[str, str]:
     except Exception:
         info["mlx_lm_version"] = "unknown"
     return info
+
+
+def _host_memory() -> dict[str, float | None]:
+    """Host physical memory and swap in GB, read without extra dependencies.
+
+    The comparison table requires a Memory/swap column. A remote-backend run
+    cannot infer this from the HTTP response, so it is read from the OS. Values
+    that cannot be read are reported as None rather than guessed.
+    """
+    out: dict[str, float | None] = {
+        "total_gb": None,
+        "used_gb": None,
+        "free_gb": None,
+        "swap_total_gb": None,
+        "swap_used_gb": None,
+    }
+    g = 1024.0**3
+
+    def _sysctl(name: str) -> str | None:
+        try:
+            return subprocess.run(  # noqa: S603
+                ["sysctl", "-n", name],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout.strip()
+        except OSError, subprocess.SubprocessError:
+            return None
+
+    total_raw = _sysctl("hw.memsize")
+    if total_raw and total_raw.isdigit():
+        out["total_gb"] = round(int(total_raw) / g, 2)
+        # Free memory is "free + speculative + purgeable"; what is left in use
+        # is everything else. vm_stat page counts, no extra dependency.
+        try:
+            vm_stat = subprocess.run(  # noqa: S603
+                ["vm_stat"],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout
+        except OSError, subprocess.SubprocessError:
+            vm_stat = ""
+        m = re.search(r"page size of (\d+) bytes", vm_stat)
+        if m:
+            page = int(m.group(1))
+            pages = 0
+            for label in ("free", "speculative", "purgeable"):
+                mm = re.search(rf"Pages {label}:\s+(\d+)", vm_stat)
+                if mm:
+                    pages += int(mm.group(1))
+            free_gb = round(pages * page / g, 2)
+            out["free_gb"] = free_gb
+            total_gb = int(total_raw) / g
+            out["used_gb"] = round(total_gb - free_gb, 2)
+        swap = _sysctl("vm.swapusage")
+        if swap:
+            # e.g. "total = 5120.00M  used = 4129.94M  free = 990.06M  (encrypted)".
+            # The decimal point must survive parsing, so match it explicitly
+            # rather than splitting on whitespace or ".".
+            def _mb(label: str) -> float | None:
+                m = re.search(rf"{label}\s*=\s*([0-9]+(?:\.[0-9]+)?)M", swap)
+                return float(m.group(1)) if m else None
+
+            st, su = _mb("total"), _mb("used")
+            if st is not None:
+                out["swap_total_gb"] = round(st / 1024, 2)
+            if su is not None:
+                out["swap_used_gb"] = round(su / 1024, 2)
+    return out
 
 
 def _harness_identity() -> dict[str, str]:
@@ -1201,6 +1274,7 @@ def main(argv: list[str] | None = None) -> int:
         "warmup": not args.no_warmup,
         "sys_info": _system_info(),
         "harness": _harness_identity(),
+        "host_memory_start": _host_memory(),
         "configs": [],  # list[dict[str, object]], narrowed explicitly where appended
     }
     if args.backend == "llamacpp":
@@ -1303,6 +1377,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
+    summary["host_memory_end"] = _host_memory()
     if llamacpp_client is not None:
         llamacpp_client.close()
 

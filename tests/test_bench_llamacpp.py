@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -31,6 +32,11 @@ import scripts.bench as bench
 ROOT = Path(__file__).resolve().parents[1]
 
 BASE = "http://127.0.0.1:8851"
+
+#: Real macOS `vm.swapusage` output shape, and the unspaced variant some
+#: BSD-derived tools emit. Both must parse identically.
+SWAP_SPACED = "total = 5120.00M  used = 4129.94M  free = 990.06M  (encrypted)"
+SWAP_TIGHT = "total=5120.00M used=4129.94M free=990.06M"
 
 
 def _sse(chunks: list[dict[str, object]]) -> bytes:
@@ -836,3 +842,106 @@ def test_harness_identity_reports_git_failure_instead_of_omitting(monkeypatch) -
     info = bench._harness_identity()
     assert info["commit"].startswith("unavailable:OSError")
     assert info["dirty"] == "unknown"
+
+
+def test_host_memory_parses_swap_without_losing_decimals(monkeypatch) -> None:
+    """Regression: splitting swap output on '.' silently zeroed the value.
+
+    `vm.swapusage` reports "total = 5120.00M  used = 4129.94M". A whitespace
+    or "." split yields 5120 / 0 instead of 5.00 GB / 4.03 GB.
+    """
+
+    def fake_run(argv, **kwargs):
+        joined = " ".join(argv)
+        if joined == "sysctl -n hw.memsize":
+            return SimpleNamespace(stdout="68719476736")
+        if joined == "sysctl -n vm.swapusage":
+            return SimpleNamespace(stdout=SWAP_SPACED)
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(bench.subprocess, "run", fake_run)
+    m = bench._host_memory()
+    assert m["total_gb"] == 64.0
+    assert m["swap_total_gb"] == 5.0
+    assert m["swap_used_gb"] == pytest.approx(4.03, abs=0.01)
+
+
+def test_host_memory_parses_swap_regardless_of_spacing_around_equals(monkeypatch) -> None:
+    """A whitespace split cannot parse `used=4129.94M`; only a real pattern can.
+
+    This is the case that distinguishes a parser from a lucky `split()`. The
+    spaced form is parseable by accident because the label happens to sit two
+    tokens before the number; the unspaced form is not parseable that way at
+    all, so it is the one that actually pins the behaviour.
+    """
+    monkeypatch.setattr(
+        bench.subprocess,
+        "run",
+        lambda argv, **k: SimpleNamespace(
+            stdout=(
+                "68719476736"
+                if " ".join(argv) == "sysctl -n hw.memsize"
+                else (SWAP_TIGHT if "swapusage" in " ".join(argv) else "")
+            )
+        ),
+    )
+    m = bench._host_memory()
+    assert m["swap_total_gb"] == 5.0
+    assert m["swap_used_gb"] == pytest.approx(4.03, abs=0.01)
+
+
+def test_host_memory_degrades_to_none_when_sysctl_is_unavailable(monkeypatch) -> None:
+    """No sysctl must produce None values, never a fabricated zero."""
+    monkeypatch.setattr(
+        bench.subprocess, "run", lambda a, **k: (_ for _ in ()).throw(OSError("no sysctl"))
+    )
+    m = bench._host_memory()
+    assert m["total_gb"] is None
+    assert m["swap_used_gb"] is None
+    assert m["used_gb"] is None
+
+
+def test_summary_carries_memory_and_swap_columns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    handler = _handler(
+        timings={
+            "prompt_n": 10,
+            "cache_n": 10,
+            "predicted_n": 8,
+            "prompt_ms": 1.0,
+            "predicted_per_second": 100.0,
+        }
+    )
+    real_client = httpx.Client
+
+    def factory(**kwargs):
+        kwargs.pop("timeout", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", factory)
+    rc = bench.main(
+        [
+            "--backend",
+            "llamacpp",
+            "--llamacpp-base-url",
+            BASE,
+            "--llamacpp-model",
+            "m",
+            "--prompt-tokens",
+            "128",
+            "--repetitions",
+            "1",
+            "--max-tokens",
+            "8",
+            "--out-dir",
+            str(tmp_path),
+        ]
+    )
+    assert rc == 0
+    data = json.loads(next(tmp_path.glob("summary_*.json")).read_text())
+    # The comparison table has a Memory/swap column; it must be present at both
+    # ends of the run so peak pressure is bounded, not just a single sample.
+    for key in ("host_memory_start", "host_memory_end"):
+        assert key in data
+        assert set(data[key]) >= {"total_gb", "used_gb", "free_gb", "swap_total_gb", "swap_used_gb"}
