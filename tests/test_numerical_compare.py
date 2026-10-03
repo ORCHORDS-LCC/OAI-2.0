@@ -349,3 +349,77 @@ def test_finite_state_match_is_reported_false_for_sign_flips_only() -> None:
         [1.0, 2.0], [1.0, 2.0], profile=_profile(), identity=_identity()
     )
     assert fine.finite_state_match
+
+
+# ---------------------------------------------------------------------------
+# The artifact must identify WHAT was compared (REQ-NUM-006).
+# ---------------------------------------------------------------------------
+
+
+def test_different_inputs_do_not_produce_an_identical_artifact() -> None:
+    """Two different sample sets must not yield the same evidence.
+
+    Before the input digest existed, comparing `[1.0, 2.0, 3.0]` and
+    comparing `[-98765.4321, 1e30, 4.2]` produced artifacts identical in
+    every field: same sample_count, same 0.0 errors, same verdict. An
+    artifact that cannot say which inputs produced it cannot make a
+    numerical failure reproducible, which is what REQ-NUM-006 requires.
+    """
+    easy = compare_numerical_paths(
+        [1.0, 2.0, 3.0], [1.0, 2.0, 3.0], profile=_profile(), identity=_identity()
+    )
+    hard = compare_numerical_paths(
+        [-98765.4321, 1e30, 4.2],
+        [-98765.4321, 1e30, 4.2],
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert easy.input_digest != hard.input_digest
+
+
+def test_digest_is_deterministic_for_the_same_inputs() -> None:
+    """Re-running the same comparison must reproduce the same digest."""
+    first = compare_numerical_paths(
+        [1.0, 2.0, 3.0], [1.0, 2.0, 3.0], profile=_profile(), identity=_identity()
+    )
+    second = compare_numerical_paths(
+        [1.0, 2.0, 3.0], [1.0, 2.0, 3.0], profile=_profile(), identity=_identity()
+    )
+    assert first.input_digest == second.input_digest
+    assert first.input_digest.startswith("sha256:")
+
+
+def test_digest_distinguishes_the_reference_from_the_optimized_side() -> None:
+    """Swapping the sides is a different comparison, not the same one."""
+    forward = compare_numerical_paths(
+        [1.0, 2.0], [1.5, 2.5], profile=_profile(), identity=_identity()
+    )
+    swapped = compare_numerical_paths(
+        [1.5, 2.5], [1.0, 2.0], profile=_profile(), identity=_identity()
+    )
+    assert forward.input_digest != swapped.input_digest
+
+
+def test_digest_distinguishes_a_different_optimized_result() -> None:
+    """Same reference, different optimized output -> different evidence."""
+    good = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 2.0], profile=_profile(), identity=_identity()
+    )
+    bad = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 9.0], profile=_profile(), identity=_identity()
+    )
+    assert good.input_digest != bad.input_digest
+
+
+def test_digest_covers_non_finite_samples() -> None:
+    """NaN/inf inputs still have to be distinguishable from finite ones."""
+    nonfinite = compare_numerical_paths(
+        [1.0, math.inf], [1.0, math.inf], profile=_profile(), identity=_identity()
+    )
+    finite = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 2.0], profile=_profile(), identity=_identity()
+    )
+    flipped = compare_numerical_paths(
+        [1.0, math.inf], [1.0, -math.inf], profile=_profile(), identity=_identity()
+    )
+    assert len({nonfinite.input_digest, finite.input_digest, flipped.input_digest}) == 3

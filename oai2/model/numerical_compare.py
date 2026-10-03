@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from enum import StrEnum
@@ -60,6 +61,14 @@ class NumericalArtifactIdentity:
 class NumericalComparison:
     profile_id: str
     identity: NumericalArtifactIdentity
+    # Digest of the exact sample pair that produced this comparison.
+    # Without it the artifact is not evidence of anything in particular:
+    # comparing [1.0, 2.0, 3.0] and comparing [-98765.4321, 1e30, 4.2]
+    # produced byte-identical artifacts -- same sample_count, same 0.0
+    # errors, same verdict -- so a reader could not tell which inputs a
+    # numerical failure came from. REQ-NUM-006 asks for reproducibility
+    # from model/config/INPUT identity, and the input half was missing.
+    input_digest: str
     sample_count: int
     max_abs_error: float
     max_rel_error: float
@@ -75,6 +84,29 @@ class NumericalSelection:
     selected_path: str
     used_fallback: bool
     reason: str
+
+
+def _samples_digest(
+    reference: list[float] | tuple[float, ...],
+    optimized: list[float] | tuple[float, ...],
+) -> str:
+    """Digest the exact sample pair, so the artifact says WHAT was compared.
+
+    The two sides are fed in separately and the side name is mixed in, so
+    swapping reference and optimized is a different digest rather than the
+    same comparison described backwards. ``repr`` of a float round-trips
+    exactly and renders nan/inf distinctly, so no sample is silently
+    normalised away.
+    """
+    digest = hashlib.sha256()
+    for side, values in (("reference", reference), ("optimized", optimized)):
+        digest.update(side.encode("utf-8"))
+        digest.update(b"\x1e")
+        for raw in values:
+            digest.update(repr(float(raw)).encode("ascii"))
+            digest.update(b",")
+        digest.update(b"\x1d")
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _value_state(value: float) -> str:
@@ -159,6 +191,7 @@ def compare_numerical_paths(
     return NumericalComparison(
         profile_id=profile.profile_id,
         identity=identity,
+        input_digest=_samples_digest(reference, optimized),
         sample_count=len(reference),
         max_abs_error=max_abs,
         max_rel_error=max_rel,
