@@ -224,8 +224,10 @@ def probe_model(
 
     The probe is intentionally cheap (one user turn, max_tokens=8,
     temperature=0) so it can be used as a liveness check without
-    spending meaningful tokens. Errors are caught and reflected on
-    the returned :class:`ModelProbe` — this function never raises.
+    spending meaningful tokens. Transport and status errors are caught
+    and reflected on the returned :class:`ModelProbe`; only an id
+    outside :data:`KNOWN_CLOUD_MODELS` raises, and it raises
+    :class:`UnknownModelError` before any request is made.
     """
 
     _ensure_known(model_id)
