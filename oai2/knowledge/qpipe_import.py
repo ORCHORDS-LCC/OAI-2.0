@@ -543,7 +543,18 @@ def import_qpipe_rows(
                     (row.external_id, int(row.superseded_by))
                 )
             else:
-                candidate_ref = f"qpipe:{row.source}:{winner_external}"
+                # The namespace MUST be canonical. The topic is written as
+                # `qpipe:{_canonical_source(row.source)}:{scope}` (see
+                # row_to_knowledge_object), so a ref built from the RAW
+                # source names a namespace the store never emits -- e.g.
+                # `qpipe:recipe_candidates:new` against a topic of
+                # `qpipe:recipe-candidates:generic`. The link would then be
+                # unresolvable, which defeats the REQ-TEMP-004 traceability
+                # it exists to provide. Same canonicalisation the identity
+                # gates use at :347, applied to the link as well.
+                candidate_ref = (
+                    f"qpipe:{_canonical_source(row.source)}:{winner_external}"
+                )
                 # `superseded_by` is a bounded field on KnowledgeObject. The
                 # prefix is ours and the winner's external_id is only bounded
                 # at 160 by _validate_row, so a legal row can produce a link

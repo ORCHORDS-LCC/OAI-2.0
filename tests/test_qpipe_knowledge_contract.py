@@ -114,13 +114,59 @@ class TestSupersessionIsLinkedNotRetired:
         by_ext = {o.source_uri.rsplit("/", 1)[-1]: o for o in rep.imported}
         old, new = by_ext["old"], by_ext["new"]
 
-        assert old.superseded_by == "qpipe:recipe_candidates:new"
+        # Canonical, hyphenated source -- the same namespace the topic uses.
+        # Previously this read "qpipe:recipe_candidates:new", a namespace
+        # the store never emits, which made the link unresolvable.
+        assert old.superseded_by == "qpipe:recipe-candidates:new"
         assert old.superseded_at == 1_700_009_000
         # REQ-TEMP-004/013: the loser is retained, linked, and identifiable as
         # historical rather than silently removed.
         assert old.status is Status.EXPERIMENTAL
         assert new.status is Status.IMPLEMENTED
         assert new.superseded_by is None
+
+    def test_supersession_ref_uses_the_canonical_source_namespace(self):
+        """The link must point at a namespace the store actually writes.
+
+        The topic is written as `qpipe:{_canonical_source(source)}:{scope}`,
+        so a ref built from the RAW source names `qpipe:recipe_candidates:new`
+        while every topic reads `qpipe:recipe-candidates:...`. The link would
+        then be unresolvable, defeating the REQ-TEMP-004 traceability it
+        exists to provide.
+        """
+        rows = [
+            _row(ext="old", rid=1, steps=[STEP_A], superseded_by=2),
+            _row(ext="new", rid=2, steps=[STEP_A, STEP_B]),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        loser = next(o for o in rep.imported if o.superseded_by is not None)
+        assert loser.superseded_by == "qpipe:recipe-candidates:new"
+        ref_namespace = ":".join(loser.superseded_by.split(":")[:2])
+        topic_namespace = ":".join(loser.topic.split(":")[:2])
+        assert ref_namespace == topic_namespace
+
+    def test_ref_namespace_matches_for_every_importable_source(self):
+        """Opposite-direction guard: canonicalisation must not corrupt a
+        source that is already canonical.
+
+        `_canonical_source` is identity for sources outside the alias set, so
+        a non-aliased source must produce the same ref it always did. This
+        is the direction that a naive "always rewrite the namespace" fix
+        would break.
+        """
+        for source in ("scenario-forge", "terminal-bench-2.1"):
+            policy = ImportPolicy()
+            rows = [
+                _row(ext="old", rid=1, steps=[STEP_A], source=source,
+                     superseded_by=2),
+                _row(ext="new", rid=2, steps=[STEP_A, STEP_B], source=source),
+            ]
+            rep = import_qpipe_rows(rows, policy=policy)
+            loser = next(o for o in rep.imported if o.superseded_by is not None)
+            assert loser.superseded_by == f"qpipe:{source}:new"
+            assert ":".join(loser.superseded_by.split(":")[:2]) == ":".join(
+                loser.topic.split(":")[:2]
+            )
 
     def test_unresolvable_supersession_is_reported_not_faked(self):
         """A target outside the import set must not become a plausible link."""
@@ -138,8 +184,8 @@ class TestSupersessionIsLinkedNotRetired:
         external_id of exactly 104 produces a ref of exactly 128. That is
         representable and must still be linked; only 105 must be refused.
         """
-        winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len("qpipe:recipe_candidates:"))
-        assert len(f"qpipe:recipe_candidates:{winner_ext}") == MAX_SUPERSEDED_BY_LENGTH
+        winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len("qpipe:recipe-candidates:"))
+        assert len(f"qpipe:recipe-candidates:{winner_ext}") == MAX_SUPERSEDED_BY_LENGTH
         rows = [
             _row(ext=winner_ext, rid=1, steps=[STEP_A]),
             _row(ext="old", rid=2, steps=[STEP_A, STEP_B], superseded_by=1),
@@ -149,7 +195,7 @@ class TestSupersessionIsLinkedNotRetired:
         assert rep.unresolved_supersession == []
         linked = [o for o in rep.imported if o.superseded_by is not None]
         assert len(linked) == 1
-        assert linked[0].superseded_by == f"qpipe:recipe_candidates:{winner_ext}"
+        assert linked[0].superseded_by == f"qpipe:recipe-candidates:{winner_ext}"
         assert len(linked[0].superseded_by) == MAX_SUPERSEDED_BY_LENGTH
 
     def test_unrepresentable_link_is_reported_and_the_rest_of_the_batch_survives(self):
@@ -160,7 +206,7 @@ class TestSupersessionIsLinkedNotRetired:
         allows. Before this was gated, that single row raised out of
         ``import_qpipe_rows`` and discarded every other row in the batch.
         """
-        prefix = "qpipe:recipe_candidates:"
+        prefix = "qpipe:recipe-candidates:"
         winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len(prefix) + 1)
         rows = [
             _row(ext=winner_ext, rid=1, steps=[STEP_A]),
@@ -179,7 +225,7 @@ class TestSupersessionIsLinkedNotRetired:
 
     def test_one_unrepresentable_link_does_not_discard_unrelated_rows(self):
         """Blast radius: unrelated good rows must survive a poison supersession row."""
-        prefix = "qpipe:recipe_candidates:"
+        prefix = "qpipe:recipe-candidates:"
         winner_ext = "w" * (MAX_SUPERSEDED_BY_LENGTH - len(prefix) + 1)
         rows = [
             _row(ext=f"good-{i}", rid=100 + i, steps=[STEP_A]) for i in range(8)
