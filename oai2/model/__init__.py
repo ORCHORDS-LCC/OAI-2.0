@@ -25,6 +25,15 @@ from .numerics import (
     extreme_value_fixtures,
     precision_rule,
 )
+from .tolerance_matrix import (
+    TOLERANCE_MATRIX,
+    TOLERANCE_POLICY_VERSION,
+    DtypeClass,
+    TolerancePolicy,
+    canonical_policy,
+    dtype_class,
+    policy_violations,
+)
 
 __all__ = [
     "NumericalArtifactIdentity",
@@ -46,4 +55,11 @@ __all__ = [
     "check_numerics",
     "extreme_value_fixtures",
     "precision_rule",
+    "TOLERANCE_MATRIX",
+    "TOLERANCE_POLICY_VERSION",
+    "DtypeClass",
+    "TolerancePolicy",
+    "canonical_policy",
+    "dtype_class",
+    "policy_violations",
 ]

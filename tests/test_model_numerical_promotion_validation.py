@@ -722,7 +722,14 @@ class TestEvaluateNumericalCandidate:
             reference=_equal_seqs(),
             optimized=_equal_seqs(),
             candidate_kind=NumericalCandidateKind.BACKEND,
-            profile=_profile(max_capability_regression=1.0),
+            # The default (0.0) ceiling, not a 1.0 one. This test used to
+            # declare max_capability_regression=1.0 -- 100% capability loss
+            # permitted -- purely so a 0.2 regression could not fail the gate.
+            # That is the exact pattern the canonical tolerance matrix exists
+            # to reject: ATTENTION_SOFTMAX permits zero capability regression,
+            # and a test that leans on a meaningless ceiling to reach a clean
+            # result teaches the behaviour the gate is meant to forbid.
+            profile=_profile(),
             identity=_identity(),
             optimized_path="opt",
             reference_path="ref",
@@ -731,6 +738,11 @@ class TestEvaluateNumericalCandidate:
         )
         # capability_regression = max(0.0, 0.9 - 0.7) = 0.2
         assert ev.comparison.capability_regression == pytest.approx(0.2)
+        # A 0.2 capability regression on attention weights is a real failure,
+        # not a tolerated rounding artefact.
+        assert "capability_regression" in ev.comparison.failures
+        assert not ev.eligible
+        assert ev.selection.used_fallback
 
     def test_uses_tuple_reference(self) -> None:
         ev = evaluate_numerical_candidate(
