@@ -233,3 +233,29 @@ So these figures answer "what does the NORMAL lane do with the GPU to
 itself" — they are **not** a clean whole-host capacity baseline. A truly
 clean baseline needs the STRONG lane's memory released as well as its GPU
 time, which on this host means stopping that lane rather than idling it.
+
+## Which configuration covers "Hot + KV reuse"
+
+The #240 table lists "Hot + prompt cache" and "Hot + KV reuse" as separate
+rows. They are distinct on the **MLX** path and are **not** separable on the
+**llama.cpp** path. Recording the mapping so the row is not silently
+missing.
+
+| Table row | Where it is implemented | How it is measured |
+| --- | --- | --- |
+| Hot + prompt cache | llama.cpp slot prefix cache | `cache_hit_tokens` from `timings.cache_n`; B2 above reports 185/190 |
+| Hot + KV reuse | `oai2/runtime/prefix_kv_cache.py` (`PrefixKVCache`), wired into `MLXHotRuntime` | `tests/test_runtime_prefix_kv_cache.py::test_real_model_prefix_restore_skips_prefix_prefill` — a real `mlx_lm` model load, asserting prefix restore skips prefix prefill |
+
+`PrefixKVCache` is a longest-prefix **KV-state** store with bounded entries
+and hit/miss/invalidation counters, which is what REQ-PERF-032 describes.
+It is an MLX-path feature.
+
+llama-server offers no separate KV-reuse control distinct from its prompt
+cache, so a dedicated "Hot+KV reuse" cell cannot be produced on the
+llama.cpp path — not "not yet measured", but **not applicable at that
+layer**. Producing a number there would mean relabelling B2's
+`cache_hit_tokens` as a different thing, which is how a table ends up with
+two rows that quietly measure the same condition.
+
+Verified locally: 15 tests in `tests/test_runtime_prefix_kv_cache.py` pass,
+including the real-model restore test.
