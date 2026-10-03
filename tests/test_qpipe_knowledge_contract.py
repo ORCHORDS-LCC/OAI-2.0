@@ -428,6 +428,34 @@ class TestSupersededEvidenceIsNotRetrievalDefault:
         )
         assert all(o.superseded_by is None for o in strict.objects)
 
+    def test_every_retrieval_gate_routes_through_the_one_definition(self):
+        """The rule must have exactly one owner.
+
+        It was previously written out at each gate. A fourth retrieval path
+        added later would have had no way to know the rule existed, and the
+        drift would be invisible until a superseded record leaked. This
+        pins the three gates AND the record-level accessor to the shared
+        predicate, so a future inlining at any one of them fails here.
+        """
+        import inspect
+
+        from oai2.knowledge import abstraction as abstraction_module
+        from oai2.knowledge import cloudflare, cloudflare_runtime, transport
+
+        # The predicate itself is the only place the rule is written.
+        assert "superseded_by is None" in inspect.getsource(abstraction_module)
+
+        # The in-memory gate calls it.
+        assert "is_active_evidence(" in inspect.getsource(abstraction_module)
+        # The semantic D1 gate calls it.
+        assert "is_active_evidence(" in inspect.getsource(cloudflare_runtime)
+        # The record-level accessor is defined in terms of it.
+        assert "is_active_evidence(" in inspect.getsource(transport)
+        # And no retrieval gate re-inlines the raw comparison.
+        for module in (abstraction_module, cloudflare, cloudflare_runtime):
+            body = inspect.getsource(module)
+            assert "superseded_by is not None and not request.include_superseded" not in body
+
     def test_is_active_accessor_agrees_with_the_gate(self):
         """`is_active` promised exclusion; now the gate implements it."""
         store = self._store()

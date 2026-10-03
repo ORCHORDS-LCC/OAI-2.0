@@ -1099,11 +1099,17 @@ def test_source_pins_four_abstract_methods_on_knowledge_store() -> None:
     assert len(matches) == 4
 
 
-def test_source_pins_two_module_level_functions() -> None:
-    """sha256_hex and now_epoch."""
+def test_source_pins_three_module_level_functions() -> None:
+    """sha256_hex, now_epoch and is_active_evidence.
+
+    `is_active_evidence` is the single definition of "this record is current
+    evidence". It is pinned here so that a refactor cannot quietly re-inline
+    the rule at one retrieval gate and leave the others on a different
+    definition.
+    """
     source = inspect.getsource(abstraction_module)
     matches = re.findall(r"^def\s+(\w+)\(", source, re.MULTILINE)
-    assert set(matches) == {"sha256_hex", "now_epoch"}
+    assert set(matches) == {"sha256_hex", "now_epoch", "is_active_evidence"}
 
 
 def test_source_pins_four_module_level_classes() -> None:

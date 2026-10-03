@@ -20,7 +20,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core import KnowledgeId, Status
-from .abstraction import KnowledgeObject, sha256_hex
+from .abstraction import KnowledgeObject, is_active_evidence, sha256_hex
 
 TRANSPORT_VERSION = "1"
 
@@ -252,8 +252,14 @@ class D1KnowledgeIndexRecord(BaseModel):
 
     @property
     def is_active(self) -> bool:
-        """A superseded record stays retrievable for audit, never by default."""
-        return self.superseded_by is None
+        """A superseded record stays retrievable for audit, never by default.
+
+        Delegates to :func:`is_active_evidence` so this and the retrieval
+        gates cannot drift apart. The retrieval gates filter on the field
+        directly rather than calling this, because a row fetched from D1 is
+        a ``CFRow``, not a ``D1KnowledgeIndexRecord``.
+        """
+        return is_active_evidence(self.superseded_by)
 
     @classmethod
     def from_knowledge(

@@ -22,6 +22,7 @@ from .abstraction import (
     RetrievalCandidate,
     RetrievalRequest,
     RetrievalResult,
+    is_active_evidence,
     sha256_hex,
 )
 from .cloudflare import CFRow, cache_key_for, object_to_row
@@ -370,7 +371,7 @@ class AsyncCloudflareKnowledgeRuntime:
                 continue
             if row.status not in request.include_status:
                 continue
-            if row.superseded_by is not None and not request.include_superseded:
+            if not is_active_evidence(row.superseded_by) and not request.include_superseded:
                 # REQ-TEMP-014. This path resolves rows one at a time through
                 # get_row, so it never runs knowledge_query_sql and would
                 # otherwise bypass its `superseded_by IS NULL` predicate

@@ -34,6 +34,24 @@ MAX_SOURCE_VERSION_LENGTH: Final[int] = 128
 MAX_SUPERSEDED_BY_LENGTH: Final[int] = 128
 
 
+def is_active_evidence(superseded_by: str | None) -> bool:
+    """Whether a record counts as current evidence for default retrieval.
+
+    This is the ONE definition of "active" for the knowledge layer. It exists
+    because the rule was previously written out at each retrieval gate, and a
+    fourth gate added later would have had no way to know the rule existed.
+
+    ``D1KnowledgeIndexRecord.is_active`` is the record-level form of the same
+    predicate; the two must not be allowed to drift.
+
+    The rule is deliberately about the supersession LINK, never about status.
+    A superseded record is demoted to ``EXPERIMENTAL`` so it stays retrievable
+    for audit, and ``EXPERIMENTAL`` is in the default status set -- so any
+    status-based test excludes nothing and silently fails open.
+    """
+    return superseded_by is None
+
+
 class KnowledgeObject(BaseModel):
     """A single typed piece of external knowledge."""
 
@@ -169,7 +187,7 @@ class InMemoryKnowledgeStore(KnowledgeStore):
             # EXPERIMENTAL and EXPERIMENTAL is in the default set -- so the
             # status filter never excluded it. Filtering on the field itself
             # is what makes the exclusion independent of the status mapping.
-            if obj.superseded_by is not None and not request.include_superseded:
+            if not is_active_evidence(obj.superseded_by) and not request.include_superseded:
                 continue
             out.append(obj)
         out.sort(key=lambda o: (o.authority, o.retrieved_at), reverse=True)
