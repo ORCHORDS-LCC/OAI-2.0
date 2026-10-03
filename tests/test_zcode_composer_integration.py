@@ -13,12 +13,14 @@ means for evidence is stated explicitly at the bottom of this module.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 from oai2.core import Status
+from oai2.server.openai_compat_app import STREAM_MODE
 
 
 @dataclass
@@ -271,6 +273,71 @@ class TestZCodePathHonestAccounting:
         rt = _StubHotRuntime(script=[{"text": "hi"}])
         client = _client(rt)
         assert _post(client, BASE_MESSAGES).json()["usage"]["completion_tokens"] == 7
+
+
+class TestZCodeStreamedPathKeepsHonestTimingEvidence:
+    """The buffered stream must carry the same timing evidence as the plain body.
+
+    `_sse` documents that internal timings "remain available in the response
+    ``notes``". A buffered client is the one that most needs them: it cannot
+    infer the buffering from arrival timing, so it has to be able to read the
+    timings rather than assume them. The streamed final frame omitted
+    ``notes`` entirely, so the promise held only on the non-streaming path.
+    """
+
+    @staticmethod
+    def _frames(text: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for line in text.splitlines():
+            if not line.startswith("data: ") or line.startswith("data: [DONE]"):
+                continue
+            out.append(json.loads(line[6:]))
+        return out
+
+    def test_streamed_final_frame_carries_runtime_notes(self):
+        notes = ["model=stub-model", "status=200", "elapsed_ms=1.0"]
+        rt = _StubHotRuntime(script=[{"text": "hi", "notes": notes}])
+        client = _client(rt)
+
+        frames = self._frames(
+            _post(client, BASE_MESSAGES, stream=True).text
+        )
+        assert frames, "the buffered stream must emit at least one frame"
+        assert "notes" in frames[-1], (
+            "the streamed final frame must carry notes, as _sse documents"
+        )
+        assert frames[-1]["notes"] == notes
+
+    def test_streamed_and_plain_paths_report_the_same_notes(self):
+        notes = ["model=stub-model", "elapsed_ms=1.0"]
+        streamed = self._frames(
+            _post(
+                _client(_StubHotRuntime(script=[{"text": "hi", "notes": notes}])),
+                BASE_MESSAGES,
+                stream=True,
+            ).text
+        )[-1]["notes"]
+        plain = _post(
+            _client(_StubHotRuntime(script=[{"text": "hi", "notes": notes}])),
+            BASE_MESSAGES,
+        ).json()["notes"]
+        assert streamed == plain
+
+    def test_stream_still_declares_its_buffered_mode(self):
+        """Guard the opposite failure: the timing evidence must not be a
+        substitute for the disclosure, and the disclosure must survive."""
+        rt = _StubHotRuntime(script=[{"text": "hi", "notes": ["elapsed_ms=1.0"]}])
+        frames = self._frames(_post(_client(rt), BASE_MESSAGES, stream=True).text)
+        assert frames[-1]["stream_mode"] == STREAM_MODE
+        assert frames[-1]["notes"], "timing evidence must still be present"
+
+    def test_stream_without_notes_emits_an_empty_list_not_a_missing_key(self):
+        """A runtime that reported no notes must still yield the key, so a
+        client can read it without a KeyError or a hasattr dance."""
+        rt = _StubHotRuntime(script=[{"text": "hi"}])
+        frames = self._frames(_post(_client(rt), BASE_MESSAGES, stream=True).text)
+        assert "notes" in frames[-1]
+        assert frames[-1]["notes"] == []
 
 
 # ---------------------------------------------------------------------------

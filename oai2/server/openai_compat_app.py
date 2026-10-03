@@ -363,6 +363,11 @@ def _sse(
         "prefix_digest": prefix.digest(),
         "prefix_cache": _prefix_report(runtime, response),
         "tool_contract_problems": list(problems),
+        # The docstring promises internal timings stay available on the
+        # streamed path too. A buffered client is the one that most needs
+        # them: it cannot infer the buffering from arrival timing, so it has
+        # to be able to read the timings rather than assume them.
+        "notes": response.notes,
     }
     if problems and response.tool_calls:
         # Keep rejected calls auditable, but never put them in an executable
