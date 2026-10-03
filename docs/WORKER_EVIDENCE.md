@@ -76,6 +76,45 @@ p95/max distribution, and it does not sample host resource use. §4 exists to cl
 
 ---
 
+## 1a. Re-measured with the harness — LIVE RUN, cold/warm separated
+
+Run 2026-10-03, harness `scripts/measure_worker_contribution.py`, same work, same pinned revision,
+`--reps 5`, `--node p50`, `--cluster-url http://127.0.0.1:10534`. **All 12 correctness gates PASS**;
+the harness printed the measured results only because it did.
+
+| Metric | Cold (n=1) | Warm (n=4) |
+| --- | --- | --- |
+| Cell A — Mac-local, total | 1.169 s (preparation/clone 1.133 s) | median **0.0339 s**, p95 0.0340 s |
+| Cell B — enqueue-to-finish, total | **3.2158 s** | median **4.6929 s**, p95 4.9085 s |
+| Cell B — queue / admission | 0.6824 s | 1.9415 s |
+| Cell B — execution on node | 2.4115 s | 2.5550 s |
+| Cell A useful jobs per minute | — | 229.956 |
+| Cell B useful jobs per minute | — | 13.648 |
+
+Cell B fleet jobs **77, 78, 79, 80, 81** — all `succeeded`, all executed on `p50`, all
+`resolved_revision` exactly `2983c5ccbfeb4364c41d73ff2aecb19d438939da`. Both cells emitted the
+same `work_argv_sha256` `66c8faead5ce10ae`, which is what makes the two cells comparable at all.
+
+**Cold vs warm, honestly.** The Mac is fast warm (0.034 s) and slow cold (1.169 s) because only
+the first rep pays the clone. The node shows the opposite shape: its cold rep is the *fastest* of
+its five (3.216 s) and its warm reps are *slower* (median 4.693 s). The node clones inside every
+job — the worker makes a disposable clone per job by design — so it never amortises preparation,
+while the Mac prepares once and reuses it. That is a real property of the current worker
+architecture, not a measurement artefact.
+
+**Two earlier runs are void and are not quoted.** The first run reported a queue time of
+~1.79 × 10⁹ s: the harness had subtracted a local `time.monotonic()` instant (seconds since boot)
+from a cluster wall-clock epoch. That is a mixed-clock defect, fixed in `plausible_duration()`
+and locked by three new self-test checks. The second run lost the control plane mid-run (another
+agent restarted it) and the harness correctly refused to publish its statistics. Neither run is
+cited as a result; only the clean run above is.
+
+**Benefit, stated without inflation.** 5 of 5 useful jobs executed on `p50`, 0 on the Mac. The
+demonstrated value is **Mac offload**. The P50 is ~140× slower end to end on this workload. No
+speedup, no inference throughput and no GPU capacity is claimed or measurable here.
+
+---
+
 ## 2. Acceptance case register
 
 | # | Acceptance case | Label | Evidence / reason |
@@ -159,6 +198,26 @@ Recorded because it is a worked example of the same discipline, on the measureme
 - **Remaining limitation.** The two node-identity gates (D1, D2) are **live-host observations from
   the fleet brief and the repository's own commit history**, not observations made by the author of
   this document. They are labelled accordingly and were not re-run here.
+
+### 3.4 D4 — Harness mixed two clocks and published an epoch as a duration (found on the FIRST live run)
+
+- **Defect.** The enqueue instant was captured with `time.monotonic()` (seconds since boot, ≈40487
+  on this host) while `grant` and `finish` come from the cluster's wall-clock epoch. The subtraction
+  yielded ~1.79 × 10⁹, and the harness printed it as `queue_s`. `grant_to_finish_s` was unaffected,
+  which is exactly why it survived the self-test: the self-test never exercised mixed-clock
+  arithmetic.
+- **Failing test.** `duration_rejects_mixed_clock_arithmetic` — added as a self-test check; it
+  fails against the pre-fix code and passes after.
+- **Fix.** The enqueue instant is now a wall clock captured separately from the monotonic rep timer,
+  the cluster-reported enqueue stamp is preferred, and every phase duration passes through
+  `plausible_duration()`, which returns `None` for negative, non-finite or > 1 day values instead of
+  publishing them. An unrecoverable phase is now reported unavailable, not invented.
+- **Passing evidence.** Self-test 23/23 PASS. The clean live run in §1a reports real queue values
+  (0.6824 s cold, 1.9415 s warm) instead of an epoch.
+- **Remaining limitation.** `plausible_duration()` bounds a phase at 86 400 s. A job that genuinely
+  queued for more than a day would be reported as unavailable rather than measured. That is
+  deliberate: this harness enqueues one bounded verification job per rep and is not a queue-depth
+  study.
 
 ---
 

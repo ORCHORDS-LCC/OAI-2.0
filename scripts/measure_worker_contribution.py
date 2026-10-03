@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shlex
@@ -575,6 +576,25 @@ def wait_for_job(
         time.sleep(poll_interval)
 
 
+# A queue or execution phase that is negative, non-finite or larger than a day
+# did not come from a duration arithmetic. It means two different clocks (or an
+# unresolved timestamp) were combined. Such a value is reported as unavailable
+# rather than published as a measurement.
+MAX_PLAUSIBLE_PHASE_S = 86_400.0
+
+
+def plausible_duration(value: Any) -> float | None:
+    """Return a duration in seconds, or None if it is not a credible one."""
+    seconds = as_float(value)
+    if seconds is None:
+        return None
+    if not math.isfinite(seconds):
+        return None
+    if seconds < 0.0 or seconds > MAX_PLAUSIBLE_PHASE_S:
+        return None
+    return round(seconds, 4)
+
+
 def job_timings(
     record: dict[str, Any],
     events: Sequence[dict[str, Any]],
@@ -977,7 +997,30 @@ def run_self_test(args: argparse.Namespace) -> int:
         f"memory={summary['memory_used_pct_max']}",
     )
 
-    # 10. Report rendering of a full synthetic payload survives the claim guard.
+    # 10. A duration that came from two different clocks is rejected, not
+    #     published. Observed defect: the enqueue instant was taken from a
+    #     monotonic clock (seconds since boot) while grant/finish are cluster
+    #     wall-clock epochs, so the subtraction emitted ~1.79e9 "seconds".
+    check(
+        "duration_rejects_mixed_clock_arithmetic",
+        plausible_duration(1791001913.31 - 40487.24) is None,
+        "a monotonic-minus-epoch subtraction must be reported unavailable, not as a duration",
+    )
+    check(
+        "duration_accepts_real_values",
+        plausible_duration(1.6966) == 1.6966 and plausible_duration(0.0) == 0.0,
+        "credible durations survive unchanged",
+    )
+    check(
+        "duration_rejects_negative_and_nonfinite",
+        plausible_duration(-1.0) is None
+        and plausible_duration(float("nan")) is None
+        and plausible_duration(float("inf")) is None
+        and plausible_duration(None) is None,
+        "negative, non-finite and missing durations are all unavailable",
+    )
+
+    # 11. Report rendering of a full synthetic payload survives the claim guard.
     payload = synthetic_payload(args)
     rendered = render_report(payload)
     try:
@@ -1273,7 +1316,10 @@ def measure(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     for index in range(args.reps):
         phase = classify_phase(index)
         rep_start = time.monotonic()
-        enqueue_at = time.monotonic()
+        # Wall clock, deliberately separate from rep_start: durations derived
+        # from cluster timestamps must only ever be compared against other
+        # wall-clock instants.
+        enqueue_wall = time.time()
         try:
             job_id = run_enqueue(
                 args.qpipe, args.repo_url, args.ref, args.check, cluster_url
@@ -1307,8 +1353,21 @@ def measure(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         stamps = job_timings(record, events)
         grant = stamps.get("grant")
         finish = stamps.get("finish")
-        enqueue_to_grant = round(grant - enqueue_at, 4) if grant else None
-        grant_to_finish = round(finish - grant, 4) if grant and finish else None
+        # The enqueue instant must come from the CLUSTER's own wall clock, not
+        # from this process. grant/finish are cluster epoch seconds; a local
+        # monotonic clock (seconds since boot) subtracted from them yields a
+        # number that looks like a timestamp but is not a duration. Prefer the
+        # cluster-reported enqueue instant and only fall back to the local
+        # wall clock, which is at least the same epoch as the cluster's.
+        enqueue_stamp = stamps.get("enqueue")
+        enqueue_to_grant = None
+        if grant and enqueue_stamp:
+            enqueue_to_grant = plausible_duration(grant - enqueue_stamp)
+        elif grant:
+            enqueue_to_grant = plausible_duration(grant - enqueue_wall)
+        grant_to_finish = (
+            plausible_duration(finish - grant) if grant and finish else None
+        )
         state = str(first_key(record, "state", "status") or "unknown").lower()
         result_block = record.get("result") if isinstance(record.get("result"), dict) else record
         observed = {
