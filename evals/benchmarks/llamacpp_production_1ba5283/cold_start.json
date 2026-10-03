@@ -1,0 +1,97 @@
+{
+  "generated_at": "2026-10-03T20:15:11.558572+00:00",
+  "requirement": "AC-PERF-031 / #240 config A: fresh model/runtime start, no reusable prompt/KV state",
+  "method": "one fresh llama-server process per sample on its own port; exactly one request per process; production NORMAL lane untouched throughout",
+  "binary": "/Users/orchords/src/llama.cpp/build/bin/llama-server",
+  "model": "/Users/orchords/models/normal/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+  "alias": "smollm2-1.7b-q4km",
+  "flags": [
+    "-ngl",
+    "99",
+    "--ctx-size",
+    "32768",
+    "--batch-size",
+    "4096",
+    "--ubatch-size",
+    "1024",
+    "--jinja",
+    "--reasoning",
+    "on",
+    "--metrics",
+    "--log-verbosity",
+    "0",
+    "--parallel",
+    "1"
+  ],
+  "flags_note": "copied verbatim from the production lane apart from --port and --parallel 1",
+  "repetitions": 5,
+  "max_tokens": 256,
+  "median": {
+    "load_seconds": 0.775,
+    "prompt_ms": 29.523,
+    "predicted_per_second": 160.489
+  },
+  "cache_n_all_zero": true,
+  "samples": [
+    {
+      "sample": 0,
+      "port": 8951,
+      "load_seconds": 0.78,
+      "prompt_tokens_served": 70,
+      "cache_n": 0,
+      "prompt_ms": 28.984,
+      "predicted_n": 98,
+      "predicted_per_second": 160.48921082326,
+      "client_e2e_seconds": 0.6347,
+      "output_chars": 447
+    },
+    {
+      "sample": 1,
+      "port": 8952,
+      "load_seconds": 0.768,
+      "prompt_tokens_served": 70,
+      "cache_n": 0,
+      "prompt_ms": 29.573,
+      "predicted_n": 98,
+      "predicted_per_second": 159.67603871732402,
+      "client_e2e_seconds": 0.6384,
+      "output_chars": 447
+    },
+    {
+      "sample": 2,
+      "port": 8953,
+      "load_seconds": 0.768,
+      "prompt_tokens_served": 70,
+      "cache_n": 0,
+      "prompt_ms": 29.211,
+      "predicted_n": 98,
+      "predicted_per_second": 164.55376242847427,
+      "client_e2e_seconds": 0.62,
+      "output_chars": 447
+    },
+    {
+      "sample": 3,
+      "port": 8954,
+      "load_seconds": 0.781,
+      "prompt_tokens_served": 70,
+      "cache_n": 0,
+      "prompt_ms": 29.523,
+      "predicted_n": 98,
+      "predicted_per_second": 157.02170298940183,
+      "client_e2e_seconds": 0.6487,
+      "output_chars": 447
+    },
+    {
+      "sample": 4,
+      "port": 8955,
+      "load_seconds": 0.775,
+      "prompt_tokens_served": 70,
+      "cache_n": 0,
+      "prompt_ms": 31.347,
+      "predicted_n": 98,
+      "predicted_per_second": 163.63409392259604,
+      "client_e2e_seconds": 0.6255,
+      "output_chars": 447
+    }
+  ]
+}

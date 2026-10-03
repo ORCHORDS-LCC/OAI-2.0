@@ -332,3 +332,54 @@ exactly two resolutions: raise `--ctx-size` (which increases per-slot KV
 memory, and the host was already at 63.4/64 GB during the uncontended run),
 or record the row as not-applicable with this reason. Silently omitting it
 would leave the required table short a row.
+
+## True cold start — `llamacpp_production_1ba5283/cold_start.json`
+
+The `cold` label in the matrices above means *no warm-up credit from the
+harness*. Config A of #240 asks for more than that: "fresh model/runtime
+start; no reusable prompt/KV state". That is unobtainable against a
+long-lived server, whose weights are resident and whose slot still holds the
+previous request's prefix cache.
+
+`scripts/cold_start_probe.py` measures it properly. Each sample starts a
+**new** `llama-server` process on its own port, waits until `/props`
+answers, issues exactly one request, and terminates the process. Nothing is
+shared between samples.
+
+Flags are copied verbatim from the production NORMAL lane except `--port`
+and `--parallel 1`.
+
+| Sample | Load s | Prefill ms | Decode tok/s | `cache_n` |
+|---:|---:|---:|---:|---:|
+| 0 | 0.78 | 29.0 | 160.49 | 0 |
+| 1 | 0.77 | 29.6 | 159.68 | 0 |
+| 2 | 0.77 | 29.2 | 164.55 | 0 |
+| 3 | 0.78 | 29.5 | 157.02 | 0 |
+| 4 | 0.77 | 31.3 | 163.63 | 0 |
+| **median** | **0.775** | **29.5** | **160.49** | **0** |
+
+`cache_n == 0` on every sample is the proof this is a real cold start: the
+server had nothing to reuse, unlike every cell above it.
+
+### Cold vs hot, and why the gap is smaller than expected
+
+| | Cold (replica) | Hot (uncontended `:8851`) |
+|---|---:|---:|
+| Decode tok/s | 160.49 | 245.01 |
+| Prefill ms | 29.5 | 7.1 |
+
+Hot is ~1.53× the cold decode rate. Two caveats keep this from being read as
+a residency win:
+
+- **Not like-for-like.** The replica runs `--parallel 1` because a single
+  sample cannot use more than one slot, and fewer slots means a smaller KV
+  allocation. Production runs `--parallel 4`. Some of the gap is slot
+  configuration, not residency.
+- **Load time is a warm *filesystem* cache, not a warm model.** 0.775 s is
+  time-to-first-serve with the GGUF already in the OS page cache. A true
+  first-boot-after-reboot load would be materially longer. The figure is
+  honest for the serving path and must not be quoted as cold-storage load.
+
+`cache_n == 0` plus a 0.775 s load is the useful pair: residency and
+prefix reuse are independent, and this configuration gets most of its speed
+back from residency without any prefix reuse at all.
