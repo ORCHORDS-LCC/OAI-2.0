@@ -10,6 +10,7 @@ from oai2.knowledge import (
     sha256_hex,
     vector_id_for,
 )
+from oai2.knowledge.cloudflare_bindings_runtime import CloudflareVectorizeStore
 from oai2.knowledge.cloudflare_runtime import (
     AsyncCloudflareKnowledgeRuntime,
     KnowledgeConflictError,
@@ -1172,3 +1173,330 @@ async def test_a_vectorize_outage_during_a_semantic_read_is_a_failure_not_an_emp
             RetrievalRequest(topic="semantic"),
             query_vector=[1.0],
         )
+
+
+# ---------------------------------------------------------------------------
+# #19 — the same acceptance, but through the REAL adapter over a binding fake
+# that models the documented Vectorize response shape.
+#
+# The tests above inject a store-level fake, so they prove the runtime's
+# integrity rules but not that the adapter can actually obtain the attribution
+# those rules depend on. A nearest-neighbour query does not return metadata
+# unless it asks for it (documented default returnMetadata:"none"), so the
+# whole stack has to work when the attribution arrives via getByIds instead.
+# ---------------------------------------------------------------------------
+
+
+class FakeVectorizeBinding:
+    """A binding-level fake that models Cloudflare's documented behaviour."""
+
+    def __init__(self) -> None:
+        self.vectors: dict[str, dict[str, object]] = {}
+        self.upserts: list[list[dict[str, object]]] = []
+        self.queries: list[tuple[list[float], dict[str, object] | None]] = []
+        self.get_by_ids_calls: list[list[str]] = []
+        # Scripted ranking, as (vector_id, score) in rank order.
+        self.ranking: list[tuple[str, float]] = []
+
+    async def upsert(self, vectors: object) -> object:
+        assert isinstance(vectors, list)
+        for v in vectors:
+            assert isinstance(v, dict)
+            vid = v["id"]
+            assert isinstance(vid, str)
+            self.vectors[vid] = {
+                "values": list(v["values"]),  # type: ignore[arg-type]
+                "metadata": dict(v.get("metadata") or {}),  # type: ignore[arg-type]
+            }
+        self.upserts.append(vectors)
+        return {"mutationId": "m1"}
+
+    async def query(self, vector: object, options: object = None) -> object:
+        assert isinstance(vector, list)
+        assert options is None or isinstance(options, dict)
+        self.queries.append((vector, options))
+        top_k = (options or {}).get("topK", 5)
+        assert isinstance(top_k, int)
+        # Documented default: id and score only. No metadata is attached.
+        return {
+            "matches": [
+                {"id": vid, "score": score} for vid, score in self.ranking[:top_k]
+            ]
+        }
+
+    async def getByIds(self, ids: object) -> object:
+        assert isinstance(ids, list)
+        self.get_by_ids_calls.append(list(ids))
+        out = []
+        for vid in ids:
+            rec = self.vectors.get(vid)
+            if rec is not None:
+                out.append(
+                    {
+                        "id": vid,
+                        "values": rec["values"],
+                        "metadata": rec["metadata"],
+                    }
+                )
+        return out
+
+
+def _runtime_through_binding() -> tuple[
+    AsyncCloudflareKnowledgeRuntime,
+    FakeReader,
+    FakeWriter,
+    FakeR2,
+    FakeVectorizeBinding,
+    FakeKv,
+]:
+    """Runtime wired through the REAL CloudflareVectorizeStore, not a fake store."""
+    reader = FakeReader()
+    writer = FakeWriter(revision=4)
+    r2 = FakeR2()
+    binding = FakeVectorizeBinding()
+    kv = FakeKv()
+    runtime = AsyncCloudflareKnowledgeRuntime(
+        reader=reader,  # type: ignore[arg-type]
+        writer=writer,  # type: ignore[arg-type]
+        r2=r2,  # type: ignore[arg-type]
+        vectorize=CloudflareVectorizeStore(binding),  # type: ignore[arg-type]
+        kv=kv,  # type: ignore[arg-type]
+        embedding_version=_EMBEDDING_VERSION,
+        embedding_digest="embed-digest-v1",
+    )
+    return runtime, reader, writer, r2, binding, kv
+
+
+@pytest.mark.asyncio
+async def test_real_binding_path_denied_update_never_serves_a_mixed_generation() -> None:
+    """DENIED UPDATE, through query -> getByIds -> VectorMatch -> D1 -> R2."""
+    runtime, reader, writer, _r2, binding, _kv = _runtime_through_binding()
+
+    old = _obj(knowledge_id="ko_real", content="OLD committed body")
+    new = _obj(knowledge_id="ko_real", content="NEW uncommitted body")
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+
+    writer.deny_write = True
+    with pytest.raises(KnowledgeConflictError):
+        await runtime.put(new, vector=[0.0, 1.0], now=21.0)
+
+    old_vid, new_vid = _vid(old), _vid(new)
+    assert set(binding.vectors) == {old_vid, new_vid}
+
+    # The raw query ranks ONLY the orphan. Its score is computed from the
+    # denied generation, so it must not attach to the old object.
+    binding.ranking = [(new_vid, 0.97)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"), query_vector=[0.0, 1.0],
+    )
+    assert result.candidates == [], "NEW score attached to OLD object"
+    assert result.objects == []
+
+    # If the OLD vector also ranks, its own score and object come back together.
+    binding.ranking = [(new_vid, 0.97), (old_vid, 0.88)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"), query_vector=[1.0, 0.0],
+    )
+    assert [c.content_hash for c in result.candidates] == [old.content_hash]
+    assert result.candidates[0].score == 0.88
+
+    # The whole path really went through the binding.
+    assert binding.queries, "no ranking query was issued"
+    assert binding.get_by_ids_calls, "no attribution call was issued"
+    assert all("returnMetadata" not in (o or {}) for _v, o in binding.queries)
+
+
+@pytest.mark.asyncio
+async def test_real_binding_path_successful_update_returns_new_content_and_score() -> None:
+    """SUCCESSFUL UPDATE: new vector, D1 points at it, both agree."""
+    runtime, reader, writer, _r2, binding, _kv = _runtime_through_binding()
+
+    old = _obj(knowledge_id="ko_real2", content="OLD committed body")
+    new = _obj(knowledge_id="ko_real2", content="NEW committed body")
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+    await runtime.put(new, vector=[0.0, 1.0], now=21.0)
+    reader.rows[str(new.knowledge_id)] = writer.writes[-1][0]
+
+    binding.ranking = [(_vid(new), 0.93)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"), query_vector=[0.0, 1.0],
+    )
+    assert [c.content_hash for c in result.candidates] == [new.content_hash]
+    assert result.candidates[0].score == 0.93
+    assert [o.content for o in result.objects] == [new.content]
+
+    # The superseded generation cannot contribute.
+    binding.ranking = [(_vid(old), 0.99)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"), query_vector=[1.0, 0.0],
+    )
+    assert result.candidates == []
+
+
+@pytest.mark.asyncio
+async def test_real_binding_path_unattributable_match_is_a_dependency_failure() -> None:
+    """MALFORMED ATTRIBUTION: a failure, not an empty semantic result."""
+    runtime, reader, writer, _r2, binding, _kv = _runtime_through_binding()
+
+    obj = _obj(knowledge_id="ko_real3", content="body")
+    await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
+    binding.ranking = [(_vid(obj), 0.9)]
+
+    # The binding returns an id and a score, but the stored record has no
+    # usable attribution.
+    binding.vectors[_vid(obj)]["metadata"] = {"knowledge_id": "ko_real3"}
+    with pytest.raises(RuntimeError):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"), query_vector=[1.0],
+        )
+
+    # And a record the index no longer holds is equally a failure.
+    binding.vectors.pop(_vid(obj))
+    with pytest.raises(RuntimeError):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"), query_vector=[1.0],
+        )
+
+
+@pytest.mark.asyncio
+async def test_real_binding_path_honours_query_rank_over_attribution_order() -> None:
+    """Ranking is the query's; getByIds order must not be able to reorder it."""
+    runtime, reader, writer, _r2, binding, _kv = _runtime_through_binding()
+
+    a = _obj(knowledge_id="ko_rank_a", content="alpha", authority=0.9)
+    b = _obj(knowledge_id="ko_rank_b", content="bravo", authority=0.9)
+    for obj in (a, b):
+        await runtime.put(obj, vector=[1.0], now=20.0)
+        reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
+
+    binding.ranking = [(_vid(a), 0.99), (_vid(b), 0.80)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"), query_vector=[1.0],
+    )
+    assert [c.knowledge_id for c in result.candidates] == [a.knowledge_id, b.knowledge_id]
+    assert [c.score for c in result.candidates] == [0.99, 0.80]
+
+
+# ---------------------------------------------------------------------------
+# #19 / #73 — MIXED EMBEDDING VERSIONS: integrity is protected, RECALL IS NOT.
+#
+# Excluding a VectorMatch whose embedding_version differs from the query
+# runtime's is correct and necessary: its score was computed in a different
+# vector space and is not comparable. But the exclusion happens AFTER the raw
+# top-K is fixed, so every old-version vector in that top-K consumes a slot
+# before being discarded. During a partial re-embed that is a recall loss with
+# no correctness cost and no visible signal.
+#
+# This is a MEASUREMENT, not a fix. #73 owns the migration. Nothing here claims
+# a recall figure, and a mock cannot establish one — the numbers below are
+# exact for the scenario constructed, and say nothing about a real index.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mixed_version_recall_loss_is_measured_not_hidden() -> None:
+    """Quantify the slot consumption. Integrity holds; recall can be truncated."""
+    # A runtime already migrated to embed-v2, over an index still half-populated
+    # with embed-v1 vectors.
+    runtime, reader, writer, _r2, binding, _kv = _runtime_through_binding()
+    runtime = AsyncCloudflareKnowledgeRuntime(
+        reader=reader,  # type: ignore[arg-type]
+        writer=writer,  # type: ignore[arg-type]
+        r2=_r2,  # type: ignore[arg-type]
+        vectorize=CloudflareVectorizeStore(binding),  # type: ignore[arg-type]
+        kv=_kv,  # type: ignore[arg-type]
+        embedding_version="embed-v2",
+        embedding_digest="embed-digest-v2",
+    )
+
+    # A realistic partial migration: the corpus is large and still mostly
+    # legacy, with only a few objects already re-embedded. limit=8 over-fetches
+    # to top_k=32, so the legacy population must exceed that to fill the
+    # ceiling — which is exactly what happens in a real half-migrated index.
+    limit = 8
+    top_k = min(max(limit * 4, 8), 100)
+    legacy_count = top_k + 8          # comfortably more than the ceiling
+    v1_objs = [
+        _obj(knowledge_id=f"ko_v1_{i}", content=f"legacy body {i}")
+        for i in range(legacy_count)
+    ]
+    v2_objs = [
+        _obj(knowledge_id=f"ko_v2_{i}", content=f"current body {i}")
+        for i in range(2)
+    ]
+    # Index them the way a partial migration actually leaves things: every
+    # vector present, each carrying the version it was embedded with.
+    for obj in v1_objs:
+        await runtime.put(obj, vector=[1.0, 0.0], now=20.0)
+        reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
+    for obj in v2_objs:
+        await runtime.put(obj, vector=[0.0, 1.0], now=21.0)
+        reader.rows[str(obj.knowledge_id)] = writer.writes[-1][0]
+
+    # Re-stamp: the v1 objects' rows and vectors are the pre-migration ones.
+    for obj in v1_objs:
+        legacy_row = _row(obj, embedding_version="embed-v1")
+        reader.rows[str(obj.knowledge_id)] = legacy_row
+        binding.vectors[_vid(obj, version="embed-v1")] = {
+            "values": [1.0, 0.0],
+            "metadata": {
+                "knowledge_id": str(obj.knowledge_id),
+                "content_hash": obj.content_hash,
+                "embedding_version": "embed-v1",
+                "status": obj.status.value,
+                "authority": obj.authority,
+            },
+        }
+    for obj in v2_objs:
+        binding.vectors[_vid(obj, version="embed-v2")] = {
+            "values": [0.0, 1.0],
+            "metadata": {
+                "knowledge_id": str(obj.knowledge_id),
+                "content_hash": obj.content_hash,
+                "embedding_version": "embed-v2",
+                "status": obj.status.value,
+                "authority": obj.authority,
+            },
+        }
+
+    # The raw ranking: the legacy population outranks every current-version
+    # object, and top_k is what the runtime actually requests.
+    binding.ranking = [(_vid(o, version="embed-v1"), 1.0 - i * 0.001) for i, o in
+                       enumerate(v1_objs)]
+    binding.ranking += [(_vid(o, version="embed-v2"), 0.1 + i * 0.01) for i, o in
+                        enumerate(v2_objs)]
+
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic", limit=limit), query_vector=[0.0, 1.0],
+    )
+
+    raw_returned = min(len(binding.ranking), top_k)
+    excluded_old_version = raw_returned - len(result.candidates)
+    current_version_returned = len(result.candidates)
+
+    # The integrity rule did exactly what it must: nothing from the other
+    # embedding space leaked into the answer.
+    assert all(
+        c.knowledge_id in {o.knowledge_id for o in v2_objs}
+        for c in result.candidates
+    ), "a cross-version score reached the result"
+
+    # But the current-version objects were ranked below the raw top-K ceiling
+    # and never even got attributed. This is the recall cost, stated as a
+    # count so it is visible rather than theoretical.
+    assert raw_returned == top_k
+    assert excluded_old_version == top_k, (
+        f"expected every ranked legacy vector to consume a slot, "
+        f"saw {excluded_old_version} excluded of {raw_returned} raw"
+    )
+    assert current_version_returned == 0, (
+        "with the legacy vectors saturating the ceiling, no current-version "
+        "object survives — this is the recall failure the version filter causes"
+    )
+    # The binding was asked for attribution only for what ranked, so the
+    # current-version vectors were never even looked up.
+    attributed = {vid for call in binding.get_by_ids_calls for vid in call}
+    assert not any(_vid(o, version="embed-v2") in attributed for o in v2_objs)

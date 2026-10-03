@@ -11,7 +11,7 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
-from .transport import VectorMatch
+from .transport import VECTOR_ID_MAX_BYTES, VectorMatch
 
 
 class R2ObjectBodyBinding(Protocol):
@@ -48,6 +48,8 @@ class VectorizeIndexBinding(Protocol):
         vector: Sequence[float],
         options: Mapping[str, object] | None = None,
     ) -> object: ...
+
+    async def getByIds(self, ids: Sequence[str]) -> object: ...
 
 
 class CloudflareR2Store:
@@ -119,20 +121,40 @@ class CloudflareVectorizeStore:
         *,
         top_k: int = 5,
     ) -> list[VectorMatch]:
-        """Return typed, fully attributed matches.
+        """Return typed, fully attributed matches, in query rank order.
 
-        The metadata is NOT optional decoration: without the knowledge_id,
-        content_hash and embedding_version carried by the same match, a caller
-        cannot tell whether the score it is holding belongs to the object it is
-        about to return. Discarding it here is what made a mixed-generation
-        answer expressible in the first place.
+        WHY THIS IS TWO BINDING CALLS. A nearest-neighbour query does not
+        return metadata unless it asks for it: the documented default of
+        ``returnMetadata`` is ``"none"``, and a default-mode match carries only
+        ``id`` and ``score``. The read contract genuinely needs the
+        knowledge_id, content_hash and embedding_version that sit on the vector
+        record, because a bare score cannot be attributed to an object.
 
-        A match that cannot be parsed is a dependency fault, not a row to skip.
-        Raising keeps a broken index from being reported as "no results".
+        Asking the query for metadata is the obvious alternative and is wrong
+        here for a concrete reason: requesting ``returnMetadata:"all"`` lowers
+        the documented ``topK`` ceiling from 100 to 50. This runtime deliberately
+        over-fetches before authoritative D1 filtering, so halving the ceiling
+        would cut recall exactly where a stale or ineligible vector is occupying
+        the slots. So the ranking query keeps the full ceiling and the
+        attribution arrives through ``getByIds``, which is the documented way to
+        retrieve stored vectors including their metadata.
+
+        ORDER AND JOIN. The query's score order is the ranking and is preserved
+        exactly. ``getByIds`` result order is never assumed; attribution is
+        joined by exact vector id into a map first.
+
+        FAIL-CLOSED. A requested id with no attribution, or with two, is a
+        dependency fault and raises. Silently dropping either would turn a
+        broken attribution channel into a short result list, and a short result
+        list is indistinguishable from a genuine low-recall answer. The vector
+        ``values`` returned by ``getByIds`` are never read and never exposed.
         """
         normalized = _vector(values)
         if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 100:
             raise ValueError("top_k must be an integer between 1 and 100")
+
+        # No returnMetadata option is sent. The ranking query must keep the full
+        # topK ceiling, and a test asserts this option is never added.
         result = await self._index.query(normalized, {"topK": top_k})
         matches = _field(result, "matches")
         if not isinstance(matches, Sequence) or isinstance(
@@ -140,21 +162,99 @@ class CloudflareVectorizeStore:
         ):
             raise RuntimeError("Vectorize query result does not expose a matches sequence")
 
-        out: list[VectorMatch] = []
+        ranked: list[tuple[str, float]] = []
+        seen: set[str] = set()
         for match in matches:
+            vector_id = _field(match, "id")
+            score = _field(match, "score")
+            if (
+                not isinstance(vector_id, str)
+                or not vector_id
+                or vector_id != vector_id.strip()
+            ):
+                # Validated for normalization HERE, not later: this id is about
+                # to be used as the getByIds lookup key, so a padded value would
+                # be sent to the binding and come back missing, turning a
+                # malformed rank into a misleading "no attribution" error.
+                raise RuntimeError("Vectorize match has an invalid id")
+            if len(vector_id.encode("utf-8")) > VECTOR_ID_MAX_BYTES:
+                raise RuntimeError(
+                    "Vectorize match id exceeds the Vectorize id length limit"
+                )
+            if vector_id in seen:
+                # One rank per vector. A repeated id would otherwise be
+                # attributed twice and could yield the same object twice.
+                raise RuntimeError(
+                    f"Vectorize query returned duplicate id {vector_id!r}"
+                )
+            if (
+                isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(float(score))
+            ):
+                raise RuntimeError("Vectorize match has an invalid score")
+            seen.add(vector_id)
+            ranked.append((vector_id, float(score)))
+
+        if not ranked:
+            # Nothing ranked, so there is nothing to attribute and no reason to
+            # spend a binding call.
+            return []
+
+        attribution = await self._metadata_by_ids([vid for vid, _ in ranked])
+
+        out: list[VectorMatch] = []
+        for vector_id, score in ranked:
+            metadata = attribution[vector_id]
             try:
                 out.append(
-                    VectorMatch.from_vectorize_parts(
-                        _field(match, "id"),
-                        _field(match, "score"),
-                        _field(match, "metadata"),
-                    )
+                    VectorMatch.from_vectorize_parts(vector_id, score, metadata)
                 )
             except (TypeError, ValueError) as exc:
                 raise RuntimeError(
                     f"Vectorize match could not be validated: {exc}"
                 ) from exc
         return out
+
+    async def _metadata_by_ids(self, ids: Sequence[str]) -> dict[str, object]:
+        """Fetch stored attribution for exactly these vector ids.
+
+        Returns a map keyed by the requested ids. Ids the binding returns that
+        were NOT requested are ignored: an index that volunteers a record must
+        never be able to promote a vector that did not rank.
+        """
+        requested = set(ids)
+        result = await self._index.getByIds(list(ids))
+        if not isinstance(result, Sequence) or isinstance(
+            result, (str, bytes, bytearray)
+        ):
+            raise RuntimeError("Vectorize getByIds did not return a sequence")
+
+        attribution: dict[str, object] = {}
+        for record in result:
+            record_id = _field(record, "id")
+            if (
+                not isinstance(record_id, str)
+                or not record_id
+                or record_id != record_id.strip()
+            ):
+                raise RuntimeError("Vectorize getByIds record has an invalid id")
+            if record_id not in requested:
+                # Extra, unrequested. Never promoted, never a candidate.
+                continue
+            if record_id in attribution:
+                raise RuntimeError(
+                    f"Vectorize getByIds returned duplicate attribution for {record_id!r}"
+                )
+            attribution[record_id] = _field(record, "metadata")
+
+        missing = requested - attribution.keys()
+        if missing:
+            raise RuntimeError(
+                "Vectorize getByIds returned no metadata for queried vector ids: "
+                f"{sorted(missing)!r}"
+            )
+        return attribution
 
 
 class CloudflareKvCache:
