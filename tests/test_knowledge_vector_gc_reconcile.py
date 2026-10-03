@@ -969,3 +969,73 @@ class TestGraceNegativeControls:
                 "vec-a" in restored.grace_candidates
                 and restored.grace_candidates["vec-a"].first_seen_at == 1_000.0
             )
+
+
+class TestInventoryCompleteIsStrictlyBoolean:
+    """The vector reconciler must match its R2 sibling's rule, not relax it.
+
+    `gc.GcReconciliationState.from_snapshot` rejects a non-bool
+    `inventory_complete` with `ValueError`. `gc_vector` coerced it with
+    `bool(...)`, so `"false"` and `"no"` became `True`. That matters because
+    `build_report` and `recheck_grace` both guard on
+    `if not self.inventory_complete: raise RuntimeError("inventory scan is
+    incomplete")` -- a coerced True lets a GC report be built, or a grace
+    candidate aged, against pages nobody has read. A missed page has to fail
+    loudly rather than read as a completed scan.
+    """
+
+    @staticmethod
+    def _snapshot() -> dict[str, object]:
+        return _state({}, [], now=1_000.0).to_snapshot()
+
+    @pytest.mark.parametrize("value", [1, 0, "false", "true", "", "no", []])
+    def test_non_boolean_is_rejected(self, value: object) -> None:
+        snap = self._snapshot()
+        snap["inventory_complete"] = value
+        with pytest.raises(
+            ValueError, match="snapshot inventory_complete must be a boolean"
+        ):
+            gc_vector.VectorGcReconciliationState.from_snapshot(snap)
+
+    def test_the_string_false_is_rejected_rather_than_read_as_complete(
+        self,
+    ) -> None:
+        """The specific coercion that made the guard meaningless.
+
+        `"false"` is truthy in Python, so `bool("false") is True`. Before the
+        fix this value was accepted and the state reported itself complete.
+        """
+        snap = self._snapshot()
+        snap["inventory_complete"] = "false"
+        with pytest.raises(
+            ValueError, match="snapshot inventory_complete must be a boolean"
+        ):
+            gc_vector.VectorGcReconciliationState.from_snapshot(snap)
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_opposite_direction_real_booleans_are_still_accepted(
+        self, value: bool
+    ) -> None:
+        """Opposite-direction guard: strictness must not reject real booleans.
+
+        A snapshot this reconciler itself writes always carries a real bool, so
+        if the new check rejected those, every round-trip would break. This
+        is the failure a too-eager type check introduces.
+        """
+        snap = self._snapshot()
+        # Keep the combination self-consistent: _validate_cursor_state
+        # separately rejects "incomplete, pages>0, no cursor", which would
+        # mask the type check this guard is about.
+        snap["pages_processed"] = 0
+        snap["next_cursor"] = None
+        snap["inventory_complete"] = value
+        restored = gc_vector.VectorGcReconciliationState.from_snapshot(snap)
+        assert restored.inventory_complete is value
+
+    def test_snapshot_round_trip_is_unaffected(self) -> None:
+        """Opposite-direction guard: the normal save/restore path still works."""
+        state = _state({}, ["vec-a"], now=1_000.0)
+        restored = gc_vector.VectorGcReconciliationState.from_snapshot(
+            state.to_snapshot()
+        )
+        assert restored.inventory_complete == state.inventory_complete

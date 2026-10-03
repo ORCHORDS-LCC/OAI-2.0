@@ -406,13 +406,23 @@ class VectorGcReconciliationState:
             if current.references != references:
                 raise ValueError("authoritative reference set changed since snapshot")
 
+        # Strict, like gc.py:259-261. `bool(...)` would coerce the JSON string
+        # "false" -- and "no" -- to True, so a snapshot that declares the scan
+        # INCOMPLETE would pass the `inventory scan is incomplete` guards in
+        # build_report/recheck_grace, and a GC report could be built, or a
+        # grace candidate aged, on an inventory with pages nobody has read.
+        # A missed page must fail loudly, not read as a completed scan.
+        inventory_complete_value = snapshot.get("inventory_complete", False)
+        if not isinstance(inventory_complete_value, bool):
+            raise ValueError("snapshot inventory_complete must be a boolean")
+
         return cls(
             observed_at=_as_number(snapshot.get("observed_at")),
             references=references,
             inventory=inventory,
             pages_processed=_as_int(snapshot.get("pages_processed", 0)),
             next_cursor=_optional_cursor(snapshot.get("next_cursor")),
-            inventory_complete=bool(snapshot.get("inventory_complete", False)),
+            inventory_complete=inventory_complete_value,
             grace_candidates=grace_candidates,
         )
 
