@@ -29,10 +29,43 @@ class TruthCase:
 
 @dataclass(slots=True, frozen=True)
 class CandidateTruthInput:
-    """The only case data visible to the candidate runtime."""
+    """The only case data visible to the candidate runtime.
+
+    ``case_id`` here is an OPAQUE per-run handle, not the case's real
+    identifier. See :func:`_public_case_id`.
+    """
 
     case_id: str
     prompt: str
+
+
+def _public_case_id(index: int) -> str:
+    """The candidate-facing handle for case ``index``.
+
+    A held-out adversarial suite exists to measure whether a candidate
+    recognises a condition on its own -- a nonexistent resource, a stale
+    fact, a contradiction. ``case_class`` is the ground truth for exactly
+    that, and this repository names cases after the condition they test
+    (``"missing-api"``, ``"stale-release-9"``). Handing the candidate the
+    real ``case_id`` therefore handed it the answer key: the class was
+    recoverable from the only field it was shown, on 3 of 3 cases, by a
+    candidate that read nothing else.
+
+    That contaminates every per-class metric (REQ-TRUTH-025) and inflates
+    abstention, because a candidate that dispatches on the handle can
+    abstain correctly without recognising anything. The suite would then
+    report truthfulness the model does not have -- the false-success
+    failure mode, one level up.
+
+    So the candidate sees a positional handle carrying no case information,
+    while the artifact records BOTH handles: :attr:`TruthSample.case_id`
+    for the report, and :attr:`TruthSample.public_case_id` so a reader can
+    confirm the mapping and check the leak did not occur.
+
+    Index-based rather than random so a run is reproducible at a given
+    source SHA, which is what REQ-TRUTH-028 asks artifacts to support.
+    """
+    return f"case-{index:04d}"
 
 
 @dataclass(slots=True, frozen=True)
@@ -107,12 +140,13 @@ async def run_held_out_truth_cases(
     responses: list[CandidateTruthResponse] = []
     seen_ids: set[str] = set()
 
-    for case in cases:
+    for index, case in enumerate(cases):
         if case.case_id in seen_ids:
             raise ValueError(f"duplicate truth case_id: {case.case_id}")
         seen_ids.add(case.case_id)
 
-        public_input = CandidateTruthInput(case_id=case.case_id, prompt=case.prompt)
+        public_case_id = _public_case_id(index)
+        public_input = CandidateTruthInput(case_id=public_case_id, prompt=case.prompt)
         response = await candidate(public_input)
         if not isinstance(response, CandidateTruthResponse):
             raise TypeError("candidate must return CandidateTruthResponse")
@@ -126,6 +160,9 @@ async def run_held_out_truth_cases(
         samples.append(
             TruthSample(
                 case_id=case.case_id,
+                # Recorded so a reader can audit the split, not to re-expose
+                # the class. The candidate never sees this value.
+                public_case_id=public_case_id,
                 case_class=case.case_class,
                 outcome=outcome,
                 evidence_policy_version=evidence_policy_version,

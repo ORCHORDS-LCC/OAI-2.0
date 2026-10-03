@@ -39,12 +39,30 @@ class TruthSample:
     evidence_policy_version: str
     runtime_version: str
     source_version: str
+    # The opaque handle the candidate was actually shown, recorded so a
+    # reader can audit that the class-descriptive `case_id` never reached
+    # it. Required and distinct from `case_id` by construction: a sample
+    # that reuses the real id means the leak occurred.
+    public_case_id: str = "unset"
 
     def __post_init__(self) -> None:
-        for name in ("case_id", "evidence_policy_version", "runtime_version", "source_version"):
+        for name in (
+            "case_id",
+            "public_case_id",
+            "evidence_policy_version",
+            "runtime_version",
+            "source_version",
+        ):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
+        if self.public_case_id == self.case_id:
+            raise ValueError(
+                "public_case_id must not equal case_id: the held-out runner "
+                "gives the candidate an opaque handle, so a sample that "
+                "reuses the real id means the class-descriptive identifier "
+                "was exposed"
+            )
         for name, enum_type in (("case_class", TruthCaseClass), ("outcome", TruthOutcome)):
             try:
                 object.__setattr__(self, name, enum_type(getattr(self, name)))
