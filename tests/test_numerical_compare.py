@@ -423,3 +423,90 @@ def test_digest_covers_non_finite_samples() -> None:
         [1.0, math.inf], [1.0, -math.inf], profile=_profile(), identity=_identity()
     )
     assert len({nonfinite.input_digest, finite.input_digest, flipped.input_digest}) == 3
+
+
+# ---------------------------------------------------------------------------
+# An unmeasured capability gate must not read as a clean one.
+# ---------------------------------------------------------------------------
+
+
+def _capability_profile(max_capability_regression: float = 0.01):
+    return NumericalToleranceProfile(
+        profile_id="router-fp16-small-v1",
+        operation=NumericalOperation.ROUTER_PROBABILITIES,
+        dtype="fp16",
+        shape_class="small",
+        max_abs_error=1.0e-3,
+        max_rel_error=1.0e-3,
+        max_capability_regression=max_capability_regression,
+        require_finite_state_match=True,
+    )
+
+
+def test_unmeasured_capability_is_distinguishable_from_a_clean_result() -> None:
+    """Omitting the capability scores reported exactly what a perfect run reports.
+
+    `_capability_regression` returns 0.0 when both scores are None, so an
+    artifact for a comparison that never measured capability was identical in
+    every field to one that measured 0.9 -> 0.9 and passed: regression 0.0,
+    passed True, failures (). A reader could not tell whether the profile's
+    `max_capability_regression` gate had been exercised at all.
+    """
+    measured_perfect = compare_numerical_paths(
+        [1.0, 2.0],
+        [1.0, 2.0],
+        profile=_capability_profile(),
+        identity=_identity(),
+        reference_capability_score=0.9,
+        optimized_capability_score=0.9,
+    )
+    never_measured = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 2.0], profile=_capability_profile(), identity=_identity()
+    )
+    # Same numbers, as before the fix.
+    assert measured_perfect.capability_regression == never_measured.capability_regression
+    assert measured_perfect.passed == never_measured.passed
+    # But no longer the same claim.
+    assert measured_perfect.capability_measured is True
+    assert never_measured.capability_measured is False
+
+
+def test_capability_regression_still_fails_when_measured() -> None:
+    """The gate itself must keep working."""
+    result = compare_numerical_paths(
+        [1.0, 2.0],
+        [1.0, 2.0],
+        profile=_capability_profile(),
+        identity=_identity(),
+        reference_capability_score=0.9,
+        optimized_capability_score=0.1,
+    )
+    assert not result.passed
+    assert "capability_regression" in result.failures
+    assert result.capability_measured is True
+
+
+def test_a_zero_tolerance_capability_gate_still_passes_when_measured() -> None:
+    """Opposite-direction guard: measuring must not itself be a failure."""
+    result = compare_numerical_paths(
+        [1.0, 2.0],
+        [1.0, 2.0],
+        profile=_capability_profile(max_capability_regression=0.0),
+        identity=_identity(),
+        reference_capability_score=0.5,
+        optimized_capability_score=0.5,
+    )
+    assert result.capability_measured is True
+    assert result.passed, result.failures
+
+
+def test_a_capability_score_on_only_one_side_is_still_rejected() -> None:
+    """Half a measurement is a caller bug, not a measurement."""
+    with pytest.raises(ValueError, match="provided together"):
+        compare_numerical_paths(
+            [1.0, 2.0],
+            [1.0, 2.0],
+            profile=_capability_profile(),
+            identity=_identity(),
+            reference_capability_score=0.9,
+        )

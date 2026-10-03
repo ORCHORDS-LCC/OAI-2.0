@@ -73,6 +73,15 @@ class NumericalComparison:
     max_abs_error: float
     max_rel_error: float
     finite_state_match: bool
+    # Whether capability was actually MEASURED, as opposed to omitted.
+    # `_capability_regression` returns 0.0 when both scores are None, so
+    # before this field existed an artifact for a comparison that never
+    # measured capability was identical in every field to one that measured
+    # 0.9 -> 0.9 and passed. A reader could not tell whether the profile's
+    # `max_capability_regression` gate had been exercised at all. REQ-NUM-004
+    # asks for capability/routing operations to be stress-tested; an
+    # unexercised gate must not be readable as a clean one.
+    capability_measured: bool
     capability_regression: float
     passed: bool
     failures: tuple[str, ...]
@@ -161,6 +170,9 @@ def compare_numerical_paths(
 
     max_abs = max(abs_errors, default=0.0)
     max_rel = max(rel_errors, default=0.0)
+    capability_measured = (
+        reference_capability_score is not None and optimized_capability_score is not None
+    )
     capability_regression = _capability_regression(
         reference_capability_score,
         optimized_capability_score,
@@ -196,6 +208,7 @@ def compare_numerical_paths(
         max_abs_error=max_abs,
         max_rel_error=max_rel,
         finite_state_match=finite_match,
+        capability_measured=capability_measured,
         capability_regression=capability_regression,
         passed=not failures,
         failures=tuple(failures),
