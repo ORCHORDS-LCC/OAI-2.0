@@ -654,3 +654,135 @@ async def test_shared_content_across_rows_is_never_removed_by_a_failed_put() -> 
         "a shared content-addressed body must never be removed as rollback"
     )
     assert await runtime.get(first.knowledge_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# #205 section 3 — D1/Vectorize split-brain reproduction.
+#
+# The put order is R2 -> Vectorize -> D1, and the vector identity is the
+# stable knowledge_id. A put that succeeds on Vectorize but is then denied by
+# D1 therefore overwrites the vector that the LAST COMMITTED D1 row still
+# points at, while D1 and R2 keep representing the previous content.
+#
+# Semantic retrieval then scores against the NEW embedding and returns the OLD
+# object, because the only generation check is `row.vectorize_id != vector_id`
+# and both are the same stable id. That is a mixed-generation answer, not an
+# orphan: the caller cannot tell which content the score belongs to.
+#
+# REPRODUCED, NOT FIXED HERE. This is a multi-store architectural invariant
+# owned by the knowledge D1/R2/Vectorize integrity work (#19), with the
+# version/retirement lifecycle in #73 and R2 GC in #209. Fixing it in this
+# issue would duplicate that owner. The test is marked xfail(strict=True) so it
+# documents the current behaviour and FAILS once the behaviour is corrected,
+# forcing this marker to be removed rather than silently going stale.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "D1/Vectorize split-brain. A put that succeeds on Vectorize but is "
+        "denied by D1 overwrites the embedding the last committed D1 row still "
+        "points at, because the vector identity is the stable knowledge_id. "
+        "Semantic retrieval then scores against the NEW embedding and returns "
+        "the OLD object, and the only generation check -- "
+        "`row.vectorize_id != vector_id` -- passes because both are the same "
+        "stable id. Desired behaviour: refuse to return a candidate whose "
+        "embedding generation disagrees with its authoritative content. "
+        "Owner: #19 (integrity), #73 (version lifecycle), #209 (R2 GC)."
+    ),
+)
+async def test_split_brain_semantic_read_must_not_mix_generations() -> None:
+    """The invariant that SHOULD hold, and currently does not.
+
+    A candidate is only returned when the embedding that produced its score
+    belongs to the same committed content generation as the object returned.
+    """
+    runtime, reader, writer, r2, vectorize, _kv = _runtime()
+
+    old = _obj(knowledge_id="ko_split", content="OLD committed body")
+    new = _obj(knowledge_id="ko_split", content="NEW uncommitted body")
+    assert old.content_hash != new.content_hash
+
+    # 1. The authoritative object: OLD content, D1 pointing at its body.
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+    assert writer.writes[-1][0].content_hash == old.content_hash
+
+    # 2-5. An update to the SAME knowledge_id: R2 and Vectorize succeed, the
+    #      authoritative D1 write is denied.
+    writer.deny_write = True
+    with pytest.raises(KnowledgeConflictError):
+        await runtime.put(new, vector=[0.0, 1.0], now=21.0)
+
+    # Precondition: the vector store now holds the NEW embedding, D1 still
+    # describes the OLD generation, and the NEW body is orphaned.
+    assert [u[1] for u in vectorize.upserts] == [[1.0, 0.0], [0.0, 1.0]]
+    assert reader.rows[str(old.knowledge_id)].content_hash == old.content_hash
+    assert f"oai2-blobs/{new.content_hash}" in r2.values
+
+    # 6. Semantic retrieval whose match was computed from the NEW embedding.
+    vectorize.matches = [(str(old.knowledge_id), 0.97)]
+
+    with pytest.raises(KnowledgeIntegrityError):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"),
+            query_vector=[0.0, 1.0],
+        )
+
+
+@pytest.mark.asyncio
+async def test_split_brain_is_currently_observable_as_a_mixed_generation_answer() -> None:
+    """Characterisation of the defect, so the report is not just an assertion.
+
+    This is what actually happens today, pinned so the xfail above cannot be
+    "fixed" by accident or by a test that never exercised the real path. It
+    documents a defect and must be replaced when the invariant is implemented.
+    """
+    runtime, reader, writer, _r2, vectorize, _kv = _runtime()
+
+    old = _obj(knowledge_id="ko_split", content="OLD committed body")
+    new = _obj(knowledge_id="ko_split", content="NEW uncommitted body")
+
+    await runtime.put(old, vector=[1.0, 0.0], now=20.0)
+    reader.rows[str(old.knowledge_id)] = writer.writes[-1][0]
+
+    writer.deny_write = True
+    with pytest.raises(KnowledgeConflictError):
+        await runtime.put(new, vector=[0.0, 1.0], now=21.0)
+
+    vectorize.matches = [(str(old.knowledge_id), 0.97)]
+    result = await runtime.retrieve(
+        RetrievalRequest(topic="semantic"),
+        query_vector=[0.0, 1.0],
+    )
+
+    # No error. A normal candidate is returned: score from the NEW embedding,
+    # object from the OLD generation, and the candidate carries no generation
+    # or embedding provenance of its own.
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.content_hash == old.content_hash
+    assert candidate.content_hash != new.content_hash
+    assert candidate.score == 0.97
+    assert not hasattr(candidate, "embedding_version")
+
+
+@pytest.mark.asyncio
+async def test_the_existing_id_check_still_catches_a_genuine_id_disagreement() -> None:
+    # Control: the guard that DOES exist is not dead code. It fires when the
+    # ids genuinely differ, which is the only case the current design detects.
+    runtime, reader, _writer, _r2, vectorize, _kv = _runtime()
+    from dataclasses import replace
+
+    obj = _obj(knowledge_id="ko_idcheck")
+    row = _row(obj)
+    reader.rows[str(obj.knowledge_id)] = replace(row, vectorize_id="stale-vector-id")
+    vectorize.matches = [(str(obj.knowledge_id), 0.99)]
+
+    with pytest.raises(KnowledgeIntegrityError, match="disagrees with D1 vectorize_id"):
+        await runtime.retrieve(
+            RetrievalRequest(topic="semantic"),
+            query_vector=[1.0],
+        )
