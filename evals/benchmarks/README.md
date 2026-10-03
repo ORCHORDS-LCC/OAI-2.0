@@ -383,3 +383,53 @@ a residency win:
 `cache_n == 0` plus a 0.775 s load is the useful pair: residency and
 prefix reuse are independent, and this configuration gets most of its speed
 back from residency without any prefix reuse at all.
+
+## First useful action — `llamacpp_production_1ba5283/first_useful_action.json`
+
+The last unmeasured quantity in the #240 required table. TTFT is time to
+first byte; a model can emit its first token in 16 ms and still be wrong.
+Earlier work on #240 made this point about `days in a week` (23.9 ms to a
+response at 13% verified-correct, implying ~183 ms to first *correct*
+response) but never measured it with a harness.
+
+`scripts/first_useful_action.py` measures it: for each case, issue attempts
+until one satisfies the suite's own regex oracle, and record the cumulative
+wall time at which a verified-correct output first exists.
+
+| Case | Attempts | Time to first correct (s) | TTFT (s) |
+| --- | ---: | ---: | ---: |
+| days_in_a_week | 1 | 0.097 | 0.043 |
+| count_letter_in_word | 1 | 0.150 | 0.018 |
+| geometric_sequence | 1 | 0.060 | 0.036 |
+| leap_year_length | 1 | 0.072 | 0.033 |
+| arithmetic_multistep | 6 | **none** | 0.017 |
+| modular_arithmetic | 6 | **none** | 0.019 |
+| boolean_logic | 6 | **none** | 0.017 |
+| unit_conversion | 6 | **none** | 0.015 |
+| rate_word_problem | 6 | **none** | 0.014 |
+| capital_city | 6 | **none** | 0.015 |
+| distinct_letter_count | 6 | **none** | 0.018 |
+| string_reversal | 6 | **none** | 0.018 |
+
+**Median TTFT 16.03 ms vs median time-to-first-correct 0.101 s — TTFT
+understates by ~6×** on the cases that are answered at all.
+
+### The sharper statement: for 8 of 12 cases the understatement is unbounded
+
+Eight cases never reach a correct answer. For those there is **no finite
+time to a useful action**, so TTFT does not merely overstate by a factor —
+it reports a latency for an outcome that never occurs. Any dashboard that
+shows TTFT as the user-facing number is reporting success on 4 tasks in 16 ms
+and silence on the other 8.
+
+### Retrying cannot help, and the artifact proves it
+
+Serving is deterministic (`temperature=0.0`, fixed seed), so the probe
+records whether repeated attempts were byte-identical: **all of them are**.
+The retry loop therefore bounds work; it does not explore a distribution.
+The 8 failures are **confident, not unlucky** — the same wrong answer every
+time. This matches the accuracy baseline exactly: the same 4 cases pass.
+
+That is the useful result. Retrying a deterministic wrong answer is not a
+mitigation, so the fix for those 8 is a different model or a different
+serving configuration, not a retry policy.

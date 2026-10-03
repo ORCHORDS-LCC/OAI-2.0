@@ -1,0 +1,625 @@
+{
+  "generated_at": "2026-10-03T20:19:15.223969+00:00",
+  "requirement": "AC-PERF-034: first useful action, distinct from TTFT",
+  "definition": "cumulative wall time until an attempt's output satisfies the case's regex oracle; TTFT is reported alongside and is NOT this metric",
+  "endpoint": "http://127.0.0.1:8851",
+  "model": "smollm2-1.7b-q4km",
+  "sampling": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "seed": 20261004,
+    "max_tokens": 48
+  },
+  "max_attempts": 6,
+  "suite_id": "deterministic_hard_12",
+  "summary": {
+    "cases": 12,
+    "reached_verified_correct": 4,
+    "never_reached_within_attempt_cap": [
+      "arithmetic_multistep",
+      "modular_arithmetic",
+      "boolean_logic",
+      "unit_conversion",
+      "rate_word_problem",
+      "capital_city",
+      "distinct_letter_count",
+      "string_reversal"
+    ],
+    "median_seconds_to_first_correct": 0.1013,
+    "median_ttft_seconds": 0.016029,
+    "ttft_understates_by_x": 6.3,
+    "cases_with_no_finite_time_to_correct": 8,
+    "all_attempts_byte_identical": true,
+    "retry_note": "serving is deterministic (temperature 0.0, fixed seed) so repeated attempts reproduce the same output; the retry loop bounds work, it does not explore a distribution. A case that is wrong once is wrong every time, which is why retrying cannot rescue the failures."
+  },
+  "cases": [
+    {
+      "case_id": "days_in_a_week",
+      "expected_answer": "7",
+      "attempts_used": 1,
+      "attempts_byte_identical": true,
+      "verified_correct": true,
+      "seconds_to_first_correct": 0.1013,
+      "attempts": [
+        {
+          "ttft_seconds": 0.046541,
+          "total_seconds": 0.101258,
+          "server_predicted_per_second": 168.30294530154276,
+          "server_prompt_ms": 38.844,
+          "attempt": 1,
+          "verified_correct": true,
+          "text": "There are 7 days in one week."
+        }
+      ]
+    },
+    {
+      "case_id": "arithmetic_multistep",
+      "expected_answer": "372",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.010836,
+          "total_seconds": 0.09715,
+          "server_predicted_per_second": 173.81832508661947,
+          "server_prompt_ms": 8.686,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        },
+        {
+          "ttft_seconds": 0.007418,
+          "total_seconds": 0.094241,
+          "server_predicted_per_second": 172.92860354388353,
+          "server_prompt_ms": 5.469,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        },
+        {
+          "ttft_seconds": 0.006825,
+          "total_seconds": 0.093667,
+          "server_predicted_per_second": 172.80906901994217,
+          "server_prompt_ms": 5.026,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        },
+        {
+          "ttft_seconds": 0.007816,
+          "total_seconds": 0.129045,
+          "server_predicted_per_second": 124.3523316062176,
+          "server_prompt_ms": 5.954,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        },
+        {
+          "ttft_seconds": 0.014584,
+          "total_seconds": 0.135187,
+          "server_predicted_per_second": 125.62708855034715,
+          "server_prompt_ms": 12.67,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        },
+        {
+          "ttft_seconds": 0.017078,
+          "total_seconds": 0.153943,
+          "server_predicted_per_second": 109.98196295807489,
+          "server_prompt_ms": 13.927,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "17 * 23 - 19 = 401"
+        }
+      ]
+    },
+    {
+      "case_id": "modular_arithmetic",
+      "expected_answer": "30",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.035517,
+          "total_seconds": 0.067116,
+          "server_predicted_per_second": 96.00307209830716,
+          "server_prompt_ms": 32.511,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "108"
+        },
+        {
+          "ttft_seconds": 0.017661,
+          "total_seconds": 0.037521,
+          "server_predicted_per_second": 151.18681650960036,
+          "server_prompt_ms": 15.101,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "108"
+        },
+        {
+          "ttft_seconds": 0.014755,
+          "total_seconds": 0.038823,
+          "server_predicted_per_second": 140.40342584359058,
+          "server_prompt_ms": 12.788,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "108"
+        },
+        {
+          "ttft_seconds": 0.018032,
+          "total_seconds": 0.043161,
+          "server_predicted_per_second": 140.78558355624384,
+          "server_prompt_ms": 15.358,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "108"
+        },
+        {
+          "ttft_seconds": 0.018599,
+          "total_seconds": 0.052538,
+          "server_predicted_per_second": 89.35751943526047,
+          "server_prompt_ms": 15.868,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "108"
+        },
+        {
+          "ttft_seconds": 0.014548,
+          "total_seconds": 0.041094,
+          "server_predicted_per_second": 113.14777098891153,
+          "server_prompt_ms": 12.526,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "108"
+        }
+      ]
+    },
+    {
+      "case_id": "count_letter_in_word",
+      "expected_answer": "3",
+      "attempts_used": 1,
+      "attempts_byte_identical": true,
+      "verified_correct": true,
+      "seconds_to_first_correct": 0.169,
+      "attempts": [
+        {
+          "ttft_seconds": 0.015885,
+          "total_seconds": 0.169041,
+          "server_predicted_per_second": 104.53280370046124,
+          "server_prompt_ms": 12.754,
+          "attempt": 1,
+          "verified_correct": true,
+          "text": "The letter 'a' appears 3 times in the word 'banana'."
+        }
+      ]
+    },
+    {
+      "case_id": "geometric_sequence",
+      "expected_answer": "32",
+      "attempts_used": 1,
+      "attempts_byte_identical": true,
+      "verified_correct": true,
+      "seconds_to_first_correct": 0.039,
+      "attempts": [
+        {
+          "ttft_seconds": 0.01867,
+          "total_seconds": 0.039006,
+          "server_predicted_per_second": 105.82570506375998,
+          "server_prompt_ms": 14.866,
+          "attempt": 1,
+          "verified_correct": true,
+          "text": "32"
+        }
+      ]
+    },
+    {
+      "case_id": "boolean_logic",
+      "expected_answer": "True",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.020535,
+          "total_seconds": 0.030146,
+          "server_predicted_per_second": 165.61775422325272,
+          "server_prompt_ms": 17.382,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "False"
+        },
+        {
+          "ttft_seconds": 0.018476,
+          "total_seconds": 0.031427,
+          "server_predicted_per_second": 87.11560240439063,
+          "server_prompt_ms": 16.129,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "False"
+        },
+        {
+          "ttft_seconds": 0.015805,
+          "total_seconds": 0.027411,
+          "server_predicted_per_second": 85.01232678738417,
+          "server_prompt_ms": 13.536,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "False"
+        },
+        {
+          "ttft_seconds": 0.017624,
+          "total_seconds": 0.03281,
+          "server_predicted_per_second": 67.35821096591674,
+          "server_prompt_ms": 15.592,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "False"
+        },
+        {
+          "ttft_seconds": 0.015895,
+          "total_seconds": 0.028038,
+          "server_predicted_per_second": 82.39268352970257,
+          "server_prompt_ms": 13.61,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "False"
+        },
+        {
+          "ttft_seconds": 0.014201,
+          "total_seconds": 0.023272,
+          "server_predicted_per_second": 116.44154634373545,
+          "server_prompt_ms": 12.328,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "False"
+        }
+      ]
+    },
+    {
+      "case_id": "unit_conversion",
+      "expected_answer": "10800",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.019043,
+          "total_seconds": 0.055983,
+          "server_predicted_per_second": 111.39268707009386,
+          "server_prompt_ms": 15.96,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "7200"
+        },
+        {
+          "ttft_seconds": 0.011997,
+          "total_seconds": 0.044535,
+          "server_predicted_per_second": 146.01737606775208,
+          "server_prompt_ms": 9.136,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "7200"
+        },
+        {
+          "ttft_seconds": 0.0128,
+          "total_seconds": 0.042347,
+          "server_predicted_per_second": 136.10071452875127,
+          "server_prompt_ms": 10.798,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "7200"
+        },
+        {
+          "ttft_seconds": 0.017325,
+          "total_seconds": 0.052567,
+          "server_predicted_per_second": 113.71712864250179,
+          "server_prompt_ms": 15.32,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "7200"
+        },
+        {
+          "ttft_seconds": 0.014128,
+          "total_seconds": 0.04696,
+          "server_predicted_per_second": 130.90718680455558,
+          "server_prompt_ms": 11.812,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "7200"
+        },
+        {
+          "ttft_seconds": 0.017469,
+          "total_seconds": 0.056247,
+          "server_predicted_per_second": 105.36020018438035,
+          "server_prompt_ms": 15.361,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "7200"
+        }
+      ]
+    },
+    {
+      "case_id": "rate_word_problem",
+      "expected_answer": "40",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.021397,
+          "total_seconds": 0.05332,
+          "server_predicted_per_second": 94.52391455038125,
+          "server_prompt_ms": 17.675,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "120"
+        },
+        {
+          "ttft_seconds": 0.014016,
+          "total_seconds": 0.045702,
+          "server_predicted_per_second": 95.65716472163766,
+          "server_prompt_ms": 11.862,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "120"
+        },
+        {
+          "ttft_seconds": 0.014223,
+          "total_seconds": 0.033189,
+          "server_predicted_per_second": 164.90765171503958,
+          "server_prompt_ms": 11.924,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "120"
+        },
+        {
+          "ttft_seconds": 0.017009,
+          "total_seconds": 0.044898,
+          "server_predicted_per_second": 110.37121518707922,
+          "server_prompt_ms": 15.15,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "120"
+        },
+        {
+          "ttft_seconds": 0.015787,
+          "total_seconds": 0.05278,
+          "server_predicted_per_second": 83.50730688935283,
+          "server_prompt_ms": 13.654,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "120"
+        },
+        {
+          "ttft_seconds": 0.013742,
+          "total_seconds": 0.036524,
+          "server_predicted_per_second": 132.05387798221676,
+          "server_prompt_ms": 11.557,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "120"
+        }
+      ]
+    },
+    {
+      "case_id": "capital_city",
+      "expected_answer": "Canberra",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.032583,
+          "total_seconds": 0.063559,
+          "server_predicted_per_second": 97.15655159012888,
+          "server_prompt_ms": 29.068,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "Sydney"
+        },
+        {
+          "ttft_seconds": 0.015498,
+          "total_seconds": 0.038843,
+          "server_predicted_per_second": 129.2824822236587,
+          "server_prompt_ms": 13.545,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "Sydney"
+        },
+        {
+          "ttft_seconds": 0.017294,
+          "total_seconds": 0.044542,
+          "server_predicted_per_second": 122.689350564371,
+          "server_prompt_ms": 14.316,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "Sydney"
+        },
+        {
+          "ttft_seconds": 0.01354,
+          "total_seconds": 0.037171,
+          "server_predicted_per_second": 127.95359549603342,
+          "server_prompt_ms": 11.618,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "Sydney"
+        },
+        {
+          "ttft_seconds": 0.01432,
+          "total_seconds": 0.044055,
+          "server_predicted_per_second": 102.37160894045385,
+          "server_prompt_ms": 11.817,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "Sydney"
+        },
+        {
+          "ttft_seconds": 0.018872,
+          "total_seconds": 0.045659,
+          "server_predicted_per_second": 113.4301270417423,
+          "server_prompt_ms": 16.41,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "Sydney"
+        }
+      ]
+    },
+    {
+      "case_id": "distinct_letter_count",
+      "expected_answer": "8",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.031915,
+          "total_seconds": 0.046564,
+          "server_predicted_per_second": 74.9512816669165,
+          "server_prompt_ms": 29.362,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "3"
+        },
+        {
+          "ttft_seconds": 0.016029,
+          "total_seconds": 0.025394,
+          "server_predicted_per_second": 134.24620754463686,
+          "server_prompt_ms": 13.573,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "3"
+        },
+        {
+          "ttft_seconds": 0.01712,
+          "total_seconds": 0.024986,
+          "server_predicted_per_second": 127.46972594008923,
+          "server_prompt_ms": 14.385,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "3"
+        },
+        {
+          "ttft_seconds": 0.010433,
+          "total_seconds": 0.017131,
+          "server_predicted_per_second": 148.6104919007282,
+          "server_prompt_ms": 8.438,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "3"
+        },
+        {
+          "ttft_seconds": 0.015482,
+          "total_seconds": 0.023819,
+          "server_predicted_per_second": 120.83131947800871,
+          "server_prompt_ms": 13.501,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "3"
+        },
+        {
+          "ttft_seconds": 0.016487,
+          "total_seconds": 0.023411,
+          "server_predicted_per_second": 184.06037180195105,
+          "server_prompt_ms": 14.189,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "3"
+        }
+      ]
+    },
+    {
+      "case_id": "string_reversal",
+      "expected_answer": "sdrohcro",
+      "attempts_used": 6,
+      "attempts_byte_identical": true,
+      "verified_correct": false,
+      "seconds_to_first_correct": null,
+      "attempts": [
+        {
+          "ttft_seconds": 0.032453,
+          "total_seconds": 0.086148,
+          "server_predicted_per_second": 169.26201760324983,
+          "server_prompt_ms": 30.191,
+          "attempt": 1,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        },
+        {
+          "ttft_seconds": 0.007724,
+          "total_seconds": 0.066045,
+          "server_predicted_per_second": 154.3262800507562,
+          "server_prompt_ms": 5.616,
+          "attempt": 2,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        },
+        {
+          "ttft_seconds": 0.00747,
+          "total_seconds": 0.072563,
+          "server_predicted_per_second": 140.5283867341203,
+          "server_prompt_ms": 5.507,
+          "attempt": 3,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        },
+        {
+          "ttft_seconds": 0.018789,
+          "total_seconds": 0.088467,
+          "server_predicted_per_second": 129.73908029407525,
+          "server_prompt_ms": 16.602,
+          "attempt": 4,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        },
+        {
+          "ttft_seconds": 0.014535,
+          "total_seconds": 0.084761,
+          "server_predicted_per_second": 129.1359370964502,
+          "server_prompt_ms": 12.515,
+          "attempt": 5,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        },
+        {
+          "ttft_seconds": 0.017455,
+          "total_seconds": 0.084259,
+          "server_predicted_per_second": 136.33678214897066,
+          "server_prompt_ms": 13.8,
+          "attempt": 6,
+          "verified_correct": false,
+          "text": "The reversed string is 'drocorb'."
+        }
+      ]
+    },
+    {
+      "case_id": "leap_year_length",
+      "expected_answer": "366",
+      "attempts_used": 1,
+      "attempts_byte_identical": true,
+      "verified_correct": true,
+      "seconds_to_first_correct": 0.0677,
+      "attempts": [
+        {
+          "ttft_seconds": 0.033451,
+          "total_seconds": 0.067733,
+          "server_predicted_per_second": 87.4763084997813,
+          "server_prompt_ms": 30.178,
+          "attempt": 1,
+          "verified_correct": true,
+          "text": "366"
+        }
+      ]
+    }
+  ]
+}
