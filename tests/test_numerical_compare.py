@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from oai2.model import (
@@ -251,3 +253,99 @@ def test_a_perfect_real_match_is_still_reported_as_zero_error() -> None:
     )
     assert perfect.max_abs_error == vacuous.max_abs_error == 0.0
     assert perfect.passed and not vacuous.passed
+
+
+# ---------------------------------------------------------------------------
+# "Both non-finite" is not the same claim as "the same non-finite value".
+# ---------------------------------------------------------------------------
+
+
+def test_opposite_signed_infinities_are_not_a_match() -> None:
+    """+inf against -inf is a sign-flipped kernel, not a matching one.
+
+    Non-finite samples are skipped when errors are accumulated, and
+    `finite_state_match` only asks "are both non-finite?". A reference that
+    saturated to +inf against an optimized path that saturated to -inf
+    therefore reported max_abs_error=0.0, finite_state_match=True and
+    passed -- a catastrophic sign flip declared numerically identical.
+    """
+    result = compare_numerical_paths(
+        [1.0, math.inf],
+        [1.0, -math.inf],
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert not result.passed
+    assert not result.finite_state_match
+    assert "finite_state_mismatch" in result.failures
+    assert result.max_abs_error == 0.0  # the failure list has to carry this
+
+
+def test_nan_against_infinity_is_not_a_match() -> None:
+    """NaN and +/-inf are different failure modes and must not be equated."""
+    for reference, optimized in (
+        ([1.0, math.nan], [1.0, math.inf]),
+        ([1.0, math.nan], [1.0, -math.inf]),
+        ([1.0, math.inf], [1.0, math.nan]),
+        ([1.0, -math.inf], [1.0, math.nan]),
+    ):
+        result = compare_numerical_paths(
+            reference, optimized, profile=_profile(), identity=_identity()
+        )
+        assert not result.passed, (reference, optimized)
+        assert not result.finite_state_match, (reference, optimized)
+        assert "finite_state_mismatch" in result.failures
+
+
+def test_same_non_finite_value_still_matches() -> None:
+    """Opposite-direction guard: the fix must not reject genuine agreement.
+
+    NaN/NaN and +inf/+inf ARE the same claim, and a profile that permits
+    them must keep permitting them.
+    """
+    for value in (math.nan, math.inf, -math.inf):
+        result = compare_numerical_paths(
+            [1.0, value], [1.0, value], profile=_profile(), identity=_identity()
+        )
+        assert result.finite_state_match, value
+        assert result.passed, (value, result.failures)
+
+
+def test_mixed_fixture_still_compares_the_finite_samples() -> None:
+    """A correctly-matched non-finite pair alongside real samples still passes."""
+    result = compare_numerical_paths(
+        [1.0, math.inf, 2.0, 3.0],
+        [1.0, math.inf, 2.0, 3.0],
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert result.passed, result.failures
+    assert result.sample_count == 4
+
+
+def test_a_real_error_still_fails_alongside_a_matching_infinity() -> None:
+    """The infinity must not mask a genuine tolerance breach on a finite sample."""
+    result = compare_numerical_paths(
+        [1.0, math.inf, 2.0],
+        [1.0, math.inf, 9.0],
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert not result.passed
+    assert "absolute_error" in result.failures
+    assert "relative_error" in result.failures
+
+
+def test_finite_state_match_is_reported_false_for_sign_flips_only() -> None:
+    """State identity, not merely finiteness, drives the flag."""
+    flipped = compare_numerical_paths(
+        [math.inf], [math.inf - math.inf * 2],  # -inf
+        profile=_profile(),
+        identity=_identity(),
+    )
+    assert not flipped.finite_state_match
+    # A real finite comparison is unaffected.
+    fine = compare_numerical_paths(
+        [1.0, 2.0], [1.0, 2.0], profile=_profile(), identity=_identity()
+    )
+    assert fine.finite_state_match

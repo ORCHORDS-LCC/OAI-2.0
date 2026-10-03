@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from oai2.model import (
@@ -221,4 +223,70 @@ def test_a_genuinely_good_kernel_is_still_promoted() -> None:
         speedup_ratio=10.0,
     )
     assert evidence.eligible
+    assert not evidence.selection.used_fallback
+
+
+def test_a_sign_flipped_infinity_kernel_is_not_promoted() -> None:
+    """End-to-end: a fast kernel that flips a saturated sign must not win.
+
+    Before the fix this reported eligible=True, used_fallback=False,
+    max_abs_error=0.0 and a 10x speedup, because both samples are
+    "non-finite" and the error lists stayed empty. That is a broken kernel
+    indistinguishable from a good one in the evidence artifact, which is what
+    REQ-NUM-024 forbids.
+    """
+    evidence = evaluate_numerical_candidate(
+        [1.0, math.inf, 2.0],
+        [1.0, -math.inf, 2.0],
+        candidate_kind=NumericalCandidateKind.KERNEL,
+        profile=_profile(),
+        identity=_identity("llamacpp"),
+        optimized_path="llamacpp:q4",
+        reference_path="mlx:fp16",
+        speedup_ratio=10.0,
+    )
+    assert not evidence.eligible
+    assert evidence.selection.used_fallback
+    assert "finite_state_mismatch" in evidence.comparison.failures
+    assert evidence.comparison.max_abs_error == 0.0
+
+
+def test_a_nan_versus_infinity_kernel_is_not_promoted() -> None:
+    """NaN and +/-inf are different failure modes, not one claim."""
+    for reference, optimized in (
+        ([1.0, math.nan, 2.0], [1.0, math.inf, 2.0]),
+        ([1.0, math.inf, 2.0], [1.0, math.nan, 2.0]),
+    ):
+        evidence = evaluate_numerical_candidate(
+            reference,
+            optimized,
+            candidate_kind=NumericalCandidateKind.KERNEL,
+            profile=_profile(),
+            identity=_identity("llamacpp"),
+            optimized_path="llamacpp:q4",
+            reference_path="mlx:fp16",
+            speedup_ratio=10.0,
+        )
+        assert not evidence.eligible, (reference, optimized)
+        assert evidence.selection.used_fallback
+
+
+def test_a_genuine_infinity_match_is_still_promoted() -> None:
+    """Opposite-direction guard at the gate: real agreement is not a defect.
+
+    A reference and an optimized path that BOTH saturate to +inf are making
+    the same claim, and a profile that allows non-finite states must keep
+    allowing them.
+    """
+    evidence = evaluate_numerical_candidate(
+        [1.0, math.inf, 2.0],
+        [1.0, math.inf, 2.0],
+        candidate_kind=NumericalCandidateKind.KERNEL,
+        profile=_profile(),
+        identity=_identity("llamacpp"),
+        optimized_path="llamacpp:q4",
+        reference_path="mlx:fp16",
+        speedup_ratio=10.0,
+    )
+    assert evidence.eligible, evidence.comparison.failures
     assert not evidence.selection.used_fallback

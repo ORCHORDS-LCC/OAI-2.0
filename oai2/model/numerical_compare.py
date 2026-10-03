@@ -77,6 +77,23 @@ class NumericalSelection:
     reason: str
 
 
+def _value_state(value: float) -> str:
+    """Classify a sample so two values are only "equal" when they really are.
+
+    "Both non-finite" is not one claim, it is four: finite, NaN, +inf, -inf.
+    Comparing only finiteness makes a reference that saturated to +inf look
+    identical to an optimized path that saturated to -inf, which is a
+    sign-flipped kernel rather than a matching one.
+    """
+    if math.isnan(value):
+        return "nan"
+    if value == math.inf:
+        return "+inf"
+    if value == -math.inf:
+        return "-inf"
+    return "finite"
+
+
 def compare_numerical_paths(
     reference: list[float] | tuple[float, ...],
     optimized: list[float] | tuple[float, ...],
@@ -98,11 +115,12 @@ def compare_numerical_paths(
     for ref_raw, opt_raw in zip(reference, optimized, strict=True):
         ref = float(ref_raw)
         opt = float(opt_raw)
-        ref_finite = math.isfinite(ref)
-        opt_finite = math.isfinite(opt)
-        if ref_finite != opt_finite:
+        # A sample is a match only if it is the SAME KIND of value. Comparing
+        # finiteness alone let +inf/-inf and NaN/+inf through as identical,
+        # because both pairs are "non-finite on both sides".
+        if _value_state(ref) != _value_state(opt):
             finite_match = False
-        if not ref_finite or not opt_finite:
+        if not (math.isfinite(ref) and math.isfinite(opt)):
             continue
         abs_error = abs(opt - ref)
         abs_errors.append(abs_error)
