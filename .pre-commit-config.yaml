@@ -1,38 +1,61 @@
 # Pre-commit hooks for OAI-2.0.
 #
-# OAI-2.0 is runner-free and direct-push-on-main. To compensate for the
-# absence of a hosted CI gate, every commit is linted and collection-checked
-# locally by pre-commit. This catches the cumulative-state failure mode
-# documented in #236 (where each commit's gate sees the prior state, not
-# the cumulative state).
+# OAI-2.0 is runner-free and direct-push-on-main, with no hosted CI gate.
+# To compensate, the lint gate is enforced by the TEST SUITE, not by this
+# file: `tests/test_lint_gate.py` runs the exact `ruff check` command that
+# `scripts/verify.py` declares, and fails the suite when it reports errors.
 #
-# Install:
+# Why the enforcement moved here (#264): a real `NameError` once sat in the
+# tree behind an F821 rule that nothing ran. `pre-commit` was declared in
+# this file but never installed, and the pinned rev below was not even the
+# version the project lints with. A gate that exists only in configuration is
+# not a gate. The suite runs on every acceptance path, needs no extra
+# tooling, and cannot silently skip.
+#
+# These hooks remain useful as a fast pre-commit convenience when pre-commit
+# IS installed. They are a convenience layer, not the enforcement layer.
+#
 #   pip install pre-commit
 #   pre-commit install
-#
-# Run on demand (mirrors the gate):
 #   pre-commit run --all-files
+#
+# Authoritative checks (no installation required):
+#   uv run pytest -W error     # includes the lint gate
+#   uv run python scripts/verify.py
 #
 # Bypass for emergency (NOT recommended; documents the gate skip):
 #   git commit --no-verify
 #
-# See CONTRIBUTING.md "Local pre-commit gate" section for details.
+# See CONTRIBUTING.md "Lint gate" section for details.
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Not the enforcement pin. The enforced version is whatever
+    # `uv run ruff` resolves, and `pyproject.toml [tool.ruff]` is the
+    # single source of truth for lint rules. Bumping this rev changes only
+    # this optional convenience layer.
     rev: v0.7.4
     hooks:
-      # Lint (fix-on-save for autofixable rules). This catches F401 (unused
-      # imports), F811 (redefinition), I001 (unsorted imports) and W292
-      # (missing newline) — the four rules documented as regressed in #236.
+      # Lint (fix-on-save for autofixable rules). Catches F401 (unused
+      # imports), F811 (redefinition), I001 (unsorted imports), W292
+      # (missing newline) and F821 (undefined name) — the last of which is
+      # the rule that found the defect #264 documents.
       - id: ruff
         args: ["--fix"]
         files: '^(oai2|tests|scripts)/.*\.py$'
-      # Format (consistent with pyproject.toml [tool.ruff] formatting line
-      # length target; ruff format is the project's chosen formatter
-      # alongside the existing lint config).
-      - id: ruff-format
-        files: '^(oai2|tests|scripts)/.*\.py$'
+      #
+      # `ruff-format` is deliberately NOT enabled (#264).
+      #
+      # At the time this was decided, `ruff format --check` reported 121
+      # files needing reformatting, and formatter output differs
+      # substantially between the pinned rev above and the 0.16.9 the
+      # project actually lints with. Applying the formatter would have
+      # buried real fixes under repo-wide churn that diverges from the pin,
+      # in a repository that takes commits continuously from parallel
+      # agents — a live merge-conflict hazard rather than a theoretical
+      # one. Formatting is cosmetic; the lint rules are what surface real
+      # defects. Revisit deliberately, repo-wide and in one commit, if the
+      # project ever standardises on a formatter.
 
   - repo: local
     hooks:
@@ -42,7 +65,7 @@ repos:
       # earliest-stage feedback available without actually running tests.
       - id: pytest-collect
         name: pytest collection smoke check
-        entry: .venv/bin/pytest --co -q
+        entry: uv run pytest --co -q
         language: system
         pass_filenames: false
         types: [python]

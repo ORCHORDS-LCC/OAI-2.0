@@ -9,6 +9,8 @@ about the predicate that actually runs in production.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 
 import pytest
 
@@ -28,16 +30,32 @@ from oai2.knowledge.knowledge_d1 import (
 KID = "ko_1"
 
 
-def _fresh_db() -> sqlite3.Connection:
+@contextmanager
+def _fresh_db() -> Iterator[sqlite3.Connection]:
+    """Yield a migrated in-memory database and ALWAYS close it.
+
+    The connection used to be handed back bare and no caller closed it, so
+    every test in this file leaked a handle. Under ``pytest -W error`` the
+    resulting ``ResourceWarning: unclosed database`` was raised as an
+    unraisable exception during garbage collection, and pytest attributed it
+    to whatever test happened to be running at that moment -- which is how a
+    leak in this file came to be reported as a knowledge-trace failure in an
+    unrelated file.
+    """
     db = sqlite3.connect(":memory:")
-    db.execute("CREATE TABLE knowledge_gc_delete_lease (object_key TEXT, state TEXT, expires_at REAL)")
-    db.execute(
-        "CREATE TABLE knowledge_gc_resource_lease ("
-        "resource_type TEXT, resource_key TEXT, state TEXT, expires_at REAL)"
-    )
-    for statement in knowledge_schema_statements():
-        db.execute(statement)
-    return db
+    try:
+        db.execute(
+            "CREATE TABLE knowledge_gc_delete_lease (object_key TEXT, state TEXT, expires_at REAL)"
+        )
+        db.execute(
+            "CREATE TABLE knowledge_gc_resource_lease ("
+            "resource_type TEXT, resource_key TEXT, state TEXT, expires_at REAL)"
+        )
+        for statement in knowledge_schema_statements():
+            db.execute(statement)
+        yield db
+    finally:
+        db.close()
 
 
 def _upsert(
@@ -75,9 +93,9 @@ def _query(db: sqlite3.Connection, topic: str = "deploy") -> list[str]:
 
 
 def test_fresh_schema_carries_the_supersession_columns() -> None:
-    db = _fresh_db()
-    columns = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
-    assert set(KNOWLEDGE_SUPERSESSION_COLUMNS) <= columns
+    with _fresh_db() as db:
+        columns = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
+        assert set(KNOWLEDGE_SUPERSESSION_COLUMNS) <= columns
 
 
 def test_schema_sql_itself_declares_the_columns() -> None:
@@ -98,29 +116,32 @@ def test_editing_create_table_alone_does_not_migrate_a_provisioned_database() ->
     untouched, so without an explicit ALTER the new columns never appear and
     every query selecting them fails.
     """
-    db = sqlite3.connect(":memory:")
-    db.execute(
-        f"CREATE TABLE {KNOWLEDGE_INDEX_TABLE} ("
-        "knowledge_id TEXT PRIMARY KEY NOT NULL, topic TEXT NOT NULL, "
-        "content_hash TEXT NOT NULL, authority REAL NOT NULL, status TEXT NOT NULL, "
-        "source_uri TEXT, retrieved_at REAL NOT NULL, r2_blob_key TEXT, "
-        "vectorize_id TEXT, corpus_revision INTEGER NOT NULL)"
-    )
-    before = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
-    assert "superseded_by" not in before
+    # This test deliberately builds the PREVIOUS schema, so it cannot use
+    # _fresh_db(). The connection is still owned and closed here; leaking it
+    # was what made an unrelated test fail under -W error.
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.execute(
+            f"CREATE TABLE {KNOWLEDGE_INDEX_TABLE} ("
+            "knowledge_id TEXT PRIMARY KEY NOT NULL, topic TEXT NOT NULL, "
+            "content_hash TEXT NOT NULL, authority REAL NOT NULL, status TEXT NOT NULL, "
+            "source_uri TEXT, retrieved_at REAL NOT NULL, r2_blob_key TEXT, "
+            "vectorize_id TEXT, corpus_revision INTEGER NOT NULL)"
+        )
+        before = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
+        assert "superseded_by" not in before
 
-    # The updated schema statement is a no-op here.
-    for statement in knowledge_schema_statements():
-        if statement.upper().startswith("CREATE TABLE IF NOT EXISTS KNOWLEDGE_INDEX"):
+        # The updated schema statement is a no-op here.
+        for statement in knowledge_schema_statements():
+            if statement.upper().startswith("CREATE TABLE IF NOT EXISTS KNOWLEDGE_INDEX"):
+                db.execute(statement)
+        after_create = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
+        assert after_create == before, "CREATE TABLE IF NOT EXISTS must be a no-op here"
+
+        # The additive migration is what actually adds them.
+        for statement in missing_supersession_migration(after_create):
             db.execute(statement)
-    after_create = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
-    assert after_create == before, "CREATE TABLE IF NOT EXISTS must be a no-op here"
-
-    # The additive migration is what actually adds them.
-    for statement in missing_supersession_migration(after_create):
-        db.execute(statement)
-    migrated = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
-    assert set(KNOWLEDGE_SUPERSESSION_COLUMNS) <= migrated
+        migrated = {r[1] for r in db.execute(f"PRAGMA table_info({KNOWLEDGE_INDEX_TABLE})")}
+        assert set(KNOWLEDGE_SUPERSESSION_COLUMNS) <= migrated
 
 
 def test_migration_is_idempotent() -> None:
@@ -142,10 +163,10 @@ def test_migration_statements_are_additive_alter_add_column() -> None:
 
 
 def test_real_query_excludes_a_superseded_row() -> None:
-    db = _fresh_db()
-    _upsert(db, kid="ko_old", superseded_by="qpipe:deploy:new", superseded_at=5.0)
-    _upsert(db, kid="ko_new", revision=1)
-    assert _query(db) == ["ko_new"]
+    with _fresh_db() as db:
+        _upsert(db, kid="ko_old", superseded_by="qpipe:deploy:new", superseded_at=5.0)
+        _upsert(db, kid="ko_new", revision=1)
+        assert _query(db) == ["ko_new"]
 
 
 def test_real_query_excludes_a_superseded_row_even_when_status_is_default() -> None:
@@ -155,12 +176,12 @@ def test_real_query_excludes_a_superseded_row_even_when_status_is_default() -> N
     would return this row. The row is excluded anyway, which is the
     whole point of filtering on the field.
     """
-    db = _fresh_db()
-    _upsert(db, kid="ko_old", status="IMPLEMENTED", superseded_by="qpipe:deploy:new")
-    _upsert(db, kid="ko_new", status="IMPLEMENTED", revision=1)
-    sql = knowledge_query_sql(1)
-    found = [r[0] for r in db.execute(sql, ("deploy", 0.0, "IMPLEMENTED", 50))]
-    assert found == ["ko_new"]
+    with _fresh_db() as db:
+        _upsert(db, kid="ko_old", status="IMPLEMENTED", superseded_by="qpipe:deploy:new")
+        _upsert(db, kid="ko_new", status="IMPLEMENTED", revision=1)
+        sql = knowledge_query_sql(1)
+        found = [r[0] for r in db.execute(sql, ("deploy", 0.0, "IMPLEMENTED", 50))]
+        assert found == ["ko_new"]
 
 
 def test_real_query_keeps_rows_with_a_superseded_at_but_no_link() -> None:
@@ -170,22 +191,22 @@ def test_real_query_keeps_rows_with_a_superseded_at_but_no_link() -> None:
     superseded_by asserts that this record IS superseded. Conflating them
     would drop live rows that merely carry a timestamp.
     """
-    db = _fresh_db()
-    _upsert(db, kid="ko_live", superseded_at=5.0)
-    assert _query(db) == ["ko_live"]
+    with _fresh_db() as db:
+        _upsert(db, kid="ko_live", superseded_at=5.0)
+        assert _query(db) == ["ko_live"]
 
 
 def test_upsert_overwrites_a_previously_set_supersession_link() -> None:
     """Re-ingesting a record as live must clear the stale link."""
-    db = _fresh_db()
-    _upsert(db, kid="ko_x", superseded_by="qpipe:deploy:old", superseded_at=5.0)
-    _upsert(db, kid="ko_x", revision=1)
-    assert _query(db) == ["ko_x"]
-    row = db.execute(
-        f"SELECT superseded_by, superseded_at FROM {KNOWLEDGE_INDEX_TABLE} WHERE knowledge_id = ?",
-        ("ko_x",),
-    ).fetchone()
-    assert row == (None, None)
+    with _fresh_db() as db:
+        _upsert(db, kid="ko_x", superseded_by="qpipe:deploy:old", superseded_at=5.0)
+        _upsert(db, kid="ko_x", revision=1)
+        assert _query(db) == ["ko_x"]
+        row = db.execute(
+            f"SELECT superseded_by, superseded_at FROM {KNOWLEDGE_INDEX_TABLE} WHERE knowledge_id = ?",
+            ("ko_x",),
+        ).fetchone()
+        assert row == (None, None)
 
 
 def test_schema_version_is_unchanged_by_this_migration() -> None:

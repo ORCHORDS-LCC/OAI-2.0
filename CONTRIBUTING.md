@@ -52,35 +52,65 @@ It runs dependency sync, Ruff, MyPy, pytest, a public-safety scan, and a Markdow
 
 The MLX benchmark harness has the same environment requirement: run it as `uv run python scripts/bench.py --help`. `--help` works with a bare interpreter, but an actual run needs `mlx` / `mlx-lm` from the uv environment and exits with an actionable error instead of a `ModuleNotFoundError` traceback when they are missing.
 
-## Local pre-commit gate (Refs #236)
+## Lint gate (Refs #236, #264)
 
-The repo is runner-free and direct-push-on-main. To catch the
-cumulative-state failure mode (where each commit's gate sees the prior
-state, not the cumulative state — see #236), every commit runs a local
-pre-commit hook:
+The repo is runner-free and direct-push-on-main, with no hosted CI gate. To
+catch the cumulative-state failure mode (where each commit's gate sees the
+prior state, not the cumulative state — see #236), the lint gate is enforced
+**by the test suite**:
+
+```bash
+uv run pytest -W error
+```
+
+`tests/test_lint_gate.py` runs the exact `ruff check` command that
+`scripts/verify.py` declares and fails the suite when it reports errors. The
+command is parsed out of `verify.py` rather than duplicated, so the test and
+the script cannot drift apart. If that check is ever removed from
+`verify.py`, the test fails and asks to be updated — it does not quietly stop
+checking anything.
+
+This is deliberate. `pre-commit` was previously declared in
+`.pre-commit-config.yaml` but never installed, and its pinned rev was not the
+version the project actually lints with. A real `NameError` once survived in
+the tree behind exactly that gap (#264): the F821 rule that can see the
+defect existed in configuration and was never executed. A gate that exists
+only in configuration is not a gate.
+
+The gate deliberately does not skip when `ruff` cannot be invoked. A check
+that disappears when its tooling is missing is the same failure wearing a
+different hat, so a missing tool is a failure with an actionable message.
+
+### Pre-commit as an optional convenience
+
+If `pre-commit` is installed, the hooks give faster per-commit feedback:
 
 ```bash
 pip install pre-commit      # one-time
 pre-commit install          # one-time, installs the .git/hooks/pre-commit
-```
-
-The `.pre-commit-config.yaml` runs:
-
-1. `ruff check --fix` — catches F401 (unused import), F811 (redefinition), I001 (unsorted imports), W292 (missing newline).
-2. `ruff format` — applies the project's chosen formatter.
-3. `pytest --co -q` — collection-only smoke check; surfaces F401 import cycles, syntax errors, and missing dependencies without running tests.
-
-Run the same checks on demand against the whole tree:
-
-```bash
 pre-commit run --all-files
 ```
+
+They run `ruff check --fix` and a `pytest --co -q` collection smoke check.
+This is a convenience layer only; correctness does not depend on it.
+
+`ruff-format` is **not** enabled (decision recorded in #264). At the time it
+was considered, `ruff format --check` reported 121 files needing changes, and
+formatter output differs substantially between the hook's pinned rev and the
+0.16.9 the project lints with. Reformatting repo-wide would bury real fixes
+under version-fragile churn in a repository that takes commits continuously
+from parallel agents. Revisit deliberately, repo-wide and in one commit, if
+the project ever standardises on a formatter.
 
 Emergency bypass (NOT recommended; documents the gate skip):
 
 ```bash
 git commit --no-verify
 ```
+
+Note that `--no-verify` bypasses the pre-commit convenience layer only. It
+does **not** bypass the suite-enforced gate: `tests/test_lint_gate.py` still
+runs inside `pytest` and still fails.
 
 ## Knowledge/Cloudflare changes
 
