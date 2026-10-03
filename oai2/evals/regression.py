@@ -14,6 +14,9 @@ from typing import Protocol
 
 class CapabilityScoreLike(Protocol):
     case_id: str
+    # The promotion gate validates the per-case score, so a conforming score
+    # must expose it. Declared here rather than relied on dynamically.
+    score: float
 
 
 class SuiteReportLike(Protocol):
@@ -104,6 +107,9 @@ def evaluate_held_out_promotion(
         joined = ", ".join(sorted(overlap))
         raise ValueError(f"held-out cases overlap training/tuning inputs: {joined}")
 
+    _validate_report_numbers(baseline_reports, "baseline")
+    _validate_report_numbers(candidate_reports, "candidate")
+
     failures: list[str] = []
     regressions: list[CapabilityRegression] = []
     threshold_by_capability = {item.capability: item for item in budget.thresholds}
@@ -155,6 +161,42 @@ def evaluate_held_out_promotion(
         failures=tuple(failures),
         capability_regressions=tuple(regressions),
     )
+
+
+def _validate_report_numbers(
+    reports: tuple[SuiteReportLike, ...] | list[SuiteReportLike],
+    name: str,
+) -> None:
+    """Reject reports whose numbers cannot support a regression decision.
+
+    The gate compares ``baseline - candidate`` and fails only when the result
+    *exceeds* a tolerance. A non-finite operand makes that comparison False
+    for every tolerance, so the corresponding check silently stops being a
+    gate. Combined with a pass count larger than the case count, a candidate
+    that failed every held-out case can be promoted.
+
+    Sibling gates in this package already refuse non-finite and out-of-range
+    inputs (``oai2.evals.qos``, ``oai2.evals.truth``); this brings the
+    promotion gate in line, and follows the fail-closed rule established for
+    evidence status in #239. An unusable report is a caller defect, so it is
+    raised rather than recorded as a candidate failure.
+    """
+    for index, report in enumerate(reports):
+        n_cases = report.n_cases
+        n_passed = report.n_passed
+        where = f"{name} report {index} ({report.capability})"
+        if isinstance(n_cases, bool) or not isinstance(n_cases, int) or n_cases < 0:
+            raise ValueError(f"{where} has invalid n_cases: {n_cases!r}")
+        if isinstance(n_passed, bool) or not isinstance(n_passed, int) or n_passed < 0:
+            raise ValueError(f"{where} has invalid n_passed: {n_passed!r}")
+        if n_passed > n_cases:
+            raise ValueError(
+                f"{where} reports n_passed={n_passed} for n_cases={n_cases}; "
+                "a pass rate above 1.0 is not evidence"
+            )
+        _rate(report.mean_score, f"{where} mean_score")
+        for score in report.scores:
+            _rate(score.score, f"{where} case {score.case_id!r} score")
 
 
 def _reports_by_capability(
