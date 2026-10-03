@@ -42,6 +42,7 @@ into the q-pipe -> OAI knowledge import path.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import Any
 
@@ -291,11 +292,28 @@ def test_import_report_total_seen_counts_imported_only() -> None:
     assert report.total_seen == 1
 
 
-def test_import_report_total_seen_sums_across_all_buckets() -> None:
-    """``total_seen`` must equal the sum of all skip lists plus
-    ``imported`` plus ``rejected_malformed``. A refactor that adds a
-    new bucket but forgets to update ``total_seen`` would silently
-    under-count and break the input-correspondence invariant."""
+def test_import_report_total_seen_sums_across_every_bucket() -> None:
+    """``total_seen`` must equal the sum of every list bucket on the report.
+
+    The previous version of this test hardcoded ``== 12`` while populating
+    only 8 of the 11 buckets, leaving ``skipped_unattributable``,
+    ``skipped_non_exportable_scope`` and ``unresolved_supersession`` at their
+    empty defaults. It therefore could not detect the failure it names: drop
+    any of those three from ``total_seen`` and the assertion still passed,
+    because the omitted buckets contributed zero either way. Verified -- with
+    those three removed from the property, this test failed and the old one
+    did not.
+
+    The expectation is now DERIVED from the dataclass fields rather than
+    written down, which closes both directions of the drift:
+
+      * a bucket added to ``ImportReport`` but forgotten in ``total_seen``
+        makes ``counted`` larger than ``total_seen``;
+      * a bucket dropped from ``total_seen`` makes it smaller.
+
+    And every bucket is asserted non-empty, so a bucket added later with an
+    empty default is caught here rather than passing silently as zero.
+    """
     report = ImportReport(
         imported=[_stub_knowledge_object()],
         skipped_duplicate=["a"],
@@ -303,12 +321,27 @@ def test_import_report_total_seen_sums_across_all_buckets() -> None:
         skipped_rejected=["d"],
         skipped_not_promoted=["e", "f", "g"],
         skipped_requires_opt_in=["h"],
-        skipped_unverified_or_low_quality=["i", "j"],
-        rejected_malformed=[("k", "bad row")],
+        skipped_unattributable=["i"],
+        skipped_non_exportable_scope=["j"],
+        skipped_unverified_or_low_quality=["k", "l"],
+        rejected_malformed=[("m", "bad row")],
+        unresolved_supersession=[("n", 999)],
     )
+    list_fields = [
+        f.name for f in dataclasses.fields(report) if isinstance(getattr(report, f.name), list)
+    ]
+    empty = [name for name in list_fields if not getattr(report, name)]
+    assert not empty, f"bucket(s) left at their empty default: {empty}"
+
+    counted = sum(len(getattr(report, name)) for name in list_fields)
     # 1 imported + 1 dup + 2 disallowed + 1 rejected + 3 not_promoted
-    # + 1 opt_in + 2 unverified + 1 malformed = 12
-    assert report.total_seen == 12
+    # + 1 opt_in + 1 unattributable + 1 non_exportable + 2 unverified
+    # + 1 malformed + 1 unresolved = 15
+    assert counted == 15, f"the fixture itself drifted: {counted}"
+    assert report.total_seen == counted, (
+        f"total_seen={report.total_seen} but the buckets sum to {counted}; "
+        f"a bucket is missing from the property. Buckets: {list_fields}"
+    )
 
 
 def _stub_knowledge_object() -> KnowledgeObject:
