@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-10-03T20:13:28.924191+00:00",
+  "requirement": "REQ-PERF-033 / #240 config D: world-state change must invalidate reuse",
+  "model": "mlx-community/SmolLM-135M-Instruct-4bit",
+  "digest_model": "digest carries tool-schema + world-state; gate_digest restricts candidates",
+  "repetitions": 3,
+  "cells": [
+    {
+      "label": "1. world A, first contact",
+      "digest": "world:a:tools:v1",
+      "expect_hit": true,
+      "matched_prefix_tokens": 0,
+      "matched_prefix_tokens_per_repetition": [
+        0,
+        41,
+        41
+      ],
+      "prefix_tokens": 41,
+      "prefill_ms_median": 0.955,
+      "prefill_ms_samples": [
+        6.21,
+        0.955,
+        0.739
+      ],
+      "hits": 2,
+      "misses": 1,
+      "restores": 2,
+      "invalidations": 0,
+      "stored_entries": 1,
+      "note": "cold: nothing stored yet"
+    },
+    {
+      "label": "2. world A, unchanged",
+      "digest": "world:a:tools:v1",
+      "expect_hit": true,
+      "matched_prefix_tokens": 41,
+      "matched_prefix_tokens_per_repetition": [
+        41,
+        41,
+        41
+      ],
+      "prefix_tokens": 41,
+      "prefill_ms_median": 0.65,
+      "prefill_ms_samples": [
+        0.628,
+        0.685,
+        0.65
+      ],
+      "hits": 5,
+      "misses": 1,
+      "restores": 5,
+      "invalidations": 0,
+      "stored_entries": 1,
+      "note": "must hit: same world, same prefix"
+    },
+    {
+      "label": "3. world B, SAME prompt text",
+      "digest": "world:b:tools:v1",
+      "expect_hit": false,
+      "matched_prefix_tokens": 0,
+      "matched_prefix_tokens_per_repetition": [
+        0,
+        41,
+        41
+      ],
+      "prefix_tokens": 41,
+      "prefill_ms_median": 0.637,
+      "prefill_ms_samples": [
+        0.732,
+        0.541,
+        0.637
+      ],
+      "hits": 7,
+      "misses": 2,
+      "restores": 7,
+      "invalidations": 0,
+      "stored_entries": 2,
+      "note": "MUST NOT hit: identical text, changed world state"
+    },
+    {
+      "label": "4. world B, unchanged",
+      "digest": "world:b:tools:v1",
+      "expect_hit": true,
+      "matched_prefix_tokens": 41,
+      "matched_prefix_tokens_per_repetition": [
+        41,
+        41,
+        41
+      ],
+      "prefix_tokens": 41,
+      "prefill_ms_median": 0.588,
+      "prefill_ms_samples": [
+        0.595,
+        0.588,
+        0.533
+      ],
+      "hits": 10,
+      "misses": 2,
+      "restores": 10,
+      "invalidations": 0,
+      "stored_entries": 2,
+      "note": "must hit again under world B"
+    }
+  ],
+  "verdict": {
+    "hit_when_world_unchanged": true,
+    "miss_when_world_changed": true,
+    "rehit_under_new_world": true,
+    "matched_tokens_unchanged_world": 41,
+    "matched_tokens_changed_world": 0
+  }
+}

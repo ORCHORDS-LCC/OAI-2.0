@@ -197,7 +197,6 @@ def test_common_prefix_no_match_is_miss() -> None:
     assert layer.state == ("", 0)
 
 
-
 def test_real_model_prefix_restore_skips_prefix_prefill() -> None:
     pytest.importorskip("mlx")
     pytest.importorskip("mlx_lm")
@@ -232,3 +231,67 @@ def test_real_model_prefix_restore_skips_prefix_prefill() -> None:
     assert generated >= 1
     metrics = cache.metrics
     assert (metrics.hits, metrics.misses, metrics.restores) == (1, 0, 1)
+
+
+class _StubLayer:
+    """Minimal stand-in for an mlx_lm cache layer.
+
+    `lookup_and_apply` trims and assigns ``layer.state``, so a bare object()
+    cannot be used: the invalidation semantics under test are the
+    bookkeeping around that assignment, not the assignment itself.
+    """
+
+    def __init__(self) -> None:
+        self.state: list[object] = []
+
+
+def test_first_lookup_after_a_world_state_change_must_miss() -> None:
+    """REQ-PERF-033 / #240 config D: a changed world must invalidate reuse.
+
+    The trap this pins is that later repetitions *should* hit, because the
+    first one already stored the new world's state. An assertion on the
+    final repetition alone therefore passes even when invalidation is
+    completely broken -- it observes the repopulation, not the
+    invalidation. `scripts/cache_invalidation_probe.py` hit exactly that
+    false pass before recording per-repetition matches.
+    """
+    cache = PrefixKVCache(max_entries=4)
+    prefix = tuple(range(40))
+    # The query must extend past the stored prefix: a fully consumed match
+    # is refused by design, so querying exactly `prefix` would always miss
+    # and the test would pass for the wrong reason.
+    query = (*prefix, 99, 98)
+    layers = [_StubLayer()]
+
+    # World A: cold, then warm.
+    assert cache.lookup_and_apply(query, layers, digest="world:a", gate_digest=True) == 0
+    cache.store(prefix, layers, digest="world:a")
+    assert cache.lookup_and_apply(query, layers, digest="world:a", gate_digest=True) == 40
+
+    # Same prompt text, different world: the FIRST lookup must not reuse A.
+    # This is the assertion that fails if invalidation is broken.
+    assert cache.lookup_and_apply(query, layers, digest="world:b", gate_digest=True) == 0
+    cache.store(prefix, layers, digest="world:b")
+    # And the new world must then hit, so this is invalidation and not a
+    # cache that has simply stopped working.
+    assert cache.lookup_and_apply(query, layers, digest="world:b", gate_digest=True) == 40
+    # World A's state was not destroyed by world B being stored.
+    assert cache.lookup_and_apply(query, layers, digest="world:a", gate_digest=True) == 40
+
+
+def test_ungated_lookup_does_not_see_the_world_boundary() -> None:
+    """Documents why serving paths must set ``gate_digest=True``.
+
+    Ungated, an identical token prefix is reused across worlds, which is
+    correct for the training-loop case (deliberately distinct samples that
+    share a prompt) and wrong for serving. The distinction is the whole
+    reason the flag exists, so it is pinned in both directions.
+    """
+    cache = PrefixKVCache(max_entries=4)
+    prefix = tuple(range(40))
+    query = (*prefix, 99, 98)
+    layers = [_StubLayer()]
+    cache.store(prefix, layers, digest="world:a")
+
+    assert cache.lookup_and_apply(query, layers, digest="world:b", gate_digest=True) == 0
+    assert cache.lookup_and_apply(query, layers, digest="world:b", gate_digest=False) == 40
