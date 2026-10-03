@@ -103,6 +103,83 @@ class TestClaimIdentityIsCarriedAndDistinct:
         assert first.content_hash != second.content_hash
 
 
+class TestSourceAliasesShareOneIdentity:
+    """One source under two spellings is one claim, not two."""
+
+    def test_alias_spellings_dedupe_to_a_single_active_claim(self):
+        """The topic was canonical but the identity digest was not.
+
+        ``row_to_knowledge_object`` derived ``knowledge_id`` from the RAW
+        source while the topic used the canonical one, so the same claim
+        stored as ``recipe-candidates`` and ``recipe_candidates`` produced
+        two different knowledge_ids inside a single topic, both with
+        ``superseded_by=None``. Default retrieval returns the same claim
+        twice -- the exact duplication the source aliases exist to prevent.
+        """
+        rows = [
+            _row(ext="X", rid=1, steps=[STEP_A], source="recipe-candidates"),
+            _row(ext="X", rid=2, steps=[STEP_A], source="recipe_candidates"),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 1
+        assert rep.skipped_duplicate == ["X"]
+        assert rep.imported[0].topic == "qpipe:recipe-candidates:generic"
+        assert rep.imported[0].superseded_by is None
+
+    def test_alias_spellings_produce_one_stable_id_across_reimports(self):
+        """Opposite direction: identity must be stable, not merely collapsed.
+
+        A fix that made both spellings produce the *same* id by accident, or
+        that let a re-import mint a fresh one, would pass the dedupe test
+        above while breaking the stated purpose -- "stable knowledge_id ...
+        so dedupe works on re-imports". Both spellings must land on one id,
+        and importing the same row again must not change it.
+        """
+        first = import_qpipe_rows(
+            [_row(ext="X", rid=1, steps=[STEP_A], source="recipe-candidates")],
+            policy=_policy(),
+        )
+        aliased = import_qpipe_rows(
+            [_row(ext="X", rid=9, steps=[STEP_A], source="recipe_candidates")],
+            policy=_policy(),
+        )
+        reimported = import_qpipe_rows(
+            [_row(ext="X", rid=1, steps=[STEP_A], source="recipe-candidates")],
+            policy=_policy(),
+        )
+        ids = {rep.imported[0].knowledge_id for rep in (first, aliased, reimported)}
+        assert len(ids) == 1, f"identity is not stable across spellings: {ids}"
+
+    def test_genuinely_distinct_sources_are_not_collapsed(self):
+        """Opposite direction: canonicalising must not merge two real sources.
+
+        Aliases collapse spellings of ONE source. Two different sources that
+        happen to share an external_id are two different claims and must stay
+        two objects with two identities, or the canonicalisation would be
+        deleting evidence rather than de-duplicating it.
+        """
+        rows = [
+            _row(ext="X", rid=1, steps=[STEP_A], source="scenario-forge"),
+            _row(ext="X", rid=2, steps=[STEP_A], source="terminal-bench-2.1"),
+        ]
+        rep = import_qpipe_rows(rows, policy=ImportPolicy())
+        assert len(rep.imported) == 2
+        assert rep.skipped_duplicate == []
+        assert len({o.knowledge_id for o in rep.imported}) == 2
+        assert len({o.topic for o in rep.imported}) == 2
+
+    def test_distinct_external_ids_in_one_source_still_import_separately(self):
+        """Opposite direction: the dedupe key must still discriminate."""
+        rows = [
+            _row(ext="X", rid=1, steps=[STEP_A], source="recipe-candidates"),
+            _row(ext="Y", rid=2, steps=[STEP_A], source="recipe-candidates"),
+        ]
+        rep = import_qpipe_rows(rows, policy=_policy())
+        assert len(rep.imported) == 2
+        assert rep.skipped_duplicate == []
+        assert len({o.knowledge_id for o in rep.imported}) == 2
+
+
 class TestSupersessionIsLinkedNotRetired:
     def test_superseded_record_stays_traceable_and_is_not_default(self):
         rows = [

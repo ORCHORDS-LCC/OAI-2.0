@@ -414,8 +414,17 @@ def row_to_knowledge_object(
 
     Stable :attr:`KnowledgeObject.knowledge_id` derived from
     ``source + external_id`` so dedupe works on re-imports.
+
+    The source is CANONICALISED before the digest is taken, because the topic
+    below is built from the canonical source too. Deriving identity from the
+    raw spelling while the topic uses the canonical one means the same claim
+    stored under two spellings gets two knowledge_ids inside one topic, both
+    active, and default retrieval returns it twice -- the exact duplication
+    the source aliases exist to prevent. Identity and topic have to agree on
+    what "source" means.
     """
-    digest = sha256_hex(f"{row.source}|{row.external_id}")
+    source = _canonical_source(row.source)
+    digest = sha256_hex(f"{source}|{row.external_id}")
     guidance = _guidance_from_body_json(row.body_json)
     if guidance is None:
         raise ValueError("row guidance failed q-pipe export validation")
@@ -424,7 +433,6 @@ def row_to_knowledge_object(
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    source = _canonical_source(row.source)
     topic = f"qpipe:{source}:{row.scope}"
     authority = derive_authority(row.capture_count, row.success_count)
     qpipe_status = QPipeStatus(row.status)
@@ -518,7 +526,10 @@ def import_qpipe_rows(
                 report.rejected_malformed.append((row.external_id, err))
             continue
 
-        key = (row.source, row.external_id)
+        # Canonical source, matching the knowledge_id digest in
+        # row_to_knowledge_object. Dedupe keyed on the raw spelling would let
+        # the same claim through twice under two spellings of one source.
+        key = (_canonical_source(row.source), row.external_id)
         if key in seen:
             report.skipped_duplicate.append(row.external_id)
             continue
